@@ -764,7 +764,7 @@ async function adminOp(m) {
       world.s = require('../client/rules.js').emptyState(); state.world = world.s;
       state.chats = {}; state.wander = []; state.lastResolved = null; state.notice = null;
       if (m.coupons) state.coupons = {};
-      for (const a of Object.values(state.accounts)) { a.solved = []; if (m.positions) { a.x = null; a.y = null; a.scene = 'ground'; a.room = null; } }
+      for (const a of Object.values(state.accounts)) { a.solved = []; a.carry = null; a.arrests = null; a.jailUntil = 0; a.stunUntil = 0; a.mined = null; a.stoleAt = null; if (m.positions) { a.x = null; a.y = null; a.scene = 'ground'; a.room = null; } }
       if (m.accounts) { for (const k of Object.keys(state.accounts)) delete state.accounts[k]; }
       dirty = true; await saveState();
       console.log(`[관리자] 초기화 (계정 ${m.accounts ? '삭제' : '유지'}, 쿠폰 ${m.coupons ? '삭제' : '유지'})`);
