@@ -451,19 +451,37 @@
             if ((x + y) % 2 === 0) { g.fillStyle = '#5a3f9e'; g.fillRect(px + 4, py + 18, TILE - 8, 3); }
             break;
         }
-        // 영토 색 은은하게 + 국경선
+        // 영토 색 + 국경선: 우리 나라는 진하게, 경계는 우리 나라 색 띠 / 나머지 경계는 흰 선
         const o = terrAt(x, y);
         const own = o > 0 ? ownerOf(o) : null;
-        if (own && t !== T.WATER && t !== T.MOUNTAIN) { g.fillStyle = natColor(own); g.globalAlpha = 0.22; g.fillRect(px, py, TILE, TILE); g.globalAlpha = 1; }
+        const mine = !!own && own === MY_NID;
+        if (own && t !== T.WATER && t !== T.MOUNTAIN) { g.fillStyle = natColor(own); g.globalAlpha = mine ? 0.34 : 0.2; g.fillRect(px, py, TILE, TILE); g.globalAlpha = 1; }
         else if (o > 0 && t !== T.WATER && t !== T.MOUNTAIN) {
           const [r, gg, b] = TYPE_RGB[terrs[o].type];
           g.fillStyle = `rgba(${r},${gg},${b},0.07)`; g.fillRect(px, py, TILE, TILE);
         }
         if (o > 0) {
+          // 흰 경계선 (오른쪽·아래 칸과 영토가 다르면). 주인이 다르면 실선, 같으면 점선
           const right = terrAt(x + 1, y), down = terrAt(x, y + 1);
-          g.fillStyle = 'rgba(43,35,64,0.45)';
-          if (right > 0 && right !== o) { const solidB = ownerOf(right) !== own; g.fillStyle = solidB ? '#2b2340' : 'rgba(43,35,64,0.45)'; if (solidB) g.fillRect(px + TILE - 2, py, 4, TILE); else for (let k = 0; k < TILE; k += 8) g.fillRect(px + TILE - 2, py + k, 3, 5); }
-          if (down > 0 && down !== o) { const solidB = ownerOf(down) !== own; g.fillStyle = solidB ? '#2b2340' : 'rgba(43,35,64,0.45)'; if (solidB) g.fillRect(px, py + TILE - 2, TILE, 4); else for (let k = 0; k < TILE; k += 8) g.fillRect(px + k, py + TILE - 2, 5, 3); }
+          for (const [q, vert] of [[right, true], [down, false]]) {
+            if (!(q > 0) || q === o) continue;
+            const solidB = ownerOf(q) !== own;
+            g.fillStyle = solidB ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)';
+            if (vert) { if (solidB) g.fillRect(px + TILE - 3, py, 3, TILE); else for (let k = 0; k < TILE; k += 8) g.fillRect(px + TILE - 2, py + k, 2, 4); }
+            else { if (solidB) g.fillRect(px, py + TILE - 3, TILE, 3); else for (let k = 0; k < TILE; k += 8) g.fillRect(px + k, py + TILE - 2, 4, 2); }
+          }
+          // 우리 나라 바깥 경계: 안쪽으로 굵은 우리 색 띠 + 바깥 테두리
+          if (mine) {
+            const out = (a, b) => { const q = terrAt(a, b); return q > 0 && q !== o && ownerOf(q) !== MY_NID; };
+            const col = natColor(own);
+            const N = out(x, y - 1), S = out(x, y + 1), Wd = out(x - 1, y), E = out(x + 1, y);
+            g.fillStyle = col;
+            if (N) g.fillRect(px, py, TILE, 10); if (S) g.fillRect(px, py + TILE - 10, TILE, 10);
+            if (Wd) g.fillRect(px, py, 10, TILE); if (E) g.fillRect(px + TILE - 10, py, 10, TILE);
+            g.fillStyle = '#ffd34d'; // 금색 바깥 테두리
+            if (N) g.fillRect(px, py, TILE, 3); if (S) g.fillRect(px, py + TILE - 3, TILE, 3);
+            if (Wd) g.fillRect(px, py, 3, TILE); if (E) g.fillRect(px + TILE - 3, py, 3, TILE);
+          }
         }
       }
     }
@@ -1069,11 +1087,19 @@
       else if (!c3) {
         const tt = terrs[o];
         const own = tt ? ownerOf(o) : null;
+        const mine = !!own && own === MY_NID;
         const rgb = own ? hexRgb(natColor(own)).map((v) => v * 1.25 - 40) : tt ? TYPE_RGB[tt.type] : [159, 216, 138];
         const k = t === T.FOREST ? 0.78 : t === T.SAND ? 1.05 : 0.95;
-        c3 = [rgb[0] * k * 0.55 + 100, rgb[1] * k * 0.55 + 100, rgb[2] * k * 0.55 + 100];
+        // 우리 나라 > 다른 나라 > 중립 순으로 진하게 (중립은 유형 색을 옅게)
+        const mix = mine ? 0.9 : own ? 0.75 : 0.32, add = mine ? 30 : own ? 55 : 150;
+        c3 = [rgb[0] * k * mix + add, rgb[1] * k * mix + add, rgb[2] * k * mix + add];
         const r = x + 1 < W ? terr[i + 1] : o, dn = y + 1 < H ? terr[i + W] : o;
-        if ((r !== o && r !== 65535 && r !== 0) || (dn !== o && dn !== 65535 && dn !== 0)) c3 = [70, 60, 95];
+        if ((r !== o && r !== 65535 && r !== 0) || (dn !== o && dn !== 65535 && dn !== 0)) c3 = [255, 255, 255];
+        if (mine) { // 우리 나라 바깥 경계 2칸: 바깥은 밝은 테두리, 안쪽은 우리 색
+          const notMine = (xx, yy) => { if (xx < 0 || yy < 0 || xx >= W || yy >= H) return false; const q = terr[yy * W + xx]; return q !== 65535 && q > 0 && q !== o && ownerOf(q) !== MY_NID; };
+          if (notMine(x + 1, y) || notMine(x - 1, y) || notMine(x, y + 1) || notMine(x, y - 1) || notMine(x + 1, y + 1) || notMine(x - 1, y - 1) || notMine(x + 1, y - 1) || notMine(x - 1, y + 1)) c3 = [255, 211, 77];
+          else if (notMine(x + 2, y) || notMine(x - 2, y) || notMine(x, y + 2) || notMine(x, y - 2)) c3 = hexRgb(natColor(own)).map((v) => v * 0.8);
+        }
       }
       d[i * 4] = c3[0]; d[i * 4 + 1] = c3[1]; d[i * 4 + 2] = c3[2]; d[i * 4 + 3] = 255;
     }
@@ -1383,7 +1409,7 @@
   // ------------------------------------------------------------ 나라 · 영토 · 블로토 전투 (화면)
   // 온라인: 서버가 결과를 정한다 / 오프라인 미리보기: 같은 규칙(rules.js)을 브라우저에서 봇 나라들과 돌린다
   let OFF = null;                  // 오프라인 World
-  let owners = {}, nationsPub = {}, myView = null, testMode = true;
+  let owners = {}, nationsPub = {}, myView = null, testMode = true, MY_NID = null; // MY_NID: 우리 나라 (지도에서 진하게 표시)
   const ownerOf = (tid) => owners[tid] || null;
   const natColor = (nid) => (nationsPub[nid] && nationsPub[nid].color) || '#888888';
   const natName = (nid) => (nationsPub[nid] && nationsPub[nid].name) || '중립';
@@ -1393,6 +1419,7 @@
     if (o) owners = o;
     if (n) nationsPub = n;
     if (v !== undefined) myView = v;
+    MY_NID = myView ? myView.me.id : null;
     if (myView && terrs[myView.me.capital]) { home = terrs[myView.me.capital]; player.tag = myView.me.color; }
     chunks.clear(); buildMapImage(); lastTerr = null; renderInv();
     if (!$('war').hidden) renderWar();
