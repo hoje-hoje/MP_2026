@@ -123,13 +123,12 @@
   }
 
   function drawOre(g, x, y, empty) {
-    g.fillStyle = 'rgba(0,0,0,0.16)'; ell(g, x, y, 20, 6);
-    g.fillStyle = '#8a8197'; tri(g, x - 20, y, x - 4, y - 26, x + 8, y); tri(g, x - 6, y, x + 8, y - 20, x + 20, y);
-    g.fillStyle = '#6d6580'; tri(g, x - 4, y - 26, x + 8, y, x, y);
+    g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, 24, 7);
+    pix(g, 'boulder', x, y + 2);
     if (empty) return;
-    g.fillStyle = '#f2c14e'; circ(g, x - 8, y - 10, 4); circ(g, x + 9, y - 8, 3.5); circ(g, x + 1, y - 17, 3);
-    const tw = (Math.sin(performance.now() / 250 + x) + 1) / 2;
-    g.fillStyle = `rgba(255,255,255,${tw})`; g.fillRect(x - 9, y - 12, 2, 2); g.fillRect(x + 8, y - 10, 2, 2);
+    const bob = Math.sin(performance.now() / 300 + x) * 2;
+    pix(g, 'coin', x - 10, y - 18 + bob, 0, 16); pix(g, 'coin', x + 8, y - 24 - bob, 0, 14);
+    pix(g, 'burst', x + 14, y - 30, 0, 14 + Math.sin(performance.now() / 200 + x) * 4, 0.8);
   }
 
   // 하늘로 가는 빛기둥
@@ -146,6 +145,7 @@
     g.fillStyle = grd; g.fillRect(x - 16, y - 220, 32, 220);
     g.fillStyle = 'rgba(255,255,255,0.9)';
     for (let i = 0; i < 4; i++) { const k = (now * 0.6 + i / 4) % 1; circ(g, x + Math.sin(i * 2.1 + now) * 10, y - k * 200, 2.2); }
+    pix(g, 'burst', x, y - 196, 0, 46 + Math.sin(now * 3) * 8, 0.85);
     if (mine) sign(g, x, y - 236, '우리 수도 · 하늘 포털');
   }
 
@@ -224,7 +224,25 @@
   async function loadArt() {
     const names = { floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
     const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
+    for (const k of EXTRA) names['x_' + k] = 'extra/' + k + '.png';
     await Promise.all([meta, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
+  }
+  const EXTRA = ['coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
+  // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
+  function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
+    const im = ART['x_' + key]; if (!im) return;
+    const sc = fitH ? fitH / im.height : k, w = im.width * sc, h = im.height * sc;
+    const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+    if (alpha !== 1) g.globalAlpha = alpha;
+    g.drawImage(im, Math.round(cx - w / 2), Math.round(bottom - h), Math.round(w), Math.round(h));
+    g.globalAlpha = 1; g.imageSmoothingEnabled = prev;
+  }
+  const tentCache = {};
+  function tintedTent(deg) {
+    if (tentCache[deg]) return tentCache[deg];
+    const im = ART.x_tent, cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height;
+    const g = cv.getContext('2d'); g.drawImage(im, 0, 0); hueShift(g, cv.width, cv.height, deg);
+    return (tentCache[deg] = cv);
   }
   // 바닥 타일 (floor.png 의 16px 칸 좌표)
   const TL = {
@@ -399,9 +417,13 @@
         if (t === T.FOREST) {
           if (h < 0.07 && (x + y) % 3 === 0) spr(g, h < 0.035 ? 'treeA' : 'treeB', px + 16, py + 30);
           else if (h < 0.26 && (x + 2 * y) % 2 === 0) spr(g, h < 0.17 ? 'midA' : 'midB', px + 16, py + 30);
+          else if (h < 0.29) pix(g, h < 0.275 ? 'stump' : 'berry', px + 16, py + 30);
         } else if (t === T.GRASS) {
           if (h < 0.004) spr(g, 'midA', px + 16, py + 30);
-          else if (h < 0.012) spr(g, 'bush', px + 16, py + 30);
+          else if (h < 0.010) spr(g, 'bush', px + 16, py + 30);
+          else if (h < 0.016) pix(g, h < 0.013 ? 'flower_r' : 'flower_y', px + 16, py + 30);
+          else if (h < 0.019) pix(g, 'mushroom', px + 16, py + 30);
+          else if (h < 0.023) pix(g, 'fern', px + 16, py + 30);
         } else if (t === T.MOUNTAIN && h < 0.16 && (x + y) % 2 === 0) spr(g, 'stone', px + 16, py + 30);
       }
     }
@@ -497,71 +519,81 @@
   // 각 나라 수도의 포털로 올라오고, 내려갈 땐 올라온 포털(=자기 나라 수도)로만 내려간다.
   const ROOMS = {
     temple: {
-      name: '하늘 신전', desc: '신들의 공지 · 신탁 게시판 · 멸망 시계', w: 30, h: 18, pos: [1, 1], crowd: 10,
-      floor: '#f4efff', line: '#e6ddf7', trim: '#e2b93b',
-      emotes: ['신탁 봤어?', '오늘 공지 뭐임', '!', '?', '내일 어디 무너짐?', '시계 빨개졌다'],
+      name: '하늘 신전', desc: '신들의 공지 · 신탁 제단 · 멸망의 탑', w: 30, h: 18, pos: [1, 1], crowd: 10,
+      floor: 'marble', carpet: [13, 6, 4, 11], trim: '#e2b93b',
+      emotes: ['신탁 봤어?', '오늘 공지 뭐임', '!', '?', '내일 어디 무너짐?', '탑이 빛난다'],
       doors: [{ side: 'W', at: 9, to: 'market' }, { side: 'E', at: 9, to: 'council' }, { side: 'N', at: 15, to: 'plaza' }, { side: 'S', at: 15, to: 'ground' }],
       props: [
-        { x: 13, y: 4, w: 4, h: 3, draw: (g, x, y) => { g.save(); g.translate(x, y); g.scale(0.75, 0.75); drawTower(g, 0, 0); g.restore(); sign(g, x, y - 228, DOOM ? (DAY >= 15 ? '결전의 날' : `멸망까지 D-${15 - DAY}`) : '고요한 시계탑'); } },
-        { x: 6, y: 3, w: 4, h: 1, board: true, draw: (g, x, y) => board(g, x, y, '신탁 게시판') },
-        { x: 4, y: 6, w: 1, h: 1, draw: pillar }, { x: 4, y: 12, w: 1, h: 1, draw: pillar },
-        { x: 25, y: 6, w: 1, h: 1, draw: pillar }, { x: 25, y: 12, w: 1, h: 1, draw: pillar },
+        { x: 13, y: 3, w: 4, h: 3, draw: (g, x, y) => { pix(g, 'tower', x, y + 8, 0, 230); if (DOOM) pix(g, 'burst', x, y - 150, 0, 60 + Math.sin(performance.now() / 180) * 10, 0.7); sign(g, x, y - 250, DOOM ? (DAY >= 15 ? '결전의 날' : `멸망까지 D-${15 - DAY}`) : '고요한 탑'); } },
+        { x: 6, y: 3, w: 3, h: 1, board: true, draw: (g, x, y) => { pix(g, 'altar', x, y + 4); pix(g, 'book', x, y - 44); sign(g, x, y - 92, '신탁 제단'); } },
+        { x: 9, y: 4, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'bishop', x, y + 2); nameTag(g, x, y - 58, '신의 사제', '#6b4fb3'); } },
+        { x: 11, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 18, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
+        { x: 4, y: 6, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar', x, y + 4) }, { x: 4, y: 12, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar', x, y + 4) },
+        { x: 25, y: 6, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar', x, y + 4) }, { x: 25, y: 12, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar', x, y + 4) },
+        { x: 21, y: 2, w: 2, h: 1, draw: (g, x, y) => pix(g, 'rosewin', x, y + 4) },
       ],
     },
     market: {
       name: '거래소', desc: '자원·병력·정보를 사고파는 곳', w: 30, h: 18, pos: [0, 1], crowd: 9,
-      floor: '#fff6e6', line: '#f1e3c6', trim: '#e7a33e',
+      floor: 'stonefloor', trim: '#e7a33e',
       emotes: ['열쇠 조각 팝니다', '병력 100 ↔ 코인 3천', '강화석 삼', '정보 삽니다', '흥정 ㄱ?', '너무 비쌈;;'],
       doors: [{ side: 'E', at: 9, to: 'temple' }],
       props: [
-        { x: 4, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#e86a5c', '자원') },
-        { x: 12, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#5b7fd6', '병력') },
-        { x: 20, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#3fa37a', '정보') },
-        { x: 4, y: 12, w: 4, h: 2, shop: 'vaccine', draw: (g, x, y) => stall(g, x, y, '#b06fd8', '백신 (균열 방어)') },
-        { x: 12, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#e2a33b', '경매') },
-        { x: 20, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#4bb3c4', '환전') },
+        { x: 4, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 0, 'woodpile', '자원') },
+        { x: 12, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 200, 'key', '병력') },
+        { x: 20, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 120, 'book', '정보') },
+        { x: 4, y: 12, w: 4, h: 2, shop: 'vaccine', draw: (g, x, y) => stall(g, x, y, 260, 'chalice', '백신 (균열 방어)') },
+        { x: 12, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 40, 'coin', '경매') },
+        { x: 20, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 160, 'candles', '환전') },
       ],
     },
     council: {
       name: '회담장', desc: '나라끼리 조약을 맺는 곳 · 밀실 2개', w: 26, h: 16, pos: [2, 1], crowd: 7,
-      floor: '#eef4ff', line: '#dbe5f7', trim: '#5b7fd6',
+      floor: 'stonefloor', carpet: [8, 4, 10, 8], trim: '#5b7fd6',
       emotes: ['불가침 조약 ㄱ?', '동맹 맺자', '조건이 뭔데', '배신하면 알지?', '왕끼리 얘기하자'],
       doors: [{ side: 'W', at: 8, to: 'temple' }, { side: 'E', at: 4, to: 'secret1' }, { side: 'E', at: 12, to: 'secret2' }],
-      props: [{ x: 10, y: 6, w: 6, h: 3, draw: roundTable }],
+      props: [
+        { x: 11, y: 6, w: 4, h: 2, draw: (g, x, y) => { pix(g, 'altar', x, y + 6, 3); pix(g, 'book', x - 20, y - 70); pix(g, 'chalice', x + 22, y - 72); sign(g, x, y - 110, '조약 제단'); } },
+        { x: 9, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 16, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
+        { x: 9, y: 10, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 16, y: 10, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
+      ],
     },
     secret1: {
       name: '밀실 1', desc: '들어온 사람끼리만 보이는 작은 방 (예정)', w: 14, h: 10, pos: [3, 0.55], crowd: 2,
-      floor: '#e9e2f7', line: '#d8cdef', trim: '#6b4fb3',
+      floor: 'stonefloor', dark: true, trim: '#6b4fb3',
       emotes: ['쉿', '여기서 한 얘기는 비밀', '...'],
       doors: [{ side: 'W', at: 5, to: 'council' }],
       props: [{ x: 6, y: 4, w: 2, h: 1, draw: smallTable }],
     },
     secret2: {
       name: '밀실 2', desc: '들어온 사람끼리만 보이는 작은 방 (예정)', w: 14, h: 10, pos: [3, 1.45], crowd: 1,
-      floor: '#e9e2f7', line: '#d8cdef', trim: '#6b4fb3',
+      floor: 'stonefloor', dark: true, trim: '#6b4fb3',
       emotes: ['쉿', '...'],
       doors: [{ side: 'W', at: 5, to: 'council' }],
       props: [{ x: 6, y: 4, w: 2, h: 1, draw: smallTable }],
     },
     plaza: {
       name: '구름 광장', desc: '모여서 노는 곳 · 이벤트가 열리는 곳', w: 34, h: 20, pos: [1, 0], crowd: 14,
-      floor: '#f7fbff', line: '#e3ecf8', trim: '#4bb3c4',
+      floor: 'na:11,12', trim: '#4bb3c4',
       emotes: ['3팀 모여~', 'ㅋㅋㅋ', '안녕!', '이벤트 언제?', '같이 다닐 사람', '우리 나라 짱'],
       doors: [{ side: 'S', at: 17, to: 'temple' }, { side: 'N', at: 17, to: 'wander' }],
       props: [
-        { x: 15, y: 8, w: 4, h: 3, draw: fountain },
-        { x: 6, y: 5, w: 3, h: 1, draw: bench }, { x: 25, y: 5, w: 3, h: 1, draw: bench },
-        { x: 6, y: 14, w: 3, h: 1, draw: bench }, { x: 25, y: 14, w: 3, h: 1, draw: bench },
+        { x: 16, y: 9, w: 2, h: 1, draw: bonfire },
+        { x: 12, y: 8, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) }, { x: 20, y: 8, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) },
+        { x: 12, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) }, { x: 20, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) },
+        { x: 6, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'stump', x, y + 2, 3) }, { x: 27, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'berry', x, y + 2, 3) },
+        { x: 6, y: 14, w: 1, h: 1, draw: (g, x, y) => pix(g, 'berry', x, y + 2, 3) }, { x: 27, y: 14, w: 1, h: 1, draw: (g, x, y) => pix(g, 'stump', x, y + 2, 3) },
       ],
     },
     wander: {
       name: '유랑민 등록소', desc: '나라 없는 사람이 귀화·용병·건국을 등록하는 곳', w: 24, h: 14, pos: [1, -1], crowd: 6,
-      floor: '#f0f8ec', line: '#ddebd6', trim: '#3fa37a',
+      floor: 'na:0,5', trim: '#3fa37a',
       emotes: ['용병 구합니다', '귀화시켜 주세요', '우리 4명 모이면 건국함', '몸값 얼마?', '어느 나라가 좋음?'],
       doors: [{ side: 'S', at: 12, to: 'plaza' }],
       props: [
-        { x: 9, y: 2, w: 6, h: 1, board: true, desk: 'wander', draw: (g, x, y) => board(g, x, y, '등록 창구') },
-        { x: 4, y: 8, w: 1, h: 1, draw: lantern }, { x: 19, y: 8, w: 1, h: 1, draw: lantern },
+        { x: 9, y: 2, w: 6, h: 2, board: true, desk: 'wander', draw: (g, x, y) => { pix(g, 'cabin', x, y + 6, 3); sign(g, x, y - 132, '등록 창구'); } },
+        { x: 4, y: 8, w: 1, h: 1, draw: (g, x, y) => pix(g, 'woodpile', x, y + 2, 3) }, { x: 19, y: 8, w: 1, h: 1, draw: bonfire },
+        { x: 5, y: 3, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'keeper', x, y + 2); nameTag(g, x, y - 58, '등록 담당', '#277a58'); } },
       ],
     },
   };
@@ -605,12 +637,19 @@
     for (const [x, y] of rim) circ(g, x, y + 8, 28 + hash(x, y, 2) * 14);
     g.fillStyle = '#ffffff';
     for (const [x, y] of rim) circ(g, x, y, 26 + hash(x, y, 3) * 14);
-    g.fillStyle = R.floor; rr(g, 18, 18, w - 36, h - 36, 18);
-    g.fillStyle = R.line;
-    for (let y = 40; y < h - 40; y += 64) for (let x = 40 + ((y / 64) % 2) * 32; x < w - 40; x += 64) { g.fillRect(x, y, 4, 4); }
+    const pat = (key) => {
+      const tc = document.createElement('canvas'); const tg = tc.getContext('2d');
+      if (key.startsWith('na:')) { const [cx, cy] = key.slice(3).split(',').map(Number); tc.width = tc.height = TILE; tg.imageSmoothingEnabled = false; tg.drawImage(ART.floor, cx * 16, cy * 16, 16, 16, 0, 0, TILE, TILE); }
+      else { const im = ART['x_' + key]; tc.width = im.width * 2; tc.height = im.height * 2; tg.imageSmoothingEnabled = false; tg.drawImage(im, 0, 0, tc.width, tc.height); }
+      return g.createPattern(tc, 'repeat');
+    };
+    g.fillStyle = pat(R.floor); rr(g, 18, 18, w - 36, h - 36, 18);
+    if (R.dark) { g.fillStyle = 'rgba(30,20,60,0.35)'; rr(g, 18, 18, w - 36, h - 36, 18); }
+    else if (R.floor === 'stonefloor') { g.fillStyle = 'rgba(255,248,235,0.22)'; rr(g, 18, 18, w - 36, h - 36, 18); }
+    if (R.carpet) { const [cx, cy, cw, ch] = R.carpet; g.fillStyle = pat('carpet'); g.fillRect(cx * TILE, cy * TILE, cw * TILE, ch * TILE); }
     g.strokeStyle = R.trim; g.lineWidth = 4; g.beginPath(); g.roundRect ? g.roundRect(30, 30, w - 60, h - 60, 12) : g.rect(30, 30, w - 60, h - 60); g.stroke();
     for (const d of R.doors) {
-      g.fillStyle = d.to === 'ground' ? 'rgba(255,236,140,0.85)' : R.floor;
+      g.fillStyle = d.to === 'ground' ? 'rgba(255,236,140,0.85)' : 'rgba(255,255,255,0.0)';
       if (d.side === 'N') g.fillRect((d.at - 1) * TILE, 0, TILE * 3, TILE + 20);
       if (d.side === 'S') g.fillRect((d.at - 1) * TILE, h - TILE - 20, TILE * 3, TILE + 20);
       if (d.side === 'W') g.fillRect(0, (d.at - 1) * TILE, TILE + 20, TILE * 3);
@@ -662,70 +701,24 @@
   }
 
   // 하늘 소품
-  function pillar(g, x, y) {
-    g.fillStyle = 'rgba(0,0,0,0.12)'; ell(g, x, y, 20, 6);
-    g.fillStyle = '#e8e2f5'; rr(g, x - 18, y - 12, 36, 12, 4);
-    g.fillStyle = '#ffffff'; g.fillRect(x - 11, y - 118, 22, 108);
-    g.fillStyle = '#ece6f7'; g.fillRect(x + 3, y - 118, 8, 108);
-    g.fillStyle = '#e2b93b'; rr(g, x - 18, y - 130, 36, 14, 4);
-  }
-  function board(g, x, y, label) {
-    g.fillStyle = 'rgba(0,0,0,0.12)'; ell(g, x, y, 60, 8);
-    g.fillStyle = '#8b5e3c'; g.fillRect(x - 54, y - 70, 6, 70); g.fillRect(x + 48, y - 70, 6, 70);
-    g.fillStyle = '#c99a6b'; rr(g, x - 62, y - 92, 124, 62, 6);
-    g.fillStyle = '#fffdf8';
-    g.save(); g.translate(x - 40, y - 82); g.rotate(-0.05); g.fillRect(0, 0, 30, 36); g.restore();
-    g.save(); g.translate(x - 4, y - 84); g.rotate(0.04); g.fillRect(0, 0, 34, 40); g.restore();
-    g.fillStyle = '#e5486a'; circ(g, x - 25, y - 80, 3); circ(g, x + 13, y - 81, 3);
-    sign(g, x, y - 112, label);
-  }
-  function stall(g, x, y, color, label) {
-    g.fillStyle = 'rgba(0,0,0,0.12)'; ell(g, x, y, 70, 10);
-    g.fillStyle = '#c99a6b'; g.fillRect(x - 60, y - 40, 120, 40);
-    g.fillStyle = '#b07f50'; g.fillRect(x - 60, y - 12, 120, 12);
-    g.fillStyle = '#8b5e3c'; g.fillRect(x - 58, y - 100, 5, 62); g.fillRect(x + 53, y - 100, 5, 62);
-    for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? '#ffffff' : color; g.fillRect(x - 66 + i * 22, y - 112, 22, 26); }
-    g.fillStyle = color; for (let i = 0; i < 6; i++) circ(g, x - 55 + i * 22, y - 86, 11);
-    g.fillStyle = '#f2c14e'; circ(g, x - 30, y - 46, 7); g.fillStyle = '#9fd8e6'; circ(g, x - 10, y - 48, 7); g.fillStyle = '#ff8fa8'; circ(g, x + 22, y - 46, 7);
-    sign(g, x, y - 132, label);
-  }
-  function roundTable(g, x, y) {
-    const cy = y - 40;
-    g.fillStyle = 'rgba(0,0,0,0.12)'; ell(g, x, cy + 30, 110, 26);
-    const seats = 10;
-    for (let i = 0; i < seats; i++) { const a = i / seats * Math.PI * 2; if (Math.sin(a) < 0) { g.fillStyle = '#5b7fd6'; rr(g, x + Math.cos(a) * 112 - 12, cy + Math.sin(a) * 50 - 22, 24, 26, 6); } }
-    g.fillStyle = '#8b5e3c'; ell(g, x, cy + 10, 96, 40);
-    g.fillStyle = '#b07f50'; ell(g, x, cy, 96, 40);
-    g.fillStyle = '#fffdf8'; g.fillRect(x - 30, cy - 10, 26, 18); g.fillRect(x + 8, cy - 6, 26, 18);
-    for (let i = 0; i < seats; i++) { const a = i / seats * Math.PI * 2; if (Math.sin(a) >= 0) { g.fillStyle = '#4a69bd'; rr(g, x + Math.cos(a) * 112 - 12, cy + Math.sin(a) * 50 - 6, 24, 26, 6); } }
+  function stall(g, x, y, hue, item, label) {
+    g.fillStyle = 'rgba(0,0,0,0.14)'; ell(g, x, y, 60, 9);
+    const im = tintedTent(hue);
+    const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+    g.drawImage(im, Math.round(x - im.width * 1.75), Math.round(y - im.height * 3.5), im.width * 3.5, im.height * 3.5);
+    g.imageSmoothingEnabled = prev;
+    if (item === 'coin') pix(g, 'coin', x + 46, y + 2, 0, 22); else pix(g, item, x + 46, y + 2);
+    sign(g, x, y - im.height * 3.5 - 20, label);
   }
   function smallTable(g, x, y) {
-    g.fillStyle = 'rgba(0,0,0,0.12)'; ell(g, x, y, 40, 8);
-    g.fillStyle = '#6b4a2b'; g.fillRect(x - 34, y - 34, 68, 30);
-    g.fillStyle = '#8b5e3c'; g.fillRect(x - 38, y - 40, 76, 10);
-    g.fillStyle = '#fff2a8'; g.fillRect(x - 4, y - 56, 6, 16);
-    g.fillStyle = 'rgba(255,210,90,0.5)'; circ(g, x - 1, y - 60, 9 + Math.sin(performance.now() / 120) * 1.5);
+    pix(g, 'tomb', x, y + 2);
+    pix(g, 'candles', x, y - 22);
+    g.fillStyle = 'rgba(255,210,90,0.35)'; circ(g, x, y - 34, 14 + Math.sin(performance.now() / 120) * 2);
   }
-  function fountain(g, x, y) {
-    const cy = y - 40;
-    g.fillStyle = 'rgba(0,0,0,0.12)'; ell(g, x, cy + 34, 80, 20);
-    g.fillStyle = '#d6dcef'; ell(g, x, cy + 12, 70, 30);
-    g.fillStyle = '#9fd8f5'; ell(g, x, cy + 6, 60, 24);
-    g.fillStyle = '#d6dcef'; rr(g, x - 10, cy - 50, 20, 56, 6);
-    const now = performance.now() / 1000;
-    g.fillStyle = 'rgba(200,236,255,0.9)';
-    for (let i = 0; i < 6; i++) { const k = (now * 0.8 + i / 6) % 1; const a = i / 6 * Math.PI * 2; circ(g, x + Math.cos(a) * k * 46, cy - 52 + k * k * 60, 3.5 * (1 - k) + 1); }
-  }
-  function bench(g, x, y) {
-    g.fillStyle = 'rgba(0,0,0,0.12)'; ell(g, x, y, 48, 7);
-    g.fillStyle = '#8b5e3c'; g.fillRect(x - 40, y - 22, 6, 22); g.fillRect(x + 34, y - 22, 6, 22);
-    g.fillStyle = '#c99a6b'; rr(g, x - 46, y - 30, 92, 12, 4); rr(g, x - 46, y - 50, 92, 12, 4);
-  }
-  function lantern(g, x, y) {
-    g.fillStyle = 'rgba(0,0,0,0.12)'; ell(g, x, y, 12, 4);
-    g.fillStyle = '#6b4a2b'; g.fillRect(x - 2, y - 80, 4, 80);
-    g.fillStyle = 'rgba(255,210,90,0.35)'; circ(g, x, y - 86, 18 + Math.sin(performance.now() / 300) * 2);
-    g.fillStyle = '#ffd36b'; rr(g, x - 9, y - 98, 18, 22, 5);
+  function bonfire(g, x, y) {
+    const t = performance.now() / 1000;
+    g.fillStyle = `rgba(255,170,60,${0.25 + Math.sin(t * 6) * 0.08})`; ell(g, x, y - 6, 70, 30);
+    pix(g, 'campfire', x, y + 4, 3.5 + Math.sin(t * 9) * 0.08);
   }
   function arch(g, x, y, side, label, down) {
     const vertical = side === 'W' || side === 'E';
@@ -746,10 +739,9 @@
     const grd = ctx.createLinearGradient(0, 0, 0, vh);
     grd.addColorStop(0, DOOM ? '#cbb6ee' : '#a9dcff'); grd.addColorStop(1, DOOM ? '#ffd2dc' : '#fdf3ff');
     ctx.fillStyle = grd; ctx.fillRect(0, 0, vw, vh);
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
     for (let i = 0; i < 9; i++) {
       const x = ((i * 337 + t * (8 + i * 2)) % (vw + 400)) - 200, y = (i * 173) % Math.max(1, vh);
-      ell(ctx, x, y, 120 + (i % 3) * 40, 26 + (i % 2) * 10);
+      pix(ctx, 'cloud', x, y + 60, 0, 70 + (i % 3) * 30, 0.85);
     }
   }
 
@@ -1025,7 +1017,7 @@
     for (const b of others('ground', null)) { const bx = (b.x / TILE - tx + span / 2) * k, by = (b.y / TILE - ty + span / 2) * k; if (bx > 0 && by > 0 && bx < s && by < s) mg.fillRect(bx - 2, by - 2, 4, 4); }
     const vw = canvas.clientWidth / zoom / TILE * k, vh = canvas.clientHeight / zoom / TILE * k;
     mg.strokeStyle = '#ffffff'; mg.lineWidth = 2; mg.strokeRect(s / 2 - vw / 2, s / 2 - vh / 2, vw, vh);
-    mg.fillStyle = '#ffd23f'; mg.strokeStyle = '#2b2340'; mg.lineWidth = 2; mg.beginPath(); mg.arc(s / 2, s / 2, 6, 0, Math.PI * 2); mg.fill(); mg.stroke();
+    pix(mg, 'pin', s / 2, s / 2 + 2, 0, 34);
   }
   function teleportTo(tx, ty) {
     for (let r = 0; r < 30; r++) for (let a = 0; a < 16; a++) {
@@ -1056,8 +1048,7 @@
     if (player.scene === 'ground') for (const b of others('ground', null)) bg.fillRect(b.x / TILE * k - 1.5, b.y / TILE * k - 1.5, 3, 3);
     for (const t of terrs) if (t && t.portal && !gone[t.id]) { bg.fillStyle = '#ffec8c'; bg.beginPath(); bg.arc(t.portal[0] * k, t.portal[1] * k, 3, 0, Math.PI * 2); bg.fill(); }
     const px = player.scene === 'sky' ? (player.entry || home).portal[0] * TILE : player.x, py = player.scene === 'sky' ? (player.entry || home).portal[1] * TILE : player.y;
-    bg.fillStyle = '#ffd23f'; bg.strokeStyle = '#2b2340'; bg.lineWidth = 3;
-    bg.beginPath(); bg.arc(px / TILE * k, py / TILE * k, 8, 0, Math.PI * 2); bg.fill(); bg.stroke();
+    pix(bg, 'pin', px / TILE * k, py / TILE * k + 2, 0, 40);
   }
   function toggleMap(force) {
     const el = $('bigmap');
