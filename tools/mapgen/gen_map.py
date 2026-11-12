@@ -2,7 +2,7 @@
 """MP 2026 세계 지도 생성기.
 
 타일 격자(기본 640x640) 위에 지형, 영토(약 190개), 중립 성지, 수도 후보,
-균열 단계, 속성을 만들고 maps/ 아래에 JSON과 미리보기 PNG를 저장한다.
+균열 웨이브(D6~D14, 5회), 속성을 만들고 maps/ 아래에 JSON과 미리보기 PNG를 저장한다.
 
 사용법:  python3 tools/mapgen/gen_map.py --seed 2026
 """
@@ -317,15 +317,31 @@ def main():
         terrs[i]["type"] = TYPES[pos * 6 // N]
         del terrs[i]["ang"]
 
-    # 균열 단계: 바깥일수록 먼저 (약간의 무작위)
-    score = np.array([tr["dc"] + rng.normal(0, 0.04) for tr in terrs])
-    rank = np.argsort(-score)
-    s1, s2, s3 = int(N * 0.16), int(N * 0.32), int(N * 0.46)
-    for pos, i in enumerate(rank):
-        terrs[i]["rift"] = 1 if pos < s1 else 2 if pos < s2 else 3 if pos < s3 else 0
+    # 균열: D5 멸망 선포 후 D6·D8·D10·D12·D14 다섯 번에 걸쳐 영토가 무너진다.
+    # 바깥에서만 오지 않도록 지도 곳곳의 진원지에서 퍼지게 한다 (위치 유불리 제거).
+    # 성지와 맞닿은 영토는 무너지지 않아 성지 길은 끝까지 열려 있다.
+    holy_adj_set = set(int(v) for v in np.unique(terr_full[(dist >= HOLY_R + WALL_W) & (dist < HOLY_R + WALL_W + 2)]) if v > 0)
+    pool = [tr for tr in terrs if tr["id"] not in holy_adj_set]
+    epic = [pool[int(i)] for i in rng.choice(len(pool), size=7, replace=False)]
+    maxd = W * 0.5
+    def danger(tr):
+        near = min(math.dist(tr["center"], e["center"]) for e in epic)
+        return 0.35 * tr["dc"] + 0.65 * (1 - min(1.0, near / (maxd * 0.45))) + rng.normal(0, 0.05)
+    scored = sorted(pool, key=danger, reverse=True)
+    waves = [0.09, 0.09, 0.09, 0.09, 0.09]   # 웨이브당 전체의 약 9%
+    for tr in terrs:
+        tr["rift"] = 0
+    pos = 0
+    for k, frac in enumerate(waves, start=1):
+        n_k = int(round(N * frac))
+        for tr in scored[pos:pos + n_k]:
+            tr["rift"] = k
+        pos += n_k
+    for e in epic:
+        e["riftEpicenter"] = True
 
     # 수도 후보: 균열 3단계 전까지 안전하고(0 또는 3), 서로 인접하지 않게 고르게 퍼뜨린다
-    cands = [tr for tr in terrs if 0.2 <= tr["dc"] and tr["rift"] in (0, 3)]
+    cands = [tr for tr in terrs if 0.2 <= tr["dc"]]
     order_c = sorted(cands, key=lambda _: rng.random())
     factor = 1.0
     while True:
@@ -360,7 +376,9 @@ def main():
         "passable": [TERRAIN_NAMES[t] for t in sorted(PASSABLE)],
         "holyCity": {"center": [cx, cy], "radius": HOLY_R, "wall": WALL_W,
                      "gates": ["N", "E", "S", "W"], "adjacentTerritories": holy_adj},
-        "riftSchedule": {"1": "D8 (12/21)", "2": "D11 (12/24)", "3": "D14 (12/27)"},
+        "riftAnnounce": "D5 (12/18)",
+        "riftSchedule": {"1": "D6 (12/19)", "2": "D8 (12/21)", "3": "D10 (12/23)", "4": "D12 (12/25)", "5": "D14 (12/27)"},
+        "riftNote": "운영진 전용 데이터. 실제 서버는 rift 필드를 참가자에게 보내지 않는다.",
         "territories": terrs,
         "terrain_b64": base64.b64encode(terrain.tobytes()).decode(),
         "territory_u16le_b64": base64.b64encode(terr_u16.tobytes()).decode(),
@@ -382,7 +400,7 @@ def main():
         "areaMax": int(max(areas)),
         "passableTiles": int(passable.sum()),
         "crossSeconds": round(2 * land_r / WALK_TPS),
-        "rift": {k: sum(1 for t in terrs if t["rift"] == k) for k in (1, 2, 3)},
+        "rift": {k: sum(1 for t in terrs if t["rift"] == k) for k in (1, 2, 3, 4, 5)},
         "types": {ty: sum(1 for t in terrs if t["type"] == ty) for ty in TYPES},
     }, ensure_ascii=False))
 
@@ -445,7 +463,7 @@ def render_overview(terrain, terr, terrs, picked, center, path, scale=2):
 def render_rift(terrain, terr, terrs, center, path, scale=1):
     h, w = terrain.shape
     img = np.zeros((h, w, 3), dtype=np.float32)
-    cols = {0: (159, 216, 138), 1: (90, 40, 140), 2: (150, 90, 200), 3: (210, 170, 235)}
+    cols = {0: (159, 216, 138), 1: (60, 20, 100), 2: (100, 45, 160), 3: (145, 85, 205), 4: (185, 135, 230), 5: (220, 190, 245)}
     lut = np.zeros((len(terrs) + 2, 3), dtype=np.float32)
     for tr in terrs:
         lut[tr["id"]] = cols[tr["rift"]]

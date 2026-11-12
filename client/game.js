@@ -15,10 +15,17 @@
   const TYPE_RGB = {};
   for (const k of TYPES) TYPE_RGB[k] = hexRgb(TYPE_FILL[k]);
   const RING = { inner: '성지 주변', middle: '중부', frontier: '변방' };
-  const RIFT = { 1: 'D8(12/21) 균열로 소멸', 2: 'D11(12/24) 균열로 소멸', 3: 'D14(12/27) 균열로 소멸' };
   const HAIRS = ['#4a3428', '#2b2340', '#f2c14e', '#c45a7a', '#e8e2d6', '#2f4f8f'];
   const OUTFITS = ['#5b7fd6', '#e86a5c', '#3fa37a', '#b06fd8', '#e2a33b', '#4bb3c4'];
   const SKINS = ['#ffe1cc', '#f6d2b8', '#eec3a3'];
+
+  // 날짜 미리보기: 주소 끝 #day1 ~ #day15 (기본 1일차). [ ] 키로도 바꿀 수 있다.
+  const DAY = (() => { const m = /^#day(\d{1,2})$/.exec(location.hash); return Math.max(1, Math.min(15, m ? +m[1] : 1)); })();
+  const WAVE_DAY = { 1: 6, 2: 8, 3: 10, 4: 12, 5: 14 };   // 균열 웨이브가 무너지는 날
+  const DOOM = DAY >= 5;                                   // D5: 신들의 멸망 선포
+  const PHASE = DAY <= 2 ? '건국기' : DAY <= 4 ? '확장기' : DAY <= 14 ? '멸망기' : '최종 결전';
+  addEventListener('hashchange', () => location.reload());
+  let gone = new Uint8Array(1);                            // 무너진 영토
 
   const $ = (id) => document.getElementById(id);
   const canvas = $('game');
@@ -41,7 +48,8 @@
   const terrAt = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? -1 : (terr[y * W + x] === 65535 ? -1 : terr[y * W + x]);
   function blocked(x, y) {
     if (x < 0 || y < 0 || x >= W || y >= H) return true;
-    const t = terrain[y * W + x];
+    const t = terrain[y * W + x], o = terr[y * W + x];
+    if (o !== 65535 && o > 0 && gone[o]) return true;
     return t === T.VOID || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1;
   }
   function speedAt(x, y) { const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
@@ -64,7 +72,8 @@
     terrain = b64bytes(data.terrain_b64);
     terr = new Uint16Array(b64bytes(data.territory_u16le_b64).buffer);
     terrs = [null];
-    for (const t of data.territories) { terrs[t.id] = t; t.name = terrName(t); }
+    gone = new Uint8Array(data.territories.length + 2);
+    for (const t of data.territories) { terrs[t.id] = t; t.name = terrName(t); if (t.rift && WAVE_DAY[t.rift] <= DAY) gone[t.id] = 1; }
     holy = data.holyCity;
     solid = new Uint8Array(W * H);
     buildSprites();
@@ -91,7 +100,7 @@
     sprites.push({ x: P(cx - 19), y: P(cy), r: 240, draw: (g, x, y) => drawBuilding(g, x, y, 10, '#3fa37a', '회담장', '⚖') });
     // 영토 제단과 수도 후보 깃발
     for (const t of terrs) {
-      if (!t) continue;
+      if (!t || gone[t.id]) continue;
       const [ax, ay] = t.altar;
       block(ax, ay, 1, 1);
       sprites.push({ x: P(ax) + 16, y: P(ay) + 28, r: 60, draw: (g, x, y) => drawAltar(g, x, y, t) });
@@ -112,8 +121,9 @@
     g.fillStyle = '#6b4fb3'; tri(g, x - 54, y - 192, x, y - 262, x + 54, y - 192);
     g.fillStyle = '#5a3f9e'; tri(g, x, y - 262, x + 54, y - 192, x + 26, y - 192);
     const now = performance.now() / 1000;
-    g.fillStyle = 'rgba(255,93,122,0.25)'; circ(g, x, y - 272, 22 + Math.sin(now * 2) * 3);
-    g.fillStyle = '#ff5d7a'; circ(g, x, y - 272, 11);
+    const orb = DOOM ? '#ff5d7a' : '#b9acd6';
+    g.fillStyle = DOOM ? 'rgba(255,93,122,0.25)' : 'rgba(185,172,214,0.25)'; circ(g, x, y - 272, 22 + Math.sin(now * (DOOM ? 4 : 1)) * 3);
+    g.fillStyle = orb; circ(g, x, y - 272, 11);
     g.fillStyle = '#ffd0da'; circ(g, x - 4, y - 276, 3);
     g.fillStyle = '#fffaf0'; circ(g, x, y - 150, 30); g.lineWidth = 5; g.strokeStyle = '#6b4fb3'; g.stroke();
     g.strokeStyle = '#2b2340'; g.lineWidth = 4; g.lineCap = 'round';
@@ -206,6 +216,18 @@
       for (let tx = 0; tx < CHUNK; tx++) {
         const x = x0 + tx, y = y0 + ty, px = tx * TILE, py = ty * TILE;
         const t = tileAt(x, y), h = hash(x, y);
+        const og = terrAt(x, y);
+        if (og > 0 && gone[og]) {
+          g.fillStyle = '#1b1430'; g.fillRect(px, py, TILE, TILE);
+          if (h < 0.05) { g.fillStyle = h < 0.015 ? '#f3dcff' : '#8d7ab8'; g.fillRect(px + (h * 997 % 28), py + (h * 577 % 28), 2, 2); }
+          const alive = (a, b) => { const q = terrAt(a, b); return q >= 0 && !gone[q] && tileAt(a, b) !== T.VOID; };
+          g.fillStyle = '#b06fd8';
+          if (alive(x, y - 1)) g.fillRect(px, py, TILE, 4);
+          if (alive(x, y + 1)) g.fillRect(px, py + TILE - 4, TILE, 4);
+          if (alive(x - 1, y)) g.fillRect(px, py, 4, TILE);
+          if (alive(x + 1, y)) g.fillRect(px + TILE - 4, py, 4, TILE);
+          continue;
+        }
         switch (t) {
           case T.VOID:
             g.fillStyle = '#1b1430'; g.fillRect(px, py, TILE, TILE);
@@ -280,6 +302,8 @@
       for (let x = x0 - 1; x < x0 + CHUNK + 1; x++) {
         const t = tileAt(x, y), h = hash(x, y, 7);
         const px = (x - x0) * TILE, py = (y - y0) * TILE;
+        const og = terrAt(x, y);
+        if (og > 0 && gone[og]) continue;
         if (t === T.FOREST && h < 0.62) tree(g, px + 16 + (h * 97 % 10) - 5, py + 26, 12 + (h * 31 % 6));
         else if (t === T.GRASS && h < 0.008) tree(g, px + 16, py + 26, 15);
         else if (t === T.MOUNTAIN && h < 0.45) rock(g, px + 16, py + 28, h);
@@ -409,7 +433,7 @@
       });
     };
     for (let i = 0; i < 40; i++) make(hcx, hcy, 34, true);
-    for (const t of terrs) if (t && t.capitalCandidate && r() < 0.6) for (let k = 0, n = 1 + ((r() * 3) | 0); k < n; k++) make(t.altar[0], t.altar[1], 8, false);
+    for (const t of terrs) if (t && t.capitalCandidate && !gone[t.id] && r() < 0.6) for (let k = 0, n = 1 + ((r() * 3) | 0); k < n; k++) make(t.altar[0], t.altar[1], 8, false);
   }
 
   function updateBot(b, dt) {
@@ -452,6 +476,7 @@
     if (k === 'm') toggleMap();
     if (k === 't') goHome();
     if (k === 'e') interact();
+    if (k === '[' || k === ']') { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
     if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; }
   });
   addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -500,7 +525,6 @@
       chip(`${t.type} 문제`, TYPE_TAG[t.type]);
       chip('주인 없음 (중립)', null, true);
       if (t.capitalCandidate) chip('수도 후보', '#c22f53');
-      if (t.rift) chip(RIFT[t.rift], '#5a3f9e');
     } else {
       $('whereName').textContent = '알 수 없는 땅';
       $('whereSub').textContent = '';
@@ -543,7 +567,8 @@
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x, t = terrain[i], o = terr[i];
       let c3 = base[t];
-      if (!c3) {
+      if (o !== 65535 && o > 0 && gone[o]) c3 = [52, 30, 88];
+      else if (!c3) {
         const tt = terrs[o];
         const rgb = tt ? TYPE_RGB[tt.type] : [159, 216, 138];
         const k = t === T.FOREST ? 0.78 : t === T.SAND ? 1.05 : 0.95;
@@ -554,7 +579,7 @@
       d[i * 4] = c3[0]; d[i * 4 + 1] = c3[1]; d[i * 4 + 2] = c3[2]; d[i * 4 + 3] = 255;
     }
     g.putImageData(img, 0, 0);
-    for (const t of terrs) if (t && t.capitalCandidate) { g.fillStyle = '#e5486a'; g.fillRect(t.altar[0] - 3, t.altar[1] - 3, 7, 7); g.fillStyle = '#ffffff'; g.fillRect(t.altar[0] - 1, t.altar[1] - 1, 3, 3); }
+    for (const t of terrs) if (t && t.capitalCandidate && !gone[t.id]) { g.fillStyle = '#e5486a'; g.fillRect(t.altar[0] - 3, t.altar[1] - 3, 7, 7); g.fillStyle = '#ffffff'; g.fillRect(t.altar[0] - 1, t.altar[1] - 1, 3, 3); }
     mapImg = c;
   }
 
@@ -713,6 +738,22 @@
   }
 
   // ------------------------------------------------------------ 시작
+  function setupDoomCard() {
+    const date = 13 + DAY;
+    if (!DOOM) {
+      $('doomL').textContent = '아직은 평화로운 세계';
+      $('doomD').textContent = `${DAY}일차`;
+      $('doomR').textContent = `12/${date} · ${PHASE}`;
+      $('doomBar').hidden = true;
+    } else {
+      $('doomL').textContent = '세계 멸망까지';
+      $('doomD').textContent = DAY >= 15 ? '결전의 날' : `D-${15 - DAY}`;
+      $('doomR').textContent = `${DAY}일차 · ${PHASE}`;
+      $('doomFill').style.width = `${Math.round((DAY - 4) / 11 * 100)}%`;
+      $('doomBar').hidden = false;
+    }
+  }
+
   loadWorld().then((data) => {
     setupWorld(data);
     buildMapImage();
@@ -720,7 +761,10 @@
     resize();
     goHome();
     $('toast').hidden = true;
+    setupDoomCard();
     $('loading').hidden = true;
+    if (DAY === 5) setTimeout(() => toast('신들이 선포했다: 12월 28일, 이 세계는 끝난다.'), 600);
+    else if (DOOM) { const n = terrs.filter((t) => t && gone[t.id]).length; if (n) setTimeout(() => toast(`균열이 영토 ${n}곳을 삼켰다`), 600); }
     requestAnimationFrame((n) => { last = n; frame(n); });
   }).catch((err) => {
     $('loading').firstChild.textContent = '지도를 불러오지 못했어요';

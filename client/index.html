@@ -83,8 +83,8 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 </div>
 
 <div id="doom" class="hud card">
-  <div class="row"><span>세계 멸망까지</span><span class="d">D-14</span><span>1일차 · 건국기</span></div>
-  <div class="bar"><div></div></div>
+  <div class="row"><span id="doomL">아직은 평화로운 세계</span><span class="d" id="doomD">1일차</span><span id="doomR">12/14 · 건국기</span></div>
+  <div class="bar" id="doomBar" hidden><div id="doomFill"></div></div>
 </div>
 
 <div id="tools" class="hud">
@@ -98,7 +98,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   <div class="cap">누르면 순간이동 (테스트용)</div>
 </div>
 
-<div id="help" class="hud card">WASD·방향키 이동 · Shift 빨리 걷기(테스트) · 휠 확대/축소</div>
+<div id="help" class="hud card">WASD·방향키 이동 · Shift 빨리 걷기 · 휠 확대/축소 · [ ] 날짜 바꾸기 (테스트)</div>
 
 <div id="prompt" class="hud card" hidden><span id="promptText">제단</span><kbd>E</kbd></div>
 <div id="toast" class="hud" hidden></div>
