@@ -98,6 +98,21 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #skyTimer { left: 50%; transform: translateX(-50%); top: calc(84px + env(safe-area-inset-top, 0px)); padding: 4px 14px; font-size: 13px; font-weight: 700; }
 #skyTimer b { font-family: var(--font-display); font-size: 18px; font-weight: 400; font-variant-numeric: tabular-nums; }
 #skyTimer.warn { background: #ffe1e8; }
+.modalbox { position: fixed; z-index: 20; inset: 0; background: rgba(27, 20, 48, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modalbox[hidden] { display: none; }
+.modalbox .panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; width: min(420px, 100%); max-height: calc(100vh - 40px); overflow: auto; }
+.modalbox h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 24px; }
+.modalbox .row { display: flex; justify-content: space-between; border-bottom: 2px solid #e4dcc4; padding: 3px 0; font-size: 14px; }
+.modalbox .msg { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.shopItem { display: flex; gap: 8px; align-items: center; justify-content: space-between; border-bottom: 2px solid #e4dcc4; padding: 6px 0; font-size: 14px; }
+.shopItem small { color: var(--muted); font-size: 11px; }
+.shopItem .seg { display: flex; gap: 4px; flex: none; }
+.shopItem button { min-height: 36px; font-size: 13px; }
+#buildBar { left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 6px; align-items: center; padding: 6px 10px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 32px); }
+#buildBar[hidden] { display: none; }
+#buildBar button { min-height: 36px; font-size: 13px; }
+#buildBar button[aria-pressed="true"] { filter: brightness(1.25); outline: 3px solid #ffd34d; }
+#prompt { cursor: pointer; touch-action: none; }
 #coupon { position: fixed; z-index: 20; inset: 0; background: rgba(27, 20, 48, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #coupon .panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; width: min(380px, 100%); }
 #coupon h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 24px; }
@@ -238,6 +253,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 <div id="inv" class="hud card" aria-label="보유 자원">
   <span class="invc"><img src="assets/extra/coin.png" alt="코인" width="18" height="18"> <span id="invCoin">0</span></span>
   <span><b>병력</b> <span id="invArmy">0</span></span>
+  <span><b>목재</b> <span id="invWood">0</span></span>
   <span><b>백신</b> <span id="invVac">0</span></span>
 </div>
 
@@ -281,6 +297,9 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   </div>
 </div>
 
+<div id="buildBar" class="hud card" hidden><b>설치 모드</b><button data-k="floor" type="button">▦ 바닥 <small>0</small></button><button data-k="wall" type="button">🧱 방벽 <small>0</small></button><button data-k="trap" type="button">🪤 덫 <small>0</small></button><button id="buildOff" type="button">끄기 (G)</button></div>
+<div id="storeBox" class="modalbox" hidden><div class="panel card"><h2>📦 우리 저장소</h2><div id="storeBody"></div><div class="seg"><button id="storeBuild" type="button">설치 모드 켜기</button><button id="storeClose" type="button">닫기</button></div></div></div>
+<div id="shopBox" class="modalbox" hidden><div class="panel card"><h2>🛒 하늘 거래소</h2><div id="shopBody"></div><div class="seg"><button id="shopClose" type="button">닫기</button></div></div></div>
 <div id="coupon" hidden>
   <div class="panel card">
     <h2>쿠폰 코드</h2>

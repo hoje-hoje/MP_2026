@@ -52,8 +52,15 @@
     if (x < 0 || y < 0 || x >= W || y >= H) return true;
     const t = terrain[y * W + x], o = terr[y * W + x];
     if (o !== 65535 && o > 0 && gone[o]) return true;
-    return t === T.VOID || t === T.HOLY || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1 || treeAt(x, y) !== null;
+    if (t === T.VOID || t === T.HOLY || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1 || treeAt(x, y) !== null) return true;
+    const e = TILES[y * W + x]; if (e && e.k === 'wall' && e.n !== MY_NID) return true; // 남의 방벽
+    return STORE_AT.has(y * W + x);
   }
+  // ---- 영지: 설치물(바닥·방벽), 우리 덫, 저장소 자리
+  let TILES = {};                 // 칸 번호 -> { k: 'floor'|'wall', n: 나라 }
+  let MY_TRAPS = new Set();       // 우리 나라 덫 (다른 나라엔 안 보임)
+  let STORE_AT = new Map();       // 칸 번호 -> 나라 (수도 저장소)
+  const FACE_D = [[0, 1], [0, -1], [-1, 0], [1, 0]];
   // 나무: 바닥에 굽지 않고 따로 그려서(깊이 정렬) 뒤로 지나갈 수 있게, 줄기 칸은 못 지나가게.
   let noTree = new Uint8Array(1);
   function treeAt(x, y) {
@@ -70,7 +77,7 @@
     return h < 0.004 ? 'midA' : null;
   }
   function clearTrees(cx, cy, r) { for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) if (x >= 0 && y >= 0 && x < W && y < H) noTree[y * W + x] = 1; }
-  function speedAt(x, y) { const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
+  function speedAt(x, y) { const e = TILES[y * W + x]; if (e && e.k === 'floor' && e.n === MY_NID) return MPRules.NUM.floorSpeed; const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
 
   // 영토 이름 (번호로 고정)
   const SYL = ['라온', '솔빛', '미르', '벼리', '가람', '누리', '다온', '초롱', '하람', '윤슬', '아라', '한결', '새벽', '별하', '온새', '나린', '해솔', '그루', '여울', '도담', '마루', '보람', '시나', '이든'];
@@ -213,8 +220,28 @@
     const f = Math.floor(performance.now() / 260 + t.id) % 3;
     g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, x, y + 2, 22, 7);
     const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
-    g.drawImage(altarSheet(t.type), f * 32, 0, 32, 32, x - 32, y - 60, 64, 64);
+    const fl = HITFX.get(t.id), hot = fl && performance.now() < fl; // 맞으면 0.12초 빨갛게 + 흔들림
+    const sx = hot ? Math.round(Math.sin(performance.now() / 12) * 3) : 0;
+    g.drawImage(altarSheet(t.type), f * 32, 0, 32, 32, x - 32 + sx, y - 60, 64, 64);
+    if (hot) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(255,40,60,0.55)'; g.fillRect(x - 32 + sx, y - 60, 64, 64); g.globalCompositeOperation = 'source-over'; g.fillStyle = 'rgba(255,60,80,0.35)'; ell(g, x + sx, y - 34, 22, 26); }
     g.imageSmoothingEnabled = prev;
+  }
+  const HITFX = new Map();
+  function drawWall(g, x, y, nid) { // 방벽: 벽돌 덩어리 + 나라 색 띠
+    const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x - 17, y - 4, 34, 6);
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) g.drawImage(ART.x_brick, 0, 0, 16, 16, x - 16 + c * 16, y - 46 + r * 14, 16, 14);
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x - 16, y - 8, 32, 6);
+    g.fillStyle = natColor(nid); g.fillRect(x - 16, y - 50, 32, 6); g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x - 16, y - 50, 32, 2);
+    g.imageSmoothingEnabled = prev;
+  }
+  function drawTrap(g, x, y) { // 우리 덫 (우리 나라에만 보임)
+    g.fillStyle = 'rgba(80,60,40,0.55)'; ell(g, x, y - 6, 12, 5);
+    g.fillStyle = '#c9c2b6'; for (let k = -2; k <= 2; k++) { g.beginPath(); g.moveTo(x + k * 5 - 2, y - 4); g.lineTo(x + k * 5, y - 12); g.lineTo(x + k * 5 + 2, y - 4); g.fill(); }
+  }
+  function drawStore(g, x, y, nid) { // 수도 저장소
+    pix(g, 'cabin', x, y + 4, 2); pix(g, 'woodpile', x + 44, y + 4, 2); pix(g, 'coin', x - 44, y - 2, 0, 18);
+    sign(g, x, y - 92, nid === MY_NID ? '우리 저장소' : `${natName(nid)} 저장소`);
   }
 
   function drawFlag(g, x, y, mine) {
@@ -372,6 +399,7 @@
   const chunks = new Map();
   let chunkBudget = 0;
 
+  function dirtyTile(i) { const x = i % W, y = Math.floor(i / W); for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) chunks.delete(Math.floor((x + dx * 3) / CHUNK) + ',' + Math.floor((y + dy * 3) / CHUNK)); }
   function getChunk(ci, cj) {
     const k = ci + ',' + cj;
     let c = chunks.get(k);
@@ -451,6 +479,7 @@
             if ((x + y) % 2 === 0) { g.fillStyle = '#5a3f9e'; g.fillRect(px + 4, py + 18, TILE - 8, 3); }
             break;
         }
+        { const e = TILES[y * W + x]; if (e && e.k === 'floor') { g.drawImage(ART.x_stonefloor, px, py, TILE, TILE); g.fillStyle = natColor(e.n); g.globalAlpha = 0.18; g.fillRect(px, py, TILE, TILE); g.globalAlpha = 1; } }
         // 영토 색 + 국경선: 우리 나라는 진하게, 경계는 우리 나라 색 띠 / 나머지 경계는 흰 선
         const o = terrAt(x, y);
         const own = o > 0 ? ownerOf(o) : null;
@@ -629,7 +658,7 @@
       emotes: ['열쇠 조각 팝니다', '병력 100 ↔ 코인 3천', '강화석 삼', '정보 삽니다', '흥정 ㄱ?', '너무 비쌈;;'],
       doors: [{ side: 'E', at: 9, to: 'temple' }],
       props: [
-        { x: 4, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 0, 'woodpile', '자원') },
+        { x: 4, y: 3, w: 4, h: 2, shop: 'build', draw: (g, x, y) => stall(g, x, y, 0, 'woodpile', '바닥·방벽·덫') },
         { x: 12, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 200, 'key', '병력') },
         { x: 20, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 120, 'book', '정보') },
         { x: 4, y: 12, w: 4, h: 2, shop: 'vaccine', draw: (g, x, y) => stall(g, x, y, 260, 'chalice', '백신 (균열 방어)') },
@@ -857,7 +886,7 @@
   const VACCINE_BASE = 3000, VACCINE_STEP = 500, SKY_LIMIT = 5 * 60;
   const vaccinePrice = () => VACCINE_BASE + VACCINE_STEP * inv.bought;
   function saveInv() { store('mp2026.inv', inv); renderInv(); }
-  function renderInv() { $('invCoin').textContent = (myView ? myView.me.coin : inv.coin).toLocaleString(); $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = inv.vaccine; }
+  function renderInv() { $('invCoin').textContent = (myView ? myView.me.coin : inv.coin).toLocaleString(); $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = myView ? myView.me.vaccine : inv.vaccine; $('invWood').textContent = myView ? myView.me.wood : 0; if (build.on) setBuild(true); }
   const player = {
     x: 0, y: 0, dir: 1, moving: false, scene: 'ground', room: null, entry: null,
     name: saved.name || '나', tag: '#277a58', team: store('mp2026.team') || 3,
@@ -943,13 +972,17 @@
     if (k === 'm') toggleMap();
     if (k === 'b') toggleWar();
     if (k === 't') goHome();
-    if (k === 'e') interact();
+    if (k === 'e' && !e.repeat) pressE();
+    if (k === 'g' && ONLINE) setBuild(!build.on);
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
     if (k === '[' || k === ']') { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; }
+    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
   });
-  addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+  addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); });
+  // 패드·폰: 화면 아래 안내를 누르면 E (꾹 누르기도 됨)
+  $('prompt').addEventListener('pointerdown', (e) => { e.preventDefault(); pressE(); });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) $('prompt').addEventListener(ev, releaseE);
   addEventListener('blur', () => keys.clear());
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); zoom = Math.max(0.5, Math.min(1.6, zoom * (e.deltaY < 0 ? 1.1 : 0.9))); }, { passive: false });
 
@@ -1016,7 +1049,7 @@
     if (player.scene === 'sky') {
       for (const sp of player.room.sprites) {
         if (sp.board && Math.hypot(sp.x - player.x, sp.y + 16 - player.y) < 90) best = sp.prop && sp.prop.desk === 'wander' ? { kind: 'desk', text: '등록 창구 이용하기' } : { kind: 'board', text: '게시판 읽기' };
-        if (sp.prop && sp.prop.shop === 'vaccine' && Math.hypot(sp.x - player.x, sp.y + 20 - player.y) < 100) best = { kind: 'vaccine', text: `백신 사기 · 코인 ${vaccinePrice().toLocaleString()}` };
+        if (sp.prop && sp.prop.shop && Math.hypot(sp.x - player.x, sp.y + 20 - player.y) < 100) best = ONLINE ? { kind: 'shop', text: sp.prop.shop === 'build' ? '바닥·방벽·덫 사기' : '백신 사기' } : sp.prop.shop === 'vaccine' ? { kind: 'vaccine', text: `백신 사기 · 코인 ${vaccinePrice().toLocaleString()}` } : null;
       }
     } else {
       const tx = player.x / TILE, ty = player.y / TILE;
@@ -1029,10 +1062,16 @@
         else if (Math.hypot(t.altar[0] + 0.5 - tx, t.altar[1] + 0.5 - ty) < 2.4) {
           const own = ownerOf(t.id), mine = myView && own === myView.me.id;
           const canClaim = myView && !own && Object.keys(owners).some((k) => owners[k] === myView.me.id && terrs[k] && terrs[k].neighbors.includes(t.id));
-          best = { kind: 'altar', t, claim: canClaim, solvable: canClaim || mine, text: canClaim ? `${t.name} · 문제 풀고 점령하기` : mine ? `우리 제단 · ${t.type} 문제 풀기 (병력)` : own ? `${natName(own)}의 제단` : `${t.name} 제단 · 우리 땅과 붙어야 점령 가능` };
+          if (ONLINE && own && !mine) best = { kind: 'hit', t, text: `${natName(own)}의 수정 때리기 · ${MPRules.NUM.scoutHits}번이면 병력이 보여요` };
+          else best = { kind: 'altar', t, claim: canClaim, solvable: canClaim || mine, text: canClaim ? `${t.name} · 문제 풀고 점령하기` : mine ? `우리 제단 · ${t.type} 문제 풀기 (병력)` : own ? `${natName(own)}의 제단` : `${t.name} 제단 · 우리 땅과 붙어야 점령 가능` };
         }
       }
     }
+    if (player.scene === 'ground' && ONLINE && best && best.t && (best.kind === 'altar' || best.kind === 'hit')) { // 저장소가 제단보다 가까우면 저장소
+      const ptx = player.x / TILE, pty = player.y / TILE, dA = Math.hypot(best.t.altar[0] + 0.5 - ptx, best.t.altar[1] + 0.5 - pty);
+      for (const [i] of STORE_AT) if (Math.hypot((i % W) + 0.5 - ptx, Math.floor(i / W) + 0.5 - pty) <= Math.min(1.9, dA)) { best = null; break; }
+    }
+    if (!best && player.scene === 'ground' && ONLINE) best = groundAction();
     const key = best ? best.kind + best.text : '';
     if (key !== (near ? near.kind + near.text : '')) {
       $('prompt').hidden = !best;
@@ -1042,8 +1081,82 @@
   }
   let toastTimer = 0;
   function toast(msg) { const el = $('toast'); el.textContent = msg; el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 2800); }
+  function facingTile() { const d = FACE_D[player.face | 0] || [0, 1]; return [Math.floor(player.x / TILE) + d[0], Math.floor(player.y / TILE) + d[1]]; }
+  const ITEM_NAME = { floor: '바닥', wall: '방벽', trap: '덫' };
+  // 땅에서 할 수 있는 일: 저장소, 설치 모드, 나무 베기, 방벽 부수기
+  function groundAction() {
+    const ptx = player.x / TILE, pty = player.y / TILE;
+    for (const [i, nid] of STORE_AT) if (Math.hypot((i % W) + 0.5 - ptx, Math.floor(i / W) + 0.5 - pty) < 1.9) return nid === MY_NID ? { kind: 'store', text: '우리 저장소 열기' } : { kind: 'enemyStore', nid, text: `${natName(nid)} 저장소` };
+    const [fx, fy] = facingTile(), i = fy * W + fx, e = TILES[i];
+    if (build.on && myView) {
+      if ((e && e.n === MY_NID) || MY_TRAPS.has(i)) return { kind: 'pickup', x: fx, y: fy, text: `${ITEM_NAME[e ? e.k : 'trap']} 거두기` };
+      if (ownerOf(terrAt(fx, fy)) !== MY_NID) return { kind: 'info', text: '설치 모드 · 우리 땅에만 놓을 수 있어요' };
+      return { kind: 'place', x: fx, y: fy, text: `${ITEM_NAME[build.k]} 놓기 · 남은 ${myView.me.items[build.k]}개` };
+    }
+    if (treeAt(fx, fy)) return { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '나무 베기 · E 꾹 누르기' };
+    if (e && e.k === 'wall' && e.n !== MY_NID) return { kind: 'break', x: fx, y: fy, hold: MPRules.NUM.wallBreakSec * 1000, text: `${natName(e.n)} 방벽 부수기 · E 꾹 ${MPRules.NUM.wallBreakSec}초` };
+    return null;
+  }
+  // 꾹 누르기 (나무 베기 2초, 방벽 부수기 5초)
+  const hold = { on: false, t0: 0, ms: 0, kind: '', x: 0, y: 0 };
+  let stunUntil = 0;
+  function pressE() { if (near && near.hold) startHold(near); else interact(); }
+  function releaseE() { if (hold.on) cancelHold(); }
+  function startHold(n) {
+    Object.assign(hold, { on: true, t0: performance.now(), ms: n.hold, kind: n.kind, x: n.x, y: n.y });
+    if (n.kind === 'break') ws.send(JSON.stringify({ t: 'breakStart', x: n.x, y: n.y }));
+  }
+  function cancelHold() { hold.on = false; }
+  function tickHold() {
+    if (!hold.on || performance.now() - hold.t0 < hold.ms) return;
+    hold.on = false;
+    if (netOn) ws.send(JSON.stringify({ t: hold.kind === 'chop' ? 'chop' : 'breakWall', x: hold.x, y: hold.y }));
+  }
+  // 설치 모드 (G): 저장소의 바닥·방벽·덫을 바로 앞 칸에 놓기
+  const build = { on: false, k: 'floor' };
+  function setBuild(on, k) {
+    if (on && !myView) { toast('나라가 있어야 설치할 수 있어요'); return; }
+    build.on = on; if (k) build.k = k;
+    $('buildBar').hidden = !on;
+    for (const b of document.querySelectorAll('#buildBar [data-k]')) { b.setAttribute('aria-pressed', String(b.dataset.k === build.k)); b.querySelector('small').textContent = myView ? myView.me.items[b.dataset.k] : 0; }
+    near = null;
+  }
+  for (const b of document.querySelectorAll('#buildBar [data-k]')) b.addEventListener('click', () => setBuild(true, b.dataset.k));
+  $('buildOff').addEventListener('click', () => setBuild(false));
+  // 우리 저장소 창
+  function openStore() {
+    const me = myView && myView.me; if (!me) return;
+    const row = (icon, name, v) => `<div class="row"><span>${icon} ${name}</span><b>${(v || 0).toLocaleString()}</b></div>`;
+    $('storeBody').innerHTML = `<p class="msg">우리 나라 모두가 같이 쓰는 저장소예요. 개인 소지품은 없어요.</p>` +
+      row('🪙', '코인', me.coin) + row('⚔', '병력', me.army) + row('🪵', '목재', me.wood) + row('💉', '백신', me.vaccine) +
+      row('▦', '바닥', me.items.floor) + row('🧱', '방벽', me.items.wall) + row('🪤', '덫', me.items.trap) +
+      `<p class="msg">바닥·방벽·덫은 하늘 거래소에서 사요. <b>설치 모드(G)</b>를 켜고 우리 땅에서 바로 앞 칸에 E로 놓아요. 바닥 위에선 우리 국민이 빨라지고, 방벽은 다른 나라 사람을 막고, 덫은 밟은 적을 3초 묶어요.</p>`;
+    $('storeBox').hidden = false;
+  }
+  $('storeBuild').addEventListener('click', () => { $('storeBox').hidden = true; setBuild(true); });
+  $('storeClose').addEventListener('click', () => { $('storeBox').hidden = true; });
+  // 하늘 거래소 창
+  function openShop() {
+    const me = myView && myView.me;
+    if (!me) { toast('나라가 있어야 살 수 있어요 (나라 공용 저장소에서 내요)'); return; }
+    const P = MPRules.NUM.price;
+    const item = (k, name, desc, price, counts) => `<div class="shopItem"><div><b>${name}</b> <small>${desc}</small><br><span>코인 ${price.toLocaleString()}${counts ? ' / 개' : ''}</span></div><div class="seg">${(counts || [1]).map((c) => `<button data-buy="${k}" data-n="${c}">${counts ? c + '개' : '사기'}</button>`).join('')}</div></div>`;
+    $('shopBody').innerHTML = `<p class="msg">우리 저장소 코인 <b>${me.coin.toLocaleString()}</b> · 산 물건은 우리 저장소에 들어가요</p>` +
+      item('floor', '▦ 바닥', '우리 국민이 1.5배 빨라짐', P.floor, [1, 5, 20]) + item('wall', '🧱 방벽', '다른 나라 사람을 막음 (5초면 부서짐)', P.wall, [1, 5, 10]) +
+      item('trap', '🪤 덫', '밟은 적이 3초 동안 못 움직임 · 적에겐 안 보임', P.trap, [1, 3]) + item('vaccine', '💉 백신', '균열에서 영토 하나를 지킴 · 살수록 비싸짐', me.vaccinePrice, null);
+    for (const b of $('shopBody').querySelectorAll('[data-buy]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'buy', item: b.dataset.buy, n: +b.dataset.n })); };
+    $('shopBox').hidden = false;
+  }
+  $('shopClose').addEventListener('click', () => { $('shopBox').hidden = true; });
   function interact() {
     if (!near) return;
+    if (near.kind === 'store') { openStore(); return; }
+    if (near.kind === 'shop') { openShop(); return; }
+    if (near.kind === 'hit') { HITFX.set(near.t.id, performance.now() + 120); if (netOn) ws.send(JSON.stringify({ t: 'hit', terr: near.t.id })); return; }
+    if (near.kind === 'place' || near.kind === 'pickup') { if (netOn) ws.send(JSON.stringify({ t: near.kind, x: near.x, y: near.y, k: build.k })); return; }
+    if (near.kind === 'info') { toast(near.text); return; }
+    if (near.kind === 'enemyStore') { toast(`${near.text} · 훔치기는 곧 열려요`); return; }
+    if (near.kind === 'node' && ONLINE) { if (mined.has(near.n.id)) { toast('이 금광은 오늘 이미 캤어요'); return; } if (netOn) ws.send(JSON.stringify({ t: 'mine', terr: near.n.id })); return; }
     if (near.kind === 'portal') ascend(near.t);
     else if (near.kind === 'node') {
       if (mined.has(near.n.id)) { toast('이 금광은 오늘 이미 캤어요'); return; }
@@ -1271,6 +1384,7 @@
     switch (m.t) {
       case 'welcome': {
         myId = m.id; netOn = true; store('mp2026.token', m.token);
+        TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         if (!m.view) openFound('who'); else $('found').hidden = true;
         chatLog = m.chat || []; renderChat();
@@ -1311,6 +1425,14 @@
       case 'err': if (!$('puzzle').hidden) puzzleResult(false, m.text); toast(m.text); if (!$('war').hidden) renderWar(); break;
       case 'ok': toast(m.text); break;
       case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
+      case 'tile': { if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); break; }
+      case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
+      case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); break;
+      case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
+      case 'scout': toast(m.text); break;
+      case 'stun': stunUntil = performance.now() + m.ms; step.on = false; toast(m.text); break;
+      case 'pos': player.x = m.x; player.y = m.y; step.on = false; netTp = true; break;
+      case 'mined': mined.add(m.terr); toast(m.text); break;
       case 'notice': showNotice(m.notice, true); break;
       case 'settings': testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; if (!$('war').hidden) renderWar(); break;
     }
@@ -1420,6 +1542,8 @@
     if (n) nationsPub = n;
     if (v !== undefined) myView = v;
     MY_NID = myView ? myView.me.id : null;
+    STORE_AT = new Map();
+    for (const n of Object.values(nationsPub)) if (!n.dead && terrs[n.capital]) { const [sx, sy] = MPRules.storageSpot(terrs[n.capital], tileAt); STORE_AT.set(sy * W + sx, n.id); clearTrees(sx, sy, 1); }
     if (myView && terrs[myView.me.capital]) { home = terrs[myView.me.capital]; player.tag = myView.me.color; }
     chunks.clear(); buildMapImage(); lastTerr = null; renderInv();
     if (!$('war').hidden) renderWar();
@@ -1841,7 +1965,7 @@
     const t = now / 1000;
 
     // 플레이어 이동
-    stepPlayer(dt);
+    stepPlayer(dt); tickHold();
     if (player.scene === 'sky') {
       player.skyLeft -= dt;
       if (player.skyLeft <= 0) { descend(); toast('하늘에 머물 수 있는 5분이 끝나 땅으로 내려왔어요'); }
@@ -1886,6 +2010,8 @@
     }
     const d = wantDir();
     if (!d) { player.moving = false; return; }
+    if (performance.now() < stunUntil) { player.moving = false; return; }
+    if (hold.on) cancelHold();
     player.face = faceOf(d[0], d[1], player.face);
     if (d[0]) player.dir = d[0];
     // 지금 칸의 가운데로 맞춘 뒤 한 칸 옆으로
@@ -1962,9 +2088,23 @@
         if (ha < 0.0025) { const a = USER.animals[(ha * 1e6 | 0) % 6]; list.push({ x: tx * TILE + 16, y: ty * TILE + 28, draw: (g, X, Y) => pix(g, 'u:' + a, X, Y - (Math.floor(performance.now() / 400 + tx) % 2), 2) }); }
       }
     }
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      const i = ty * W + tx, e = TILES[i];
+      if (e && e.k === 'wall') list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawWall(g, X, Y, e.n) });
+      if (MY_TRAPS.has(i)) list.push({ x: tx * TILE + 16, y: ty * TILE + 4, draw: (g, X, Y) => drawTrap(g, X, Y + 24) });
+    }
+    for (const [i, nid] of STORE_AT) { const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); }
+    if (build.on && player.scene === 'ground') { // 설치 모드: 앞 칸 표시
+      const [fx, fy] = facingTile(); ctx.fillStyle = 'rgba(255,211,77,0.35)'; ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE); ctx.strokeStyle = '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect(fx * TILE + 1, fy * TILE + 1, TILE - 2, TILE - 2);
+    }
     for (const b of others('ground', null)) if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1) list.push(b);
     list.push(player);
     drawActors(list, t);
+    if (hold.on) { // 꾹 누르기 게이지
+      const k = Math.min(1, (performance.now() - hold.t0) / hold.ms);
+      ctx.fillStyle = '#2b2340'; ctx.fillRect(player.x - 26, player.y - 96, 52, 10); ctx.fillStyle = '#ffd34d'; ctx.fillRect(player.x - 24, player.y - 94, 48 * k, 6);
+    }
+    if (performance.now() < stunUntil) { ctx.font = `700 13px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd34d'; ctx.fillText('✦ 꼼짝 못 함 ✦', player.x, player.y - 100); }
   }
 
   // ------------------------------------------------------------ 시작

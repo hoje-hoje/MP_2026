@@ -20,12 +20,45 @@
     lossLose: 0.5, lossWin: 0.25,  // 전투 손실
     actionsPerDay: 10,             // 하루 행동력 (점령·퍼즐)
     puzzleArmy: 10,                // 퍼즐 1문제 병력
+    // 영지 (나라 공용 저장소)
+    woodPerTree: 2,                // 나무 1그루 목재
+    price: { floor: 20, wall: 60, trap: 150 }, // 하늘 거래소 가격 (코인, 1개)
+    vaccineBase: 3000, vaccineStep: 500,       // 백신: 나라가 살 때마다 비싸짐
+    maxWalls: 60, maxTraps: 12,    // 나라당 설치 한도
+    floorSpeed: 1.5,               // 우리 나라 바닥 위에서 빨라지는 배수
+    wallBreakSec: 5, chopSec: 2,   // 방벽 부수기·나무 베기 시간
+    scoutHits: 10,                 // 적 수정을 이만큼 때리면 그 나라 병력이 보임
+    carry: { coin: 150, wood: 10 }, // 한 번에 훔쳐 들 수 있는 양
+    stealSec: 3, arrestJail: 3, jailMin: 60, // 훔치기 시간, 체포 몇 번이면 감옥, 감옥 시간(분)
   };
+  const T = { VOID: 0, GRASS: 1, FOREST: 2, SAND: 3, WATER: 4, MOUNTAIN: 5, HOLY: 6, WALL: 7 };
+  function hash(x, y, s = 0) { let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+  // 나무가 있는 칸인지 (지형 값만 보고 정해짐 → 서버와 화면이 같은 결과)
+  function treeKind(t, x, y) {
+    if (t !== T.FOREST && t !== T.GRASS) return null;
+    const h = hash(x, y, 7);
+    if (t === T.FOREST) {
+      if (h < 0.07 && (x + y) % 3 === 0) return h < 0.035 ? 'treeA' : 'treeB';
+      if (h < 0.26 && (x + 2 * y) % 2 === 0) return h < 0.17 ? 'midA' : 'midB';
+      return null;
+    }
+    return h < 0.004 ? 'midA' : null;
+  }
+  // 수도 저장소 위치: 제단 둘레에서 걸을 수 있는 첫 칸 (깃발 자리 ±2,0 과 포털은 피함)
+  const STORE_OFFS = [[-3, 1], [3, 1], [-3, -1], [3, -1], [-2, -2], [2, -2], [0, -3], [-3, 2], [3, 2], [-4, 0], [4, 0]];
+  function storageSpot(t, tileAt) {
+    for (const [dx, dy] of STORE_OFFS) {
+      const x = t.altar[0] + dx, y = t.altar[1] + dy, k = tileAt(x, y);
+      if (t.portal && Math.abs(t.portal[0] - x) <= 1 && Math.abs(t.portal[1] - y) <= 1) continue; // 포털 길 막지 않게
+      if (k === T.GRASS || k === T.FOREST || k === T.SAND) return [x, y];
+    }
+    return [t.altar[0] - 3, t.altar[1]];
+  }
   const COLORS = ['#3d5fb8', '#c94a3c', '#277a58', '#8a4fc0', '#9a5f10', '#1f7f8f', '#b03a78', '#4f6b1f', '#5a4fc0', '#a0522d', '#2b6f9e', '#7a3fa0'];
   const teamColor = (n) => COLORS[((n | 0) - 1 + COLORS.length * 10) % COLORS.length];
   const FRONTS = ['A', 'B', 'C'];
 
-  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1 }; }
+  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1, tiles: {}, traps: {}, chopped: {} }; }
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const randCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
   const clampTroops = (arr) => (Array.isArray(arr) && arr.length === 3) ? arr.map((v) => Math.max(0, Math.floor(+v || 0))) : null;
@@ -37,6 +70,7 @@
       for (const t of map.territories) this.t[t.id] = t;
       this.caps = map.territories.filter((t) => t.capitalCandidate).sort((a, b) => a.id - b.id);
       this.s = state || emptyState();
+      for (const k of ['tiles', 'traps', 'chopped']) this.s[k] = this.s[k] || {}; // 예전 저장 상태 호환
       this._dist = {};
     }
 
@@ -265,7 +299,10 @@
       for (const k of Object.keys(this.s.owner)) if (this.s.owner[k] === D.id) this.s.owner[k] = A.id;
       for (const m of D.members) if (!A.members.includes(m)) A.members.push(m);
       A.provinces = A.provinces.concat(D.provinces.filter((p) => !A.provinces.includes(p)));
-      A.army += D.army; A.coin += D.coin;
+      A.army += D.army; A.coin += D.coin; A.wood = (A.wood || 0) + (D.wood || 0); A.vaccine = (A.vaccine || 0) + (D.vaccine || 0);
+      for (const k of ['floor', 'wall', 'trap']) { A.items = A.items || {}; A.items[k] = (A.items[k] || 0) + ((D.items || {})[k] || 0); }
+      for (const [i, e] of Object.entries(this.s.tiles || {})) if (e.n === D.id) e.n = A.id;
+      for (const [i, nid] of Object.entries(this.s.traps || {})) if (nid === D.id) this.s.traps[i] = A.id;
       D.army = 0; D.coin = 0; D.dead = true; D.mergedInto = A.id;
       for (const b of this.s.battles) if (b.def === D.id) b.def = A.id;
     }
@@ -282,6 +319,7 @@
       return {
         me: {
           id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, army: n.army, coin: n.coin, actions: n.actions,
+          wood: n.wood || 0, vaccine: n.vaccine || 0, items: Object.assign({ floor: 0, wall: 0, trap: 0 }, n.items), vaccinePrice: NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0),
           isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length,
           declaresLeft: this.declaresLeft(n.id), provinces: n.provinces, code: n.code,
           // 접속 열쇠(토큰)는 절대 내보내지 않는다: 순번만
@@ -304,5 +342,5 @@
     return (accepts || []).some((a) => { const x = norm(a); if (x === g) return true; const nx = num(x), ng = num(g); return !isNaN(nx) && !isNaN(ng) && Math.abs(nx - ng) < 1e-9; });
   }
 
-  return { World, NUM, FRONTS, teamColor, emptyState, sameAnswer };
+  return { World, NUM, FRONTS, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, T };
 });
