@@ -929,7 +929,7 @@
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
     if (k === '[' || k === ']') { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; }
+    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; }
   });
   addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
   addEventListener('blur', () => keys.clear());
@@ -1011,7 +1011,7 @@
         else if (Math.hypot(t.altar[0] + 0.5 - tx, t.altar[1] + 0.5 - ty) < 2.4) {
           const own = ownerOf(t.id), mine = myView && own === myView.me.id;
           const canClaim = myView && !own && Object.keys(owners).some((k) => owners[k] === myView.me.id && terrs[k] && terrs[k].neighbors.includes(t.id));
-          best = { kind: 'altar', t, claim: canClaim, text: canClaim ? `${t.name} 점령하기 (행동력 1)` : mine ? `우리 제단 · ${t.type} 문제 풀기` : own ? `${natName(own)}의 제단` : `${t.name} 제단 · 우리 땅과 붙어야 점령 가능` };
+          best = { kind: 'altar', t, claim: canClaim, solvable: canClaim || mine, text: canClaim ? `${t.name} · 문제 풀고 점령하기` : mine ? `우리 제단 · ${t.type} 문제 풀기 (병력)` : own ? `${natName(own)}의 제단` : `${t.name} 제단 · 우리 땅과 붙어야 점령 가능` };
         }
       }
     }
@@ -1038,7 +1038,7 @@
       inv.coin -= price; inv.vaccine += 1; inv.bought += 1; saveInv(); near = null;
       toast(`백신을 샀어요 · 보유 ${inv.vaccine}개 (다음 가격 ${vaccinePrice().toLocaleString()})`);
     }
-    else if (near.kind === 'altar') { if (near.claim) warAction('claim', { terr: near.t.id }); else toast(`'${near.t.type}' 퍼즐은 다음 단계에서 붙일 예정이에요`); }
+    else if (near.kind === 'altar') { if (near.solvable) openPuzzle(near.t); else toast(near.text); }
     else if (near.kind === 'desk') { $('wanderMsg').textContent = '나라가 없다면 여기서 등록하세요.'; renderWander(); $('wanderBox').hidden = false; }
     else if (near.kind === 'board') {
       if (!DOOM) toast('[공지] 신들은 아직 침묵하고 있다.');
@@ -1276,7 +1276,9 @@
       case 'joined': chatLog = m.chat || []; renderChat(); afterFounded(m.founded); break;
       case 'view': applyWorld(null, null, m.view); break;
       case 'night': applyWorld(null, null, m.view); showNight(m.reports || []); break;
-      case 'err': toast(m.text); break;
+      case 'puzzle': showPuzzle(m); break;
+      case 'answer': puzzleResult(m.correct, m.text); break;
+      case 'err': if (!$('puzzle').hidden) puzzleResult(false, m.text); toast(m.text); break;
       case 'ok': toast(m.text); break;
     }
   }
@@ -1626,6 +1628,50 @@
     toast('유랑민으로 떨어졌어요 · 하늘 유랑민 등록소에서 귀화·용병·건국을 등록할 수 있어요');
   }
 
+  // ------------------------------------------------------------ 제단 수학 퍼즐
+  // 온라인: 문제만 받고 답은 서버가 확인 / 미리보기: puzzles.preview.json (샘플)
+  let previewPuzzles = null, curPuzzle = null;
+  const offSolved = new Set(store('mp2026.solved') || []);
+  async function openPuzzle(t) {
+    if (ONLINE) { if (netOn) ws.send(JSON.stringify({ t: 'puzzle', terr: t.id })); return; }
+    if (!OFF_ME) { toast('나라가 있어야 퍼즐 보상을 받을 수 있어요'); return; }
+    if (!previewPuzzles) { try { previewPuzzles = (await (await fetch('puzzles.preview.json')).json()).puzzles; } catch (e) { previewPuzzles = []; } }
+    const pool = previewPuzzles.filter((q) => !offSolved.has(q.id));
+    if (!pool.length) { toast('지금 풀 수 있는 문제가 없어요 (문제가 곧 추가돼요)'); return; }
+    const same = pool.filter((q) => q.type === t.type);
+    const q = (same.length ? same : pool)[0];
+    showPuzzle({ id: q.id, terr: t.id, type: q.type, question: q.question, image: q.image, mode: ownerOf(t.id) ? 'army' : 'claim' }, q);
+  }
+  function showPuzzle(p, local) {
+    curPuzzle = Object.assign({}, p, { local });
+    $('pzTitle').textContent = `🔮 ${p.type} 문제`;
+    $('pzMode').textContent = p.mode === 'claim' ? `맞히면 ${terrLabel(p.terr)}을(를) 점령해요` : `맞히면 병력 +${MPRules.NUM.puzzleArmy}`;
+    $('pzQ').textContent = p.question || '';
+    const img = $('pzImg'); img.hidden = !p.image; if (p.image) { img.src = p.image; img.alt = p.question || '문제 그림'; }
+    $('pzQ').hidden = !!p.image; // 그림이 있으면 글은 그림 설명(alt)으로만
+    $('pzIn').value = ''; $('pzMsg').textContent = '한 번 낼 때마다 행동력 1을 써요.'; $('pzMsg').className = 'msg';
+    $('puzzle').hidden = false; setTimeout(() => $('pzIn').focus(), 50);
+  }
+  function submitPuzzle() {
+    if (!curPuzzle) return;
+    const ans = $('pzIn').value.trim();
+    if (!ans) { $('pzMsg').textContent = '답을 입력해 주세요'; return; }
+    if (ONLINE) { ws.send(JSON.stringify({ t: 'answer', id: curPuzzle.id, answer: ans })); return; }
+    if (!OFF.useAction(OFF_ME)) return puzzleResult(false, '오늘 행동력을 다 썼어요 (자정에 다시 10)');
+    if (!MPRules.sameAnswer(ans, curPuzzle.local.answer)) { offSync(); return puzzleResult(false, '틀렸어요. 다시 도전하려면 행동력 1이 들어요'); }
+    offSolved.add(curPuzzle.id); store('mp2026.solved', [...offSolved]);
+    const r = OFF.puzzleReward(OFF_ME, curPuzzle.terr);
+    offSync();
+    puzzleResult(true, r.kind === 'claim' ? '정답! 영토를 점령했어요' : r.kind === 'army' ? `정답! 병력 +${r.army}` : '정답!');
+  }
+  function puzzleResult(ok, text) {
+    $('pzMsg').textContent = text; $('pzMsg').className = 'msg ' + (ok ? 'good' : 'warn');
+    if (ok) { curPuzzle = null; setTimeout(() => { $('puzzle').hidden = true; }, 1300); toast(text); }
+  }
+  $('pzSend').addEventListener('click', submitPuzzle);
+  $('pzIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPuzzle(); });
+  $('pzClose').addEventListener('click', () => { $('puzzle').hidden = true; curPuzzle = null; });
+
   // ------------------------------------------------------------ 루프
   let dpr = 1, vw = 0, vh = 0;
   function resize() {
@@ -1665,11 +1711,12 @@
   // 칸 단위 이동: 방향키를 한 번 누르면 한 칸, 누르고 있으면 계속. (좀 더 빠르게: 한 칸 0.11초)
   const STEP = 0.11;
   const step = { on: false, fx: 0, fy: 0, tx: 0, ty: 0, t: 0, dur: STEP };
-  let lastDirKey = null;
-  addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if (DIRS[k]) lastDirKey = k; });
+  let lastDirKey = null, queuedDir = null;
+  addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; const k = e.key.toLowerCase(); if (DIRS[k]) { lastDirKey = k; if (!e.repeat) queuedDir = DIRS[k]; } });
   const DIRS = { arrowleft: [-1, 0], a: [-1, 0], arrowright: [1, 0], d: [1, 0], arrowup: [0, -1], w: [0, -1], arrowdown: [0, 1], s: [0, 1] };
   function wantDir() {
     if (stick.on && Math.hypot(stick.vx, stick.vy) > 0.35) return Math.abs(stick.vx) > Math.abs(stick.vy) ? [Math.sign(stick.vx), 0] : [0, Math.sign(stick.vy)];
+    if (queuedDir) { const d = queuedDir; queuedDir = null; return d; } // 아주 짧게 눌러도 한 칸
     if (lastDirKey && keys.has(lastDirKey)) return DIRS[lastDirKey];
     for (const k in DIRS) if (keys.has(k)) return DIRS[k];
     return null;

@@ -19,6 +19,7 @@
     cmdPer: 0.10, cmdMax: 0.30,    // 지휘관 보너스: 그 영토에 서 있는 국민 1명당 +10%, 최대 +30%
     lossLose: 0.5, lossWin: 0.25,  // 전투 손실
     actionsPerDay: 10,             // 하루 행동력 (점령·퍼즐)
+    puzzleArmy: 10,                // 퍼즐 1문제 병력
   };
   const COLORS = ['#3d5fb8', '#c94a3c', '#277a58', '#8a4fc0', '#9a5f10', '#1f7f8f', '#b03a78', '#4f6b1f', '#5a4fc0', '#a0522d', '#2b6f9e', '#7a3fa0'];
   const teamColor = (n) => COLORS[((n | 0) - 1 + COLORS.length * 10) % COLORS.length];
@@ -139,16 +140,36 @@
     refreshActions(n, dayKey) { if (dayKey && n.actionDay !== dayKey) { n.actionDay = dayKey; n.actions = NUM.actionsPerDay; } }
 
     // 중립 영토 점령 (나중에 수학 퍼즐을 맞혀야 호출)
-    claim(nid, tid, dayKey) {
+    claim(nid, tid, dayKey, free) {
       const n = this.nation(nid), t = this.t[tid];
       if (!n || n.dead || !t) return { ok: false, err: '나라나 영토가 없어요' };
       this.refreshActions(n, dayKey);
       if (this.s.owner[tid]) return { ok: false, err: '이미 주인이 있는 땅이에요' };
       if (!this.touches(nid, tid)) return { ok: false, err: '우리 땅과 붙어 있는 곳만 점령할 수 있어요' };
-      if (n.actions <= 0) return { ok: false, err: '오늘 행동력을 다 썼어요' };
-      n.actions -= 1;
+      if (!free && n.actions <= 0) return { ok: false, err: '오늘 행동력을 다 썼어요' };
+      if (!free) n.actions -= 1;
       this.s.owner[tid] = nid;
       return { ok: true };
+    }
+
+    // ---------------------------------------------------------- 제단 퍼즐
+    // 시도할 때마다 행동력 1. 맞히면: 붙어 있는 중립 영토면 점령, 우리 영토면 병력 +퍼즐보상
+    useAction(nid, dayKey) {
+      const n = this.nation(nid); if (!n) return false;
+      this.refreshActions(n, dayKey);
+      if (n.actions <= 0) return false;
+      n.actions -= 1; return true;
+    }
+    puzzleReward(nid, tid, dayKey) {
+      const n = this.nation(nid); if (!n) return { kind: 'none' };
+      const own = this.s.owner[tid];
+      if (!own && this.touches(nid, tid)) { this.claim(nid, tid, dayKey, true); return { kind: 'claim' }; }
+      if (own === nid) {
+        const extra = n.members.length > 4 ? 0.5 : 1; // 5·6번째 국민이 있으면 보상 절반 (단순화: 나라 전체)
+        const army = Math.round(NUM.puzzleArmy * extra);
+        n.army += army; return { kind: 'army', army };
+      }
+      return { kind: 'none' };
     }
 
     // ---------------------------------------------------------- 전투 (블로토)
@@ -274,5 +295,14 @@
     }
   }
 
-  return { World, NUM, FRONTS, teamColor, emptyState };
+  // 답 비교: 공백 무시, 숫자면 값으로 (7 = 7.0 = 07), 분수 a/b 도 값으로
+  function sameAnswer(given, accepts) {
+    const norm = (v) => String(v == null ? '' : v).replace(/\s+/g, '').replace(/[,]/g, '').toLowerCase();
+    const num = (v) => { const m = /^(-?\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)$/.exec(v); if (m) return +m[1] / +m[2]; return /^-?\d+(\.\d+)?$/.test(v) ? +v : NaN; };
+    const g = norm(given);
+    if (!g) return false;
+    return (accepts || []).some((a) => { const x = norm(a); if (x === g) return true; const nx = num(x), ng = num(g); return !isNaN(nx) && !isNaN(ng) && Math.abs(nx - ng) < 1e-9; });
+  }
+
+  return { World, NUM, FRONTS, teamColor, emptyState, sameAnswer };
 });

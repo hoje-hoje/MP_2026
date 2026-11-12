@@ -104,6 +104,17 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 .codebox b, .code { font-family: var(--font-display); font-size: 34px; letter-spacing: 8px; color: #6b4fb3; }
 .code { font-size: 22px; letter-spacing: 4px; }
 #btnFound:disabled { opacity: 0.5; cursor: not-allowed; }
+#puzzle { position: fixed; z-index: 24; inset: 0; background: rgba(27, 20, 48, 0.65); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#puzzle .panel { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; width: min(620px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+#puzzle .head { display: flex; justify-content: space-between; align-items: center; }
+#puzzle h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 22px; }
+#puzzle .mode { margin: 0; font-size: 13px; font-weight: 700; color: #6b4fb3; }
+#puzzle img { max-width: 100%; background: #ffffff; border: 2px solid #2b2340; }
+#puzzle .q { margin: 0; font-family: 'Noto Sans KR', system-ui, sans-serif; font-size: 15px; line-height: 1.6; }
+#puzzle .row { display: flex; gap: 8px; }
+#puzzle input { flex: 1; min-width: 0; font: 700 22px var(--font-display); color: var(--ink); background: #ffffff; border: 3px solid var(--ink); padding: 6px 10px; }
+#puzzle .msg { margin: 0; font-size: 13px; font-weight: 700; color: var(--muted); }
+#puzzle .msg.good { color: #277a58; } #puzzle .msg.warn { color: #c22f53; }
 #war { position: fixed; z-index: 22; inset: 0; background: rgba(27, 20, 48, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #war .panel { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; width: min(560px, 100%); max-height: calc(100vh - 32px); }
 #war .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -291,6 +302,17 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
     <div id="warHead" class="warhead"></div>
     <div id="warTabs" class="seg"><button type="button" data-tab="nation">나라</button><button type="button" data-tab="attack">공격</button><button type="button" data-tab="defend">방어</button><button type="button" data-tab="report">결과</button></div>
     <div id="warBody" class="warbody"></div>
+  </div>
+</div>
+
+<div id="puzzle" hidden>
+  <div class="panel card">
+    <div class="head"><h2 id="pzTitle">문제</h2><button id="pzClose" type="button">닫기</button></div>
+    <p id="pzMode" class="mode"></p>
+    <img id="pzImg" alt="문제 그림" hidden>
+    <p id="pzQ" class="q"></p>
+    <div class="row"><input id="pzIn" type="text" inputmode="decimal" autocomplete="off" placeholder="답"><button id="pzSend" type="button">제출</button></div>
+    <p id="pzMsg" class="msg"></p>
   </div>
 </div>
 

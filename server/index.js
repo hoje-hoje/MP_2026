@@ -74,6 +74,13 @@ const MAP = JSON.parse(fs.readFileSync(STATIC['/world.json'], 'utf8'));
 const TERR = new Uint16Array(Buffer.from(MAP.territory_u16le_b64, 'base64').buffer.slice(0));
 const terrAtPx = (x, y) => { const tx = Math.floor(x / 32), ty = Math.floor(y / 32); if (tx < 0 || ty < 0 || tx >= MAP.width || ty >= MAP.height) return -1; const v = TERR[ty * MAP.width + tx]; return v === 65535 ? -1 : v; };
 const world = new World(MAP, state.world || null);
+const { sameAnswer } = require('../client/rules.js');
+// 문제 은행: server/puzzles.local.json (저장소에 안 올림) 이 있으면 그것, 없으면 샘플
+const PUZZLE_FILE = fs.existsSync(path.join(__dirname, 'puzzles.local.json')) ? path.join(__dirname, 'puzzles.local.json') : path.join(__dirname, 'puzzles.sample.json');
+let PUZZLES = [];
+function loadPuzzles() { try { PUZZLES = JSON.parse(fs.readFileSync(PUZZLE_FILE, 'utf8')).puzzles || []; console.log(`문제 ${PUZZLES.length}개 (${path.basename(PUZZLE_FILE)})`); } catch (e) { console.log('문제 파일 오류:', e.message); } }
+loadPuzzles();
+fs.watchFile(PUZZLE_FILE, { interval: 5000 }, loadPuzzles); // 문제 파일을 고치면 서버 재시작 없이 반영
 state.world = world.s;
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const FOUNDING_LAST_DAY = process.env.FOUNDING_LAST_DAY || '2026-12-15'; // 건국은 D2(12/15)까지
@@ -196,6 +203,37 @@ wss.on('connection', (ws) => {
         dirty = true; broadcastOwners(); sendViews([r.nation.id]);
         send(ws, { t: 'joined', founded: m.t === 'found', chat: (state.chats['nation:' + r.nation.id] || []).slice(-30) });
         if (m.t === 'join') notifyNation(r.nation.id, `${s.acc.name}님이 우리 나라에 들어왔어요`);
+        break;
+      }
+      case 'puzzle': {
+        const t = world.t[m.terr | 0]; const n = world.nationOfPlayer(s.token);
+        if (!t) return;
+        if (s.scene !== 'ground' || s.x == null || Math.hypot(s.x / 32 - t.altar[0] - 0.5, s.y / 32 - t.altar[1] - 0.5) > 3) return send(ws, { t: 'err', text: '제단 가까이에서만 풀 수 있어요' });
+        if (!n) return send(ws, { t: 'err', text: '나라가 있어야 퍼즐 보상을 받을 수 있어요' });
+        const own = world.ownerOf(t.id);
+        if (own && own !== n.id) return send(ws, { t: 'err', text: '다른 나라의 제단이에요' });
+        if (!own && !world.touches(n.id, t.id)) return send(ws, { t: 'err', text: '우리 땅과 붙어 있어야 점령할 수 있어요' });
+        const solved = new Set(s.acc.solved || []);
+        const pool = PUZZLES.filter((q) => !solved.has(q.id));
+        if (!pool.length) return send(ws, { t: 'err', text: '지금 풀 수 있는 문제가 없어요 (문제가 곧 추가돼요)' });
+        const same = pool.filter((q) => q.type === t.type);
+        const q = (same.length ? same : pool)[Math.floor(Math.random() * (same.length || pool.length))];
+        s.pending = { id: q.id, terr: t.id };
+        send(ws, { t: 'puzzle', id: q.id, terr: t.id, type: q.type, question: q.question, image: q.image || null, mode: own ? 'army' : 'claim' });
+        break;
+      }
+      case 'answer': {
+        const n = world.nationOfPlayer(s.token);
+        if (!n || !s.pending || s.pending.id !== m.id) return;
+        const q = PUZZLES.find((x) => x.id === m.id); if (!q) return;
+        if (!world.useAction(n.id, kstDay())) return send(ws, { t: 'answer', correct: false, text: '오늘 행동력을 다 썼어요 (자정에 다시 10)' });
+        if (!sameAnswer(m.answer, q.answer)) { dirty = true; sendViews([n.id]); return send(ws, { t: 'answer', correct: false, text: '틀렸어요. 다시 도전하려면 행동력 1이 들어요' }); }
+        (s.acc.solved = s.acc.solved || []).push(q.id);
+        const r = world.puzzleReward(n.id, s.pending.terr, kstDay());
+        s.pending = null; dirty = true;
+        if (r.kind === 'claim') broadcastOwners();
+        sendViews([n.id]);
+        send(ws, { t: 'answer', correct: true, text: r.kind === 'claim' ? '정답! 영토를 점령했어요' : r.kind === 'army' ? `정답! 병력 +${r.army}` : '정답!' });
         break;
       }
       case 'kingTo': {

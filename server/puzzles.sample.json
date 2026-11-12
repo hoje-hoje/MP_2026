@@ -1,0 +1,13 @@
+{
+  "_설명": "샘플 문제. 진짜 문제는 server/puzzles.local.json 에 같은 형식으로 넣는다 (저장소에 올라가지 않음 → 학생들이 GitHub에서 답을 못 봄).",
+  "puzzles": [
+    {
+      "id": "p001",
+      "type": "미적분",
+      "level": 2,
+      "question": "f(x)와 g(x)는 서로 역함수이고 ∫₁^g(x) f(t)dt = x³ 일 때 g(2)의 값을 구하여라.",
+      "image": "assets/puzzles/p001.png",
+      "answer": ["7"]
+    }
+  ]
+}

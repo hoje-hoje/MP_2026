@@ -2,3 +2,4 @@ tools/coupons/out/
 __pycache__/
 node_modules/
 data/
+server/puzzles.local.json
