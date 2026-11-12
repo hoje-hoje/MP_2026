@@ -32,6 +32,7 @@ const STATIC = {
   '/game.js': path.join(ROOT, 'client', 'game.js'),
   '/world.json': path.join(ROOT, 'maps', 'world.json'),
 };
+const ASSET_DIR = path.join(ROOT, 'client', 'assets');
 let worldPublic = null; // 균열 정보(rift)를 뺀 지도: 참가자에게는 이것만 보낸다
 function publicWorld() {
   if (worldPublic) return worldPublic;
@@ -49,7 +50,11 @@ const server = http.createServer((req, res) => {
     return res.end('window.MP_ONLINE = true;');
   }
   if (url.pathname === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ ok: true, players: online.size })); }
-  const file = STATIC[url.pathname];
+  let file = STATIC[url.pathname];
+  if (!file && url.pathname.startsWith('/assets/')) {
+    const f = path.normalize(path.join(ASSET_DIR, decodeURIComponent(url.pathname.slice(8))));
+    if (f.startsWith(ASSET_DIR + path.sep) && /\.(png|json)$/.test(f) && fs.existsSync(f)) file = f;
+  }
   if (!file) { res.writeHead(404); return res.end('not found'); }
   try {
     const body = url.pathname === '/world.json' ? publicWorld() : fs.readFileSync(file);
@@ -84,7 +89,7 @@ const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim()
 const HEX = /^#[0-9a-f]{6}$/i;
 function cleanLook(l) {
   l = l || {};
-  return { hair: HEX.test(l.hair) ? l.hair : '#4a3428', outfit: HEX.test(l.outfit) ? l.outfit : '#5b7fd6', skin: HEX.test(l.skin) ? l.skin : '#ffe1cc', accent: HEX.test(l.accent) ? l.accent : '#ff5d7a', long: !!l.long };
+  return { char: Math.max(0, Math.min(2, l.char | 0)), hue: Math.max(0, Math.min(5, l.hue | 0)), hair: HEX.test(l.hair) ? l.hair : '#4a3428', outfit: HEX.test(l.outfit) ? l.outfit : '#5b7fd6', skin: HEX.test(l.skin) ? l.skin : '#ffe1cc', accent: HEX.test(l.accent) ? l.accent : '#ff5d7a', long: !!l.long };
 }
 function filterBad(text) { let t = text; for (const w of BANNED) t = t.split(w).join('♡'.repeat(w.length)); return t; }
 
@@ -135,7 +140,7 @@ wss.on('connection', (ws) => {
         // 같은 장소에서 너무 빨리 움직이면 무시 (순간이동 테스트 기능 m.tp 는 프로토타입 기간에만 허용)
         if (sameArea && s.x != null && !m.tp && Math.hypot(x - s.x, y - s.y) > MAX_SPEED * dt + 64) return;
         if (!sameArea) { for (const id of s.known) send(ws, { t: 'leave', id }); s.known.clear(); }
-        s.x = x; s.y = y; s.dir = m.dir < 0 ? -1 : 1; s.moving = m.moving ? 1 : 0; s.scene = scene; s.room = room; s.lastMove = now;
+        s.x = x; s.y = y; s.dir = m.dir < 0 ? -1 : 1; s.face = Math.max(0, Math.min(3, m.f | 0)); s.moving = m.moving ? 1 : 0; s.scene = scene; s.room = room; s.lastMove = now;
         Object.assign(s.acc, { x, y, scene, room }); dirty = true;
         break;
       }
@@ -205,7 +210,7 @@ setInterval(() => {
       if (o === viewer || !near(viewer, o)) continue;
       seen.add(o.id);
       if (!viewer.known.has(o.id)) { viewer.known.add(o.id); send(viewer.ws, { t: 'meta', p: meta(o) }); }
-      p.push([o.id, Math.round(o.x), Math.round(o.y), o.dir, o.moving]);
+      p.push([o.id, Math.round(o.x), Math.round(o.y), o.dir, o.moving, o.face | 0]);
     }
     for (const id of viewer.known) if (!seen.has(id)) { viewer.known.delete(id); send(viewer.ws, { t: 'leave', id }); }
     send(viewer.ws, { t: 'state', p, n: online.size });
