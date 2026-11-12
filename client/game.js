@@ -243,15 +243,19 @@
   async function loadArt() {
     const names = { water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
     const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
+    const users = fetch('assets/user/users.json').then((r) => r.json()).then((j) => {
+      USER.chars = j.chars; USER.animals = j.animals; USER.monsters = j.monsters;
+      return Promise.all([...j.chars, ...j.animals, ...j.monsters].map(async (k) => { ART['u_' + k] = await loadImg('assets/user/' + k + '.png'); }));
+    });
     for (const k of EXTRA) names['x_' + k] = 'extra/' + k + '.png';
     for (const k of TEMPLE) names['x_' + k] = 'na/' + k + '.png';
-    await Promise.all([meta, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
+    await Promise.all([meta, users, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
   const EXTRA = ['coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
   const TEMPLE = ['statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
-    const im = ART['x_' + key]; if (!im) return;
+    const im = key.startsWith('u:') ? ART['u_' + key.slice(2)] : ART['x_' + key]; if (!im) return;
     const sc = fitH ? fitH / im.height : k, w = im.width * sc, h = im.height * sc;
     const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
     if (alpha !== 1) g.globalAlpha = alpha;
@@ -282,6 +286,15 @@
 
   // 캐릭터: 16px 칸, 열 = 방향(아래·위·왼쪽·오른쪽), 행 = 걷기 프레임. 팀/꾸미기 색은 색상 회전으로.
   const CHARS = { cols: 10, names: ['NinjaBlue'] };   // assets/na/chars.json
+  const USER = { chars: [], animals: [], monsters: [] }; // assets/user/users.json (동아리 제공 캐릭터, 앞번호)
+  const charCount = () => USER.chars.length + CHARS.names.length;
+  const userTint = new Map();
+  function userSprite(k, hi) {
+    const key = k + ':' + hi; let cv = userTint.get(key); if (cv) return cv;
+    const im = ART['u_' + k]; cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height;
+    const g = cv.getContext('2d'); g.drawImage(im, 0, 0); hueShift(g, cv.width, cv.height, HUES[hi] || 0);
+    userTint.set(key, cv); return cv;
+  }
   const HUES = [0, 50, 110, 170, 230, 300];
   const sheets = new Map();
   function charSheet(c, hi) {
@@ -324,10 +337,24 @@
   function drawSprite(g, x, y, look, t, moving, face) {
     g.fillStyle = 'rgba(0,0,0,0.22)'; ell(g, x, y, 15, 5);
     if (look.me) { g.strokeStyle = '#ffd23f'; g.lineWidth = 2; g.setLineDash([5, 4]); g.beginPath(); g.ellipse(x, y, 20, 7, 0, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); }
-    const sheet = charSheet(look.char | 0, look.hue | 0);
-    const row = moving ? (Math.floor(t * 8 + (look.seed || 0)) % 4) : 0;
+    const c = look.char | 0;
     const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
-    g.drawImage(sheet, (face | 0) * 16, row * 16, 16, 16, Math.round(x - 8 * CH_K), Math.round(y - 16 * CH_K + 2), 16 * CH_K, 16 * CH_K);
+    if (c < USER.chars.length) {
+      // 동아리 캐릭터: 한 장짜리 그림 → 걸을 때 통통 튀고, 왼쪽으로 가면 좌우 뒤집기
+      const im = userSprite(USER.chars[c], look.hue | 0);
+      const k = 2, w = im.width * k, h = im.height * k;
+      const ph = Math.floor(t * 9 + (look.seed || 0)) % 2;
+      const bob = moving ? (ph ? 3 : 0) : Math.round(Math.sin(t * 2 + (look.seed || 0)) * 0.6);
+      g.save(); g.translate(Math.round(x), Math.round(y + 2 - bob));
+      if (face === 2) g.scale(-1, 1);
+      if (moving && ph) g.rotate(face === 2 ? 0.06 : -0.06);
+      g.drawImage(im, -Math.round(w / 2), -h, w, h);
+      g.restore();
+    } else {
+      const sheet = charSheet(c - USER.chars.length, look.hue | 0);
+      const row = moving ? (Math.floor(t * 8 + (look.seed || 0)) % 4) : 0;
+      g.drawImage(sheet, (face | 0) * 16, row * 16, 16, 16, Math.round(x - 8 * CH_K), Math.round(y - 16 * CH_K + 2), 16 * CH_K, 16 * CH_K);
+    }
     g.imageSmoothingEnabled = prev;
   }
   const faceOf = (dx, dy, prev) => (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) ? prev : (Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 1 : 0));
@@ -612,6 +639,8 @@
       props: [
         { x: 16, y: 11, w: 2, h: 1, draw: bonfire },
         { x: 16, y: 4, w: 3, h: 3, draw: (g, x, y) => pix(g, 'pool', x, y, 2) },
+        { x: 8, y: 9, w: 1, h: 1, draw: (g, x, y) => pix(g, 'u:chick', x, y + 2, 2) }, { x: 9, y: 10, w: 1, h: 1, draw: (g, x, y) => pix(g, 'u:hen', x, y + 2, 2) },
+        { x: 25, y: 10, w: 1, h: 1, draw: (g, x, y) => pix(g, 'u:rabbit', x, y + 2, 2) }, { x: 26, y: 15, w: 2, h: 1, draw: (g, x, y) => pix(g, 'u:pig', x, y + 2, 2) },
         { x: 10, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 23, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
         { x: 12, y: 8, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) }, { x: 20, y: 8, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) },
         { x: 12, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) }, { x: 20, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) },
@@ -626,7 +655,7 @@
       doors: [{ side: 'S', at: 12, to: 'plaza' }],
       props: [
         { x: 9, y: 2, w: 6, h: 2, board: true, desk: 'wander', draw: (g, x, y) => { pix(g, 'cabin', x, y + 6, 3); sign(g, x, y - 132, '등록 창구'); } },
-        { x: 4, y: 8, w: 1, h: 1, draw: (g, x, y) => pix(g, 'woodpile', x, y + 2, 3) }, { x: 19, y: 8, w: 1, h: 1, draw: bonfire },
+        { x: 4, y: 8, w: 1, h: 1, draw: (g, x, y) => pix(g, 'woodpile', x, y + 2, 3) }, { x: 15, y: 9, w: 2, h: 1, draw: (g, x, y) => pix(g, 'u:cow', x, y + 2, 2) }, { x: 19, y: 8, w: 1, h: 1, draw: bonfire },
         { x: 5, y: 3, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'keeper', x, y + 2); nameTag(g, x, y - 58, '등록 담당', '#277a58'); } },
       ],
     },
@@ -822,7 +851,7 @@
       bots.push({
         x: tx * TILE + 16, y: ty * TILE + 16, dir: r() < 0.5 ? -1 : 1, moving: false,
         name: `${team}팀 · ${BOT_NAMES[(r() * BOT_NAMES.length) | 0]}`, tag: TYPE_TAG[ty_],
-        face: 0, look: { char: (r() * 3) | 0, hue: (r() * 6) | 0, hair: HAIRS[(r() * 6) | 0], outfit: OUTFITS[(r() * 6) | 0], skin: SKINS[(r() * 3) | 0], accent: TYPE_FILL[TYPES[(r() * 6) | 0]], long: r() < 0.45, seed: r() * 3 },
+        face: 0, look: { char: (r() * 104) | 0, hue: (r() * 6) | 0, hair: HAIRS[(r() * 6) | 0], outfit: OUTFITS[(r() * 6) | 0], skin: SKINS[(r() * 3) | 0], accent: TYPE_FILL[TYPES[(r() * 6) | 0]], long: r() < 0.45, seed: r() * 3 },
         home: [cx, cy, rad], goal: null, wait: r() * 3, speed: (0.55 + r() * 0.35) * WALK,
         emote: null, emoteT: 0, rand: rng((r() * 1e9) | 0),
         scene: room ? 'sky' : 'ground', room: room || null,
@@ -1112,11 +1141,13 @@
   // 꾸미기
   function closetUI() {
     const cw = $('hairSw'); cw.textContent = ''; cw.classList.add('facegrid');
-    CHARS.names.forEach((name, i) => {
+    const all = [...USER.chars.map((k) => ['u', k]), ...CHARS.names.map((n, j) => ['na', n, j])];
+    all.forEach(([kind, name, j], i) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'facebtn';
       b.setAttribute('aria-label', name);
-      const cv = document.createElement('canvas'); cv.width = 38; cv.height = 38; const g = cv.getContext('2d');
-      g.drawImage(ART.faces, (i % CHARS.cols) * 38, Math.floor(i / CHARS.cols) * 38, 38, 38, 0, 0, 38, 38);
+      const cv = document.createElement('canvas'); cv.width = 38; cv.height = 38; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+      if (kind === 'u') { const im = userSprite(name, player.look.hue | 0); const sc = Math.min(36 / im.width, 36 / im.height); g.drawImage(im, (38 - im.width * sc) / 2, 38 - im.height * sc, im.width * sc, im.height * sc); }
+      else g.drawImage(ART.faces, (j % CHARS.cols) * 38, Math.floor(j / CHARS.cols) * 38, 38, 38, 0, 0, 38, 38);
       b.appendChild(cv);
       b.setAttribute('aria-pressed', String((player.look.char | 0) === i));
       b.addEventListener('click', () => { player.look.char = i; closetUI(); saveLook(); });
@@ -1440,6 +1471,10 @@
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const k = treeAt(tx, ty);
       if (k) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => spr(g, k, X, Y) });
+      else if (USER.animals.length && tileAt(tx, ty) === T.GRASS && !noTree[ty * W + tx]) {
+        const ha = hash(tx, ty, 21);
+        if (ha < 0.0025) { const a = USER.animals[(ha * 1e6 | 0) % 6]; list.push({ x: tx * TILE + 16, y: ty * TILE + 28, draw: (g, X, Y) => pix(g, 'u:' + a, X, Y - (Math.floor(performance.now() / 400 + tx) % 2), 2) }); }
+      }
     }
     for (const b of others('ground', null)) if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1) list.push(b);
     list.push(player);
