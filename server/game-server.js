@@ -88,7 +88,7 @@ const MAP = JSON.parse(fs.readFileSync(STATIC['/world.json'], 'utf8'));
 const TERR = new Uint16Array(Buffer.from(MAP.territory_u16le_b64, 'base64').buffer.slice(0));
 const terrAtPx = (x, y) => { const tx = Math.floor(x / 32), ty = Math.floor(y / 32); if (tx < 0 || ty < 0 || tx >= MAP.width || ty >= MAP.height) return -1; const v = TERR[ty * MAP.width + tx]; return v === 65535 ? -1 : v; };
 const world = new World(MAP, state.world || null);
-const { sameAnswer, NUM, treeKind, storageSpot, T: TT } = require('../client/rules.js');
+const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT } = require('../client/rules.js');
 // ---- 영지: 지형·저장소·설치물
 const TERRAIN = Buffer.from(MAP.terrain_b64, 'base64');
 const tileAt = (x, y) => (x < 0 || y < 0 || x >= MAP.width || y >= MAP.height) ? TT.VOID : TERRAIN[y * MAP.width + x];
@@ -111,7 +111,16 @@ function frontsFor(attNid, tid) {
   border.sort((a, b) => horiz ? a[0] - b[0] || a[1] - b[1] : a[1] - b[1] || a[0] - b[0]);
   return [1 / 6, 1 / 2, 5 / 6].map((k) => border[Math.min(border.length - 1, Math.floor(border.length * k))]);
 }
-function storageOf(n) { return n && world.t[n.capital] ? storageSpot(world.t[n.capital], tileAt) : null; }
+function storageOf(n) { return n && world.t[n.capital] ? (n.storePos || storageSpot(world.t[n.capital], tileAt)) : null; }
+// 금광 위치: 옮겼으면 그 자리, 아니면 기본 자리
+const MINE_DEF = {};
+function mineOf(tid) { if (world.s.mines[tid]) return world.s.mines[tid]; if (!(tid in MINE_DEF)) MINE_DEF[tid] = world.t[tid] ? mineSpot(world.t[tid], tileAt, terrAtTile) : null; return MINE_DEF[tid]; }
+// 건물(저장소·금광) 자리 사이 거리 확인: 다른 건물과 2칸 이상 떨어져야 함 (E가 헷갈리지 않게)
+function buildingNear(x, y, skip) {
+  for (const n of world.alive()) { if (skip === 'store:' + n.id) continue; const p = storageOf(n); if (p && Math.max(Math.abs(p[0] - x), Math.abs(p[1] - y)) <= 2) return true; }
+  for (const tid of Object.keys(world.t)) { if (skip === 'mine:' + tid) continue; const p = mineOf(+tid); if (p && Math.max(Math.abs(p[0] - x), Math.abs(p[1] - y)) <= 2) return true; }
+  return false;
+}
 // 플레이어가 그 칸 바로 옆(가로·세로·대각선 1칸 정도)에 있는지
 function nextTo(s, x, y, r = 1.6) { return s.scene === 'ground' && s.x != null && Math.hypot(s.x / 32 - (x + 0.5), s.y / 32 - (y + 0.5)) <= r; }
 // 설치 금지: 제단·포털·저장소 둘레 1칸
@@ -229,7 +238,7 @@ wss.on('connection', (ws) => {
         t: 'welcome', id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? JAIL_POS : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: arrestsToday(acc), jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        battles: world.publicBattles(), tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat) broadcastOwners();
       return;
@@ -438,7 +447,7 @@ wss.on('connection', (ws) => {
       case 'mine': { // 금광: 영토마다 하루 1번, 사람마다
         const n = world.nationOfPlayer(s.token); const tid = m.terr | 0;
         if (!n) return send(ws, { t: 'err', text: '나라가 있어야 캔 코인을 모을 수 있어요' });
-        if (s.scene !== 'ground' || terrAtPx(s.x, s.y) !== tid) return;
+        const mp = mineOf(tid); if (!mp || !nextTo(s, mp[0], mp[1], 2.2)) return send(ws, { t: 'err', text: '금광 바로 옆에서 캐요' });
         const day = kstDay(); s.acc.mined = s.acc.mined && s.acc.mined.day === day ? s.acc.mined : { day, ids: [] };
         if (s.acc.mined.ids.includes(tid)) return send(ws, { t: 'err', text: '이 금광은 오늘 이미 캤어요' });
         const got = 300 + Math.floor(Math.random() * 31) * 10;
@@ -498,6 +507,20 @@ wss.on('connection', (ws) => {
         if (done || m.t === 'place') { dirty = true; sendViews([n.id]); }
         if (!done && why) send(ws, { t: 'err', text: why });
         else if (done && why && list.length > 1) send(ws, { t: 'ok', text: `${done}칸 ${m.t === 'pickup' ? '거둠' : '놓음'} · ${why}` });
+        break;
+      }
+      case 'moveB': { // 설치 모드: 우리 저장소·우리 땅 금광 옮기기
+        const n = world.nationOfPlayer(s.token); if (!n) return;
+        const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y), kind = m.kind === 'mine' ? 'mine' : 'store', tid = m.terr | 0;
+        if (kind === 'mine' && world.ownerOf(tid) !== n.id) return send(ws, { t: 'err', text: '우리 땅의 금광만 옮길 수 있어요' });
+        if (!nextTo(s, x, y, 2.2)) return send(ws, { t: 'err', text: '바로 앞 칸에 놓아요' });
+        if (world.ownerOf(terrAtTile(x, y)) !== n.id) return send(ws, { t: 'err', text: '우리 나라 땅에만 놓을 수 있어요' });
+        if (!walkableTerrain(tileAt(x, y)) || (treeKind(tileAt(x, y), x, y) && !world.s.chopped[i]) || world.s.tiles[i] && world.s.tiles[i].k === 'wall' || world.s.traps[i]) return send(ws, { t: 'err', text: '여기엔 놓을 수 없어요 (나무·방벽·덫이 있거나 걸을 수 없는 칸)' });
+        if (reservedTile(x, y)) return send(ws, { t: 'err', text: '제단·포털 바로 옆엔 못 놓아요' });
+        if (buildingNear(x, y, kind === 'mine' ? 'mine:' + tid : 'store:' + n.id)) return send(ws, { t: 'err', text: '다른 저장소·금광과 2칸 넘게 떨어져야 해요' });
+        if (kind === 'store') n.storePos = [x, y]; else world.s.mines[tid] = [x, y];
+        dirty = true; broadcastOwners();
+        send(ws, { t: 'ok', text: kind === 'store' ? '저장소를 옮겼어요' : '금광을 옮겼어요' });
         break;
       }
       case 'breakStart': case 'breakWall': { // 남의 방벽 부수기: 5초 동안 붙어 있어야 함
@@ -572,9 +595,10 @@ wss.on('connection', (ws) => {
         const own = world.ownerOf(t.id), n = world.nationOfPlayer(s.token);
         if (!own || (n && n.id === own) || !nextTo(s, t.altar[0], t.altar[1], 2.6) || now() - (s.lastHit || 0) < 250) return;
         s.lastHit = now();
-        for (const o of online.values()) if (o.scene === 'ground' && near(o, s)) send(o.ws, { t: 'hitfx', terr: t.id });
+        // 개인별로 센다 (1분 안에 10번). 주변 사람에게는 보내지 않음 (사람이 많아도 가볍게)
         s.hits = s.hits && s.hits.terr === t.id && now() - s.hits.at < 60000 ? s.hits : { terr: t.id, n: 0 };
         s.hits.n++; s.hits.at = now();
+        send(ws, { t: 'hitn', terr: t.id, n: s.hits.n, need: NUM.scoutHits });
         if (s.hits.n >= NUM.scoutHits) {
           s.hits = null; const D = world.nation(own);
           // 첩보 카드: 이 나라가 우리를 공격할 때 전선 하나를 볼 수 있음 (사람마다 이 나라에서 2시간에 1장)
@@ -633,7 +657,7 @@ setInterval(() => {
 
 // ------------------------------------------------------------ 나라·전투 방송
 function broadcastOwners() {
-  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: world.publicNations(), battles: world.publicBattles() });
+  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: world.publicNations(), battles: world.publicBattles(), mines: world.s.mines });
   for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
 }
 function sendViews(nids) {
@@ -654,7 +678,10 @@ function cmdCount(nid, tid) {
   return c;
 }
 function resolveNight(why) {
+  const before = Object.assign({}, world.s.owner);
   const reports = world.resolveAll(cmdCount);
+  for (const tid of Object.keys(world.s.mines)) if (world.s.owner[tid] !== before[tid]) delete world.s.mines[tid]; // 주인이 바뀐 영토의 금광은 기본 자리로
+  for (const n of world.alive()) if (n.storePos && world.ownerOf(terrAtTile(n.storePos[0], n.storePos[1])) !== n.id) delete n.storePos; // 저장소 자리를 빼앗기면 수도 옆으로
   state.lastResolved = kstDay(); state.lastSlot = curSlotKey(); dirty = true; saveState();
   console.log(`[전투] ${why}: ${reports.length}건 처리`);
   broadcastOwners();

@@ -59,6 +59,7 @@
   // ---- 영지: 설치물(바닥·방벽), 우리 덫, 저장소 자리
   let TILES = {};                 // 칸 번호 -> { k: 'floor'|'wall', n: 나라 }
   let BATTLES = [];               // 선포된 전투 (모두에게 보임): { id, target, att, def, f: [[x,y]×3] }
+  function applyMines(mines) { for (const n of nodes) { const o = mines && mines[n.id]; n.tx = o ? o[0] : n.dx; n.ty = o ? o[1] : n.dy; if (o) clearTrees(o[0], o[1], 1); } }
   let MY_TRAPS = new Set();       // 우리 나라 덫 (다른 나라엔 안 보임)
   let STORE_AT = new Map();       // 칸 번호 -> 나라 (수도 저장소)
   const FACE_D = [[0, 1], [0, -1], [-1, 0], [1, 0]];
@@ -148,15 +149,9 @@
         sprites.push({ x: P(qx) + 16, y: P(qy) + 20, portal: t, draw: (g, x, y) => drawPortal(g, x, y, t === home) });
       }
       // 금광 (온라인 자원 지점): 영토마다 1곳, 하루 1번 캘 수 있음
-      for (let k = 0; k < 40; k++) {
-        const nx = ax + Math.round((hash(t.id, k, 11) - 0.5) * 18), ny = ay + Math.round((hash(t.id, k, 12) - 0.5) * 18);
-        if (Math.abs(nx - ax) + Math.abs(ny - ay) < 4 || blocked(nx, ny) || terrAt(nx, ny) !== t.id) continue;
-        const n = { id: t.id, t, x: P(nx) + 16, y: P(ny) + 24 };
-        clearTrees(nx, ny, 1);
-        nodes.push(n);
-        sprites.push({ x: n.x, y: n.y, draw: (g, x, y) => drawOre(g, x, y, mined.has(n.id)) });
-        break;
-      }
+      // 위치는 서버와 같은 규칙(MPRules.mineSpot), 옮긴 금광은 MINES 로 바뀜 → 그림은 drawGround 에서
+      const ms = MPRules.mineSpot(t, tileAt, terrAt);
+      if (ms) { clearTrees(ms[0], ms[1], 1); nodes.push({ id: t.id, t, tx: ms[0], ty: ms[1], dx: ms[0], dy: ms[1], get x() { return this.tx * TILE + 16; }, get y() { return this.ty * TILE + 24; } }); }
     }
   }
 
@@ -235,10 +230,12 @@
     const fl = HITFX.get(t.id), hot = fl && performance.now() < fl; // 맞으면 0.12초 빨갛게 + 흔들림
     const sx = hot ? Math.round(Math.sin(performance.now() / 12) * 3) : 0;
     g.drawImage(altarSheet(t.type), f * 32, 0, 32, 32, x - 32 + sx, y - 60, 64, 64);
+    const hn = HITN.get(t.id); // 내가 때린 횟수
+    if (hn && performance.now() - hn.at < 60000 && hn.n < MPRules.NUM.scoutHits) { g.font = `700 16px ${PFONT}`; g.textAlign = 'center'; g.lineWidth = 4; g.strokeStyle = '#2b2340'; g.strokeText(`${hn.n}/${MPRules.NUM.scoutHits}`, x, y - 70); g.fillStyle = '#ffd34d'; g.fillText(`${hn.n}/${MPRules.NUM.scoutHits}`, x, y - 70); }
     if (hot) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(255,40,60,0.55)'; g.fillRect(x - 32 + sx, y - 60, 64, 64); g.globalCompositeOperation = 'source-over'; g.fillStyle = 'rgba(255,60,80,0.35)'; ell(g, x + sx, y - 34, 22, 26); }
     g.imageSmoothingEnabled = prev;
   }
-  const HITFX = new Map();
+  const HITFX = new Map(), HITN = new Map();
   function drawWall(g, x, y, nid) { // 방벽: 벽돌 덩어리 + 나라 색 띠
     const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
     g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x - 17, y - 4, 34, 6);
@@ -1104,13 +1101,14 @@
       const o = terrAt(tx | 0, ty | 0);
       if (o > 0) {
         const t = terrs[o];
-        const n = nodes.find((q) => q.id === t.id);
+        let n = null, nd = 52; for (const q of nodes) { const d = Math.hypot(q.x - player.x, q.y - player.y); if (d < nd) { nd = d; n = q; } }
+        for (const [i] of STORE_AT) if (n && Math.hypot((i % W) * TILE + 16 - player.x, Math.floor(i / W) * TILE + 16 - player.y) < nd) n = null; // 저장소가 더 가까우면 저장소
         if (t.portal && Math.hypot(t.portal[0] + 0.5 - tx, t.portal[1] + 0.5 - ty) < 1.8) best = { kind: 'portal', t, text: '하늘로 올라가기' };
-        else if (n && Math.hypot(n.x - player.x, n.y - player.y) < 52) best = { kind: 'node', n, text: mined.has(n.id) ? '오늘은 다 캤어요 (내일 다시)' : '금광 캐기 · 코인' };
+        else if (n && !build.on) best = { kind: 'node', n, text: mined.has(n.id) ? '오늘은 다 캤어요 (내일 다시)' : '금광 캐기 · 코인' };
         else if (Math.hypot(t.altar[0] + 0.5 - tx, t.altar[1] + 0.5 - ty) < 2.4) {
           const own = ownerOf(t.id), mine = myView && own === myView.me.id;
           const canClaim = myView && !own && Object.keys(owners).some((k) => owners[k] === myView.me.id && terrs[k] && terrs[k].neighbors.includes(t.id));
-          if (ONLINE && own && !mine) best = { kind: 'hit', t, text: `${natName(own)}의 수정 때리기 · ${MPRules.NUM.scoutHits}번이면 병력이 보여요` };
+          if (ONLINE && own && !mine) { const hn = HITN.get(t.id), c = hn && performance.now() - hn.at < 60000 ? hn.n : 0; best = { kind: 'hit', t, text: `${natName(own)}의 수정 때리기 ${c}/${MPRules.NUM.scoutHits} · 다 채우면 병력·첩보` }; }
           else best = { kind: 'altar', t, claim: canClaim, solvable: canClaim || mine, text: canClaim ? `${t.name} · 문제 풀고 점령하기` : mine ? `우리 제단 · ${t.type} 문제 풀기 (병력)` : own ? `${natName(own)}의 제단` : `${t.name} 제단 · 우리 땅과 붙어야 점령 가능` };
         }
       }
@@ -1119,6 +1117,7 @@
       const ptx = player.x / TILE, pty = player.y / TILE, dA = Math.hypot(best.t.altar[0] + 0.5 - ptx, best.t.altar[1] + 0.5 - pty);
       for (const [i] of STORE_AT) if (Math.hypot((i % W) + 0.5 - ptx, Math.floor(i / W) + 0.5 - pty) <= Math.min(1.9, dA)) { best = null; break; }
     }
+    if (player.scene === 'ground' && ONLINE && build.on) { const b = groundAction(); if (b) best = b; } // 설치 모드에선 설치가 먼저
     if (!best && player.scene === 'ground' && ONLINE) best = groundAction();
     const key = best ? best.kind + best.text : '';
     if (key !== (near ? near.kind + near.text : '')) {
@@ -1134,6 +1133,20 @@
   // 땅에서 할 수 있는 일: 저장소, 설치 모드, 나무 베기, 방벽 부수기
   function groundAction() {
     const ptx = player.x / TILE, pty = player.y / TILE;
+    const [fx, fy] = facingTile(), i = fy * W + fx, e = TILES[i];
+    if (build.on && myView && build.moving) { // 옮기는 중: 앞 칸에 놓기
+      return { kind: 'dropB', x: fx, y: fy, text: `여기에 ${build.moving.kind === 'store' ? '저장소' : '금광'} 놓기 (E) · 취소는 G` };
+    }
+    if (build.on && myView) { // 우리 저장소·우리 땅 금광 옆이면 옮기기
+      for (const [i, nid] of STORE_AT) if (nid === MY_NID && Math.hypot((i % W) + 0.5 - ptx, Math.floor(i / W) + 0.5 - pty) < 1.9) return { kind: 'pickB', what: { kind: 'store' }, text: '저장소 옮기기 (E) → 옮길 자리에서 E' };
+      for (const q of nodes) if (ownerOf(q.id) === MY_NID && Math.hypot(q.tx + 0.5 - ptx, q.ty + 0.5 - pty) < 1.6) return { kind: 'pickB', what: { kind: 'mine', terr: q.id }, text: '금광 옮기기 (E) → 옮길 자리에서 E' };
+    }
+    if (build.on && myView) {
+      const tiles = shapeTiles(), shape = build.k === 'trap' ? '1' : build.shape;
+      if ((e && e.n === MY_NID && !(build.k === 'floor' && e.k === 'floor' && (e.c | 0) !== build.c)) || MY_TRAPS.has(i)) return { kind: 'pickup', tiles, text: `${SHAPE_NAME[shape]} 거두기 (E) · 바로 앞: ${ITEM_NAME[e ? e.k : 'trap']}` };
+      if (ownerOf(terrAt(fx, fy)) !== MY_NID) return { kind: 'info', text: '설치 모드 · 우리 땅에만 놓을 수 있어요' };
+      return { kind: 'place', tiles, text: `${build.k === 'floor' ? FLOOR_COLORS[build.c][0] + ' ' : ''}${ITEM_NAME[build.k]} ${SHAPE_NAME[shape]} 놓기 · 남은 ${myView.me.items[build.k]}개` };
+    }
     if (MY_NID) for (const [id, r] of remotes) { // 우리 땅에 들어온 적 → 체포
       if (r.x == null || !r.nid || r.nid === MY_NID || Math.hypot(r.x - player.x, r.y - player.y) > 52) continue;
       if (ownerOf(terrAt(r.x / TILE | 0, r.y / TILE | 0)) === MY_NID) return { kind: 'arrest', id, text: `${r.name}${r.carry ? ' (도둑!)' : ''} 체포하기` };
@@ -1152,13 +1165,6 @@
       if (!MY_NID) return { kind: 'info', text: `${natName(nid)} 저장소` };
       if (player.carry) return { kind: 'info', text: '이미 훔친 걸 들고 있어요 · 우리 저장소로!' };
       return { kind: 'steal', nid, hold: MPRules.NUM.stealSec * 1000, text: `${natName(nid)} 저장소 털기 · E 꾹 ${MPRules.NUM.stealSec}초` };
-    }
-    const [fx, fy] = facingTile(), i = fy * W + fx, e = TILES[i];
-    if (build.on && myView) {
-      const tiles = shapeTiles(), shape = build.k === 'trap' ? '1' : build.shape;
-      if ((e && e.n === MY_NID && !(build.k === 'floor' && e.k === 'floor' && (e.c | 0) !== build.c)) || MY_TRAPS.has(i)) return { kind: 'pickup', tiles, text: `${SHAPE_NAME[shape]} 거두기 (E) · 바로 앞: ${ITEM_NAME[e ? e.k : 'trap']}` };
-      if (ownerOf(terrAt(fx, fy)) !== MY_NID) return { kind: 'info', text: '설치 모드 · 우리 땅에만 놓을 수 있어요' };
-      return { kind: 'place', tiles, text: `${build.k === 'floor' ? FLOOR_COLORS[build.c][0] + ' ' : ''}${ITEM_NAME[build.k]} ${SHAPE_NAME[shape]} 놓기 · 남은 ${myView.me.items[build.k]}개` };
     }
     if (treeAt(fx, fy) && MY_NID && ownerOf(terrAt(fx, fy)) === MY_NID) return { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '나무 베기 · E 꾹 누르기' };
     if (e && e.k === 'wall' && e.n !== MY_NID) return { kind: 'break', x: fx, y: fy, hold: MPRules.NUM.wallBreakSec * 1000, text: `${natName(e.n)} 방벽 부수기 · E 꾹 ${MPRules.NUM.wallBreakSec}초` };
@@ -1195,7 +1201,7 @@
   }
   function setBuild(on, k) {
     if (on && !myView) { toast('나라가 있어야 설치할 수 있어요'); return; }
-    build.on = on; if (k) build.k = k;
+    build.on = on; if (k) build.k = k; if (!on) build.moving = null;
     $('buildBar').hidden = !on;
     for (const b of document.querySelectorAll('#buildBar [data-k]')) { b.setAttribute('aria-pressed', String(b.dataset.k === build.k)); b.querySelector('small').textContent = myView ? myView.me.items[b.dataset.k] : 0; }
     for (const b of document.querySelectorAll('#buildBar [data-shape]')) { b.setAttribute('aria-pressed', String(b.dataset.shape === build.shape)); b.disabled = build.k === 'trap'; }
@@ -1238,6 +1244,8 @@
     if (near.kind === 'store') { openStore(); return; }
     if (near.kind === 'shop') { openShop(); return; }
     if (near.kind === 'hit') { HITFX.set(near.t.id, performance.now() + 120); if (netOn) ws.send(JSON.stringify({ t: 'hit', terr: near.t.id })); return; }
+    if (near.kind === 'pickB') { build.moving = near.what; near = null; toast('옮길 자리 바로 앞에서 E를 누르세요 (우리 땅, 다른 건물과 2칸 이상)'); return; }
+    if (near.kind === 'dropB') { if (netOn) ws.send(JSON.stringify(Object.assign({ t: 'moveB', x: near.x, y: near.y }, build.moving))); build.moving = null; near = null; return; }
     if (near.kind === 'place' || near.kind === 'pickup') { if (netOn) ws.send(JSON.stringify({ t: near.kind, tiles: near.tiles, k: build.k, c: build.c })); return; }
     if (near.kind === 'info') { toast(near.text); return; }
     if (near.kind === 'reinforce') { if (netOn) ws.send(JSON.stringify({ t: 'reinforce', battle: near.battle, front: near.front })); return; }
@@ -1483,7 +1491,7 @@
         myId = m.id; netOn = true; store('mp2026.token', m.token);
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
         player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
-        BATTLES = m.battles || []; TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
+        BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         if (!m.view) openFound('who'); else $('found').hidden = true;
         chatLog = m.chat || []; renderChat();
@@ -1518,7 +1526,7 @@
       case 'chat': chatLog.push(m); if (chatLog.length > 60) chatLog.shift(); renderChat(); break;
       case 'emote': { const r = m.id === myId ? player : remotes.get(m.id); if (r) { r.emote = m.text; r.emoteT = 3; } break; }
       case 'wander': wanderList = m.list || []; renderWander(); break;
-      case 'owners': if (m.battles) BATTLES = m.battles; applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
+      case 'owners': if (m.battles) BATTLES = m.battles; if (m.mines) applyMines(m.mines); applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
       case 'joined': chatLog = m.chat || []; renderChat(); afterFounded(m.founded); break;
       case 'view': applyWorld(null, null, m.view); break;
       case 'night': applyWorld(null, null, m.view); showNight(m.reports || []); break;
@@ -1536,7 +1544,8 @@
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
-      case 'scout': toast(m.text); break;
+      case 'hitn': HITN.set(m.terr, { n: m.n, at: performance.now() }); near = null; break;
+      case 'scout': HITN.delete(m.terr); toast(m.text); break;
       case 'stun': stunUntil = performance.now() + m.ms; step.on = false; toast(m.text); break;
       case 'pos': player.x = m.x; player.y = m.y; step.on = false; netTp = true; break;
       case 'mined': mined.add(m.terr); toast(m.text); break;
@@ -1654,7 +1663,7 @@
     if (v !== undefined) myView = v;
     MY_NID = myView ? myView.me.id : null;
     STORE_AT = new Map();
-    for (const n of Object.values(nationsPub)) if (!n.dead && terrs[n.capital]) { const [sx, sy] = MPRules.storageSpot(terrs[n.capital], tileAt); STORE_AT.set(sy * W + sx, n.id); clearTrees(sx, sy, 1); }
+    for (const n of Object.values(nationsPub)) if (!n.dead && terrs[n.capital]) { const [sx, sy] = n.store || MPRules.storageSpot(terrs[n.capital], tileAt); STORE_AT.set(sy * W + sx, n.id); clearTrees(sx, sy, 1); }
     if (myView && terrs[myView.me.capital]) { home = terrs[myView.me.capital]; player.tag = myView.me.color; }
     // 땅 주인·나라 색·우리 나라가 바뀐 경우에만 지도를 다시 그린다 (자원만 바뀌면 그대로)
     const sig = MY_NID + '|' + JSON.stringify(owners) + '|' + Object.values(nationsPub).map((q) => q.id + q.color + (q.dead ? 'x' : '')).join();
@@ -2237,7 +2246,8 @@
       if (e && e.k === 'wall') list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawWall(g, X, Y, e.n) });
       if (MY_TRAPS.has(i)) list.push({ x: tx * TILE + 16, y: ty * TILE + 4, draw: (g, X, Y) => drawTrap(g, X, Y + 24) });
     }
-    for (const [i, nid] of STORE_AT) { const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); }
+    for (const n of nodes) if (n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1 && !(build.moving && build.moving.kind === 'mine' && build.moving.terr === n.id)) list.push({ x: n.x, y: n.y, draw: (g, X, Y) => drawOre(g, X, Y, mined.has(n.id)) });
+    for (const [i, nid] of STORE_AT) { if (build.moving && build.moving.kind === 'store' && nid === MY_NID) continue; const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); }
     // 전선: 공격받는 영토 국경 중 A·B·C 세 곳을 빨갛게 + 깃발
     for (const b of BATTLES) if (b.f) b.f.forEach(([fx, fy], k) => {
       if (fx * TILE < x0 - 200 || fx * TILE > x1 + 200 || fy * TILE < y0 - 200 || fy * TILE > y1 + 200) return;
@@ -2258,7 +2268,7 @@
       } });
     });
     if (build.on && player.scene === 'ground') { // 설치 모드: 앞 칸 표시
-      for (const [fx, fy] of shapeTiles()) { const ok = ownerOf(terrAt(fx, fy)) === MY_NID && !blocked(fx, fy); ctx.fillStyle = ok ? 'rgba(255,211,77,0.35)' : 'rgba(255,60,80,0.3)'; ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE); ctx.strokeStyle = ok ? '#ffd34d' : '#ff3c50'; ctx.lineWidth = 2; ctx.strokeRect(fx * TILE + 1, fy * TILE + 1, TILE - 2, TILE - 2); }
+      for (const [fx, fy] of build.moving ? [facingTile()] : shapeTiles()) { const ok = ownerOf(terrAt(fx, fy)) === MY_NID && !blocked(fx, fy); ctx.fillStyle = ok ? 'rgba(255,211,77,0.35)' : 'rgba(255,60,80,0.3)'; ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE); ctx.strokeStyle = ok ? '#ffd34d' : '#ff3c50'; ctx.lineWidth = 2; ctx.strokeRect(fx * TILE + 1, fy * TILE + 1, TILE - 2, TILE - 2); }
     }
     for (const b of others('ground', null)) if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1) list.push(b);
     list.push(player);

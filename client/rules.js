@@ -59,7 +59,7 @@
   const teamColor = (n) => COLORS[((n | 0) - 1 + COLORS.length * 10) % COLORS.length];
   const FRONTS = ['A', 'B', 'C'];
 
-  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1, tiles: {}, traps: {}, chopped: {} }; }
+  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1, tiles: {}, traps: {}, chopped: {}, mines: {} }; }
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const randCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
   const clampTroops = (arr) => (Array.isArray(arr) && arr.length === 3) ? arr.map((v) => Math.max(0, Math.floor(+v || 0))) : null;
@@ -71,7 +71,7 @@
       for (const t of map.territories) this.t[t.id] = t;
       this.caps = map.territories.filter((t) => t.capitalCandidate).sort((a, b) => a.id - b.id);
       this.s = state || emptyState();
-      for (const k of ['tiles', 'traps', 'chopped']) this.s[k] = this.s[k] || {}; // 예전 저장 상태 호환
+      for (const k of ['tiles', 'traps', 'chopped', 'mines']) this.s[k] = this.s[k] || {}; // 예전 저장 상태 호환 (mines: 옮긴 금광 위치)
       this._dist = {};
     }
 
@@ -343,7 +343,7 @@
     // ---------------------------------------------------------- 참가자에게 보낼 화면 정보
     publicNations() {
       const out = {};
-      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length };
+      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null };
       return out;
     }
     view(nid, key) {
@@ -377,5 +377,18 @@
     return (accepts || []).some((a) => { const x = norm(a); if (x === g) return true; const nx = num(x), ng = num(g); return !isNaN(nx) && !isNaN(ng) && Math.abs(nx - ng) < 1e-9; });
   }
 
-  return { World, NUM, FRONTS, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, T };
+  // 금광 기본 위치: 영토마다 1곳. 제단에서 4칸 이상, 저장소 자리에서 3칸 이상 떨어진 걸을 수 있는 칸
+  function mineSpot(t, tileAt, terrAt) {
+    const st = t.capitalCandidate ? storageSpot(t, tileAt) : null;
+    for (let k = 0; k < 60; k++) {
+      const x = t.altar[0] + Math.round((hash(t.id, k, 11) - 0.5) * 18), y = t.altar[1] + Math.round((hash(t.id, k, 12) - 0.5) * 18), g = tileAt(x, y);
+      if (Math.abs(x - t.altar[0]) + Math.abs(y - t.altar[1]) < 4 || terrAt(x, y) !== t.id) continue;
+      if (!(g === T.GRASS || g === T.FOREST || g === T.SAND) || treeKind(g, x, y)) continue;
+      if (st && Math.max(Math.abs(st[0] - x), Math.abs(st[1] - y)) < 3) continue;
+      if (t.portal && Math.max(Math.abs(t.portal[0] - x), Math.abs(t.portal[1] - y)) < 2) continue;
+      return [x, y];
+    }
+    return null;
+  }
+  return { World, NUM, FRONTS, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
