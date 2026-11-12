@@ -1233,7 +1233,7 @@
   function setNet(text) { $('netText').textContent = text; }
   function connect() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: store('mp2026.token'), name: player.name, team: player.team, look: lookPayload() }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: store('mp2026.token'), name: player.name, team: 0, look: lookPayload() }));
     ws.onmessage = (ev) => { try { onNet(JSON.parse(ev.data)); } catch (e) { /* 무시 */ } };
     ws.onclose = () => { netOn = false; remotes.clear(); setNet('연결이 끊겼어요 · 다시 연결하는 중…'); setTimeout(connect, 2000); };
   }
@@ -1241,7 +1241,8 @@
     switch (m.t) {
       case 'welcome': {
         myId = m.id; netOn = true; store('mp2026.token', m.token);
-        testMode = !!m.testMode; applyWorld(m.owners, m.nations, m.view || null);
+        testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null);
+        if (!m.view) openFound('who'); else $('found').hidden = true;
         chatLog = m.chat || []; renderChat();
         wanderList = m.wander || [];
         const p = m.pos;
@@ -1271,7 +1272,8 @@
       case 'chat': chatLog.push(m); if (chatLog.length > 60) chatLog.shift(); renderChat(); break;
       case 'emote': { const r = m.id === myId ? player : remotes.get(m.id); if (r) { r.emote = m.text; r.emoteT = 3; } break; }
       case 'wander': wanderList = m.list || []; renderWander(); break;
-      case 'owners': applyWorld(m.owners, m.nations); break;
+      case 'owners': applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
+      case 'joined': chatLog = m.chat || []; renderChat(); afterFounded(m.founded); break;
       case 'view': applyWorld(null, null, m.view); break;
       case 'night': applyWorld(null, null, m.view); showNight(m.reports || []); break;
       case 'err': toast(m.text); break;
@@ -1354,21 +1356,8 @@
   // 접속 화면
   function startOnline() {
     $('help').hidden = true; $('chat').hidden = false;
-    $('joinNick').value = player.name; $('joinTeam').value = player.team;
-    $('join').hidden = false;
-    const go = () => {
-      player.name = $('joinNick').value.trim().slice(0, 10) || '나';
-      player.team = Math.max(1, Math.min(60, parseInt($('joinTeam').value, 10) || 1));
-      player.tag = teamColor(player.team);
-      const caps = terrs.filter((t) => t && t.capitalCandidate && !gone[t.id]).sort((a, b) => a.id - b.id);
-      home = caps[(player.team - 1) % caps.length];
-      saveLook(); store('mp2026.team', player.team);
-      $('join').hidden = true;
-      setNet('서버에 연결하는 중…');
-      connect();
-    };
-    $('btnJoin').addEventListener('click', go);
-    $('joinTeam').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    setNet('서버에 연결하는 중…');
+    connect();
   }
   $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { sendChat(); } if (e.key === 'Escape') e.target.blur(); });
   $('chatIn').addEventListener('focus', () => keys.clear());
@@ -1387,25 +1376,31 @@
     if (o) owners = o;
     if (n) nationsPub = n;
     if (v !== undefined) myView = v;
-    if (myView && terrs[myView.me.capital]) home = terrs[myView.me.capital];
+    if (myView && terrs[myView.me.capital]) { home = terrs[myView.me.capital]; player.tag = myView.me.color; }
     chunks.clear(); buildMapImage(); lastTerr = null; renderInv();
     if (!$('war').hidden) renderWar();
   }
-  function offSync() { applyWorld(OFF.s.owner, OFF.publicNations(), OFF.view(OFF_ME, 'me')); }
-  const OFF_ME = 'n3';
+  function offSync() { applyWorld(OFF.s.owner, OFF.publicNations(), OFF_ME ? OFF.view(OFF_ME, 'me') : null); }
+  let OFF_ME = null;
 
-  function setupOffline() {
+  function setupOffline(capId, nationName) {
     OFF = new MPRules.World({ territories: terrs.filter(Boolean) }, null);
-    const me = OFF.ensureNation(3, 'me', player.name, home.id);
-    me.name = '우리 나라'; me.army = 120; me.actions = 99;
-    for (const nb of terrs[home.id].neighbors.slice(0, 2)) OFF.claim(me.id, nb);
-    me.actions = 10;
+    const center = capId ? terrs[capId] : home;
+    if (capId) {
+      const r = OFF.foundNation('me', player.name, nationName, capId);
+      OFF_ME = r.nation.id;
+      const me = r.nation; me.army = 120; me.actions = 99;
+      for (const nb of terrs[capId].neighbors.slice(0, 2)) OFF.claim(me.id, nb);
+      me.actions = 10;
+    } else OFF_ME = null;
+    home = center;
     // 가까운 수도 후보 5곳에 봇 나라를 세우고 우리 쪽으로 땅을 넓혀 둔다
-    const caps = terrs.filter((t) => t && t.capitalCandidate && t.id !== home.id && !gone[t.id] && !OFF.ownerOf(t.id))
+    const caps = terrs.filter((t) => t && t.capitalCandidate && t.id !== home.id && !gone[t.id] && !OFF.ownerOf(t.id) && !t.neighbors.some((nb) => OFF.ownerOf(nb)))
       .sort((a, b) => OFF.distance(home.id, a.id) - OFF.distance(home.id, b.id)).slice(0, 5);
     const BOT_NAMES = ['라온 왕국', '미르 제국', '솔빛 연합', '가람 공국', '누리 왕조'];
     caps.forEach((c, i) => {
-      const b = OFF.ensureNation([1, 2, 4, 5, 6][i], 'bot' + i, '봇' + (i + 1), c.id);
+      const b = OFF.ensureNation(30 + i, 'bot' + i, '봇' + (i + 1), c.id);
+      if (b) b.color = ['#c94a3c', '#8a4fc0', '#9a5f10', '#1f7f8f', '#b03a78'][i];
       if (!b) return;
       b.name = BOT_NAMES[i]; b.army = 60 + ((hash(i, 3) * 80) | 0); b.actions = 99;
       for (let k = 0; k < 9; k++) {
@@ -1421,6 +1416,7 @@
   }
   // 봇들이 우리 땅을 노린다 (미리보기에서 방어 화면을 볼 수 있게)
   function botsDeclare() {
+    if (!OFF_ME) return;
     const mine = OFF.territoriesOf(OFF_ME);
     for (const b of OFF.alive().filter((n) => n.id !== OFF_ME)) {
       if (hash(b.team, OFF.s.night, 9) > 0.55 && !(OFF.s.night === 1 && !OFF.s.battles.length)) continue;
@@ -1437,6 +1433,8 @@
   // 행동 보내기 (온라인: 서버로 / 오프라인: 바로 적용)
   function warAction(t, payload) {
     if (ONLINE) { if (netOn) ws.send(JSON.stringify(Object.assign({ t }, payload))); return; }
+    if (t === 'kingTo') { toast('미리보기에선 왕을 넘길 국민이 없어요'); return; }
+    if (!OFF_ME && t !== 'resolveNow') { toast('나라가 없어요 · 유랑민 등록소에서 귀화나 건국을 하세요'); return; }
     let r;
     if (t === 'claim') r = OFF.claim(OFF_ME, payload.terr);
     else if (t === 'declare') r = OFF.declare(OFF_ME, payload.terr, payload.troops);
@@ -1461,20 +1459,24 @@
   }
 
   // ---- 전쟁 창
-  let warTab = 'attack', warTarget = null;
+  let warTab = 'nation', warTarget = null;
   const troopsOf = (id) => [0, 1, 2].map((i) => Math.max(0, parseInt($(id + i).value, 10) || 0));
   function troopInputs(prefix, vals, disabled) {
     return `<div class="fronts">${['A', 'B', 'C'].map((f, i) => `<label class="front"><span>${f} 전선</span><input id="${prefix}${i}" type="number" min="0" step="1" value="${vals[i] | 0}" ${disabled ? 'disabled' : ''}></label>`).join('')}</div>`;
   }
   function renderWar() {
     const v = myView, box = $('warBody');
-    if (!v) { box.innerHTML = '<p class="msg">나라 정보를 불러오는 중이에요.</p>'; return; }
+    if (!v) { $('warHead').textContent = ''; box.innerHTML = '<p class="msg">아직 나라가 없어요. 하늘의 유랑민 등록소에서 귀화·용병·건국을 등록하거나, 건국 기간에는 나라를 세울 수 있어요.</p>'; return; }
     const me = v.me, king = me.isKing;
     $('warHead').innerHTML = `<b style="color:${me.color}">■</b> ${esc(me.name)} · 왕 ${esc(me.kingName || '')}<br><span>병력 <b>${me.army}</b> · 영토 ${me.territories}곳 · 오늘 밤 선전포고 ${me.declaresLeft}/${MPRules.NUM.maxDeclare} · 행동력 ${me.actions}</span>`;
     for (const b of document.querySelectorAll('#warTabs button')) b.setAttribute('aria-pressed', String(b.dataset.tab === warTab));
     let h = '';
     if (!king) h += '<p class="note">전쟁 결정(선전포고·방어 배치)은 왕만 할 수 있어요. 여기선 상황만 볼 수 있어요.</p>';
-    if (warTab === 'attack') {
+    if (warTab === 'nation') {
+      h += `<div class="plan"><div class="row"><span>초대 코드</span><b class="code">${esc(me.code || '')}</b></div><p class="msg">팀원에게 이 코드를 알려 주면 [초대 코드로 들어가기]로 우리 나라에 들어와요 (최대 ${MPRules.NUM.maxMembers}명).</p></div>`;
+      h += `<h3>국민 (${me.members}/${MPRules.NUM.maxMembers})</h3>` + (me.memberList || []).map((m) => `<div class="row"><span>${m.king ? '👑 ' : ''}${esc(m.name)}${m.me ? ' (나)' : ''}</span>${king && !m.king ? `<button data-king="${m.idx}">왕 넘기기</button>` : ''}</div>`).join('');
+      h += `<h3>나라 정보</h3><div class="msg">수도 ${esc(terrLabel(me.capital))} · 영토 ${me.territories}곳 · 병력 ${me.army} · 행동력 ${me.actions}</div>`;
+    } else if (warTab === 'attack') {
       const mineSet = new Set(Object.keys(owners).filter((k) => owners[k] === me.id).map(Number));
       const targets = [];
       for (const tid of mineSet) for (const nb of terrs[tid].neighbors) if (owners[nb] && owners[nb] !== me.id && !gone[nb] && !targets.includes(nb)) targets.push(nb);
@@ -1510,6 +1512,7 @@
     if (testMode) h += `<div class="row test"><span>테스트용</span><button id="btnResolve">지금 밤 10시 전투 처리</button></div>`;
     box.innerHTML = h;
     // 이벤트
+    for (const b of box.querySelectorAll('[data-king]')) b.onclick = () => warAction('kingTo', { idx: +b.dataset.king });
     for (const b of box.querySelectorAll('[data-tgt]')) b.onclick = () => { warTarget = +b.dataset.tgt; renderWar(); };
     for (const b of box.querySelectorAll('[data-cancel]')) b.onclick = () => warAction('cancel', { battle: +b.dataset.cancel });
     for (const b of box.querySelectorAll('[data-defend]')) b.onclick = () => warAction('defend', { terr: +b.dataset.defend, troops: troopsOf('def' + b.dataset.bid + '_') });
@@ -1526,6 +1529,102 @@
   $('btnWar').addEventListener('click', () => toggleWar());
   $('btnWarClose').addEventListener('click', () => toggleWar(false));
   for (const b of document.querySelectorAll('#warTabs button')) b.addEventListener('click', () => { warTab = b.dataset.tab; renderWar(); });
+
+  // ------------------------------------------------------------ 건국 화면
+  let foundingOpen = true, foundSel = null;
+  function capOptions() {
+    const capOf = {};
+    for (const n of Object.values(nationsPub)) if (!n.dead) capOf[n.capital] = n.id;
+    return terrs.filter((t) => t && t.capitalCandidate).map((c) => {
+      let status = 'free';
+      if (gone[c.id]) status = 'gone';
+      else if (capOf[c.id]) status = 'taken';
+      else if (owners[c.id]) status = 'owned';
+      else if (c.neighbors.some((nb) => capOf[nb])) status = 'near';
+      return { t: c, status, nation: capOf[c.id] || owners[c.id] || null };
+    });
+  }
+  function openFound(step) {
+    $('found').hidden = false;
+    for (const el of document.querySelectorAll('#found [data-step]')) el.hidden = el.dataset.step !== step;
+    if (step === 'who') { $('fNick').value = player.name; $('fJoinCard').disabled = !ONLINE; $('fJoinNote').hidden = ONLINE; $('fFoundCard').disabled = !foundingOpen; $('fFoundNote').hidden = foundingOpen; }
+    if (step === 'found') { foundSel = null; drawFoundMap(); showFoundInfo(); $('fName').focus(); }
+    if (step === 'done') { $('fCode').textContent = myView ? myView.me.code : '-----'; $('fDoneName').textContent = myView ? myView.me.name : ''; }
+    $('fMsg').textContent = '';
+  }
+  function saveNick() {
+    player.name = $('fNick').value.trim().slice(0, 10) || '나';
+    tagW.clear(); saveLook();
+  }
+  const fCanvas = $('fMap'), fg = fCanvas.getContext('2d');
+  function drawFoundMap() {
+    const S = fCanvas.width, k = S / W;
+    fg.imageSmoothingEnabled = false;
+    fg.fillStyle = '#1b1430'; fg.fillRect(0, 0, S, S);
+    fg.drawImage(mapImg, 0, 0, S, S);
+    for (const o of capOptions()) {
+      const [x, y] = [o.t.altar[0] * k, o.t.altar[1] * k];
+      if (o.status === 'free') { fg.drawImage(ART.flags, 0, 0, 16, 16, x - 9, y - 16, 22, 22); }
+      else if (o.status === 'taken') { fg.fillStyle = '#1b1430'; fg.fillRect(x - 7, y - 7, 14, 14); fg.fillStyle = natColor(o.nation); fg.fillRect(x - 5, y - 5, 10, 10); }
+      else { fg.fillStyle = 'rgba(27,20,48,0.6)'; fg.fillRect(x - 4, y - 4, 8, 8); }
+      if (foundSel === o.t.id) { fg.strokeStyle = '#ffd23f'; fg.lineWidth = 3; fg.strokeRect(x - 13, y - 19, 26, 28); }
+    }
+  }
+  function showFoundInfo() {
+    const box = $('fInfo');
+    if (!foundSel) { box.innerHTML = '<b>지도에서 깃발(수도 후보)을 눌러 고르세요.</b><br><span>깃발 = 비어 있음 · 색 네모 = 다른 나라 수도 · 어두운 점 = 고를 수 없음</span>'; $('btnFound').disabled = true; return; }
+    const t = terrs[foundSel];
+    const near = Object.values(nationsPub).filter((n) => !n.dead && terrs[n.capital] && Math.hypot(terrs[n.capital].center[0] - t.center[0], terrs[n.capital].center[1] - t.center[1]) < 90).length;
+    const nbFree = t.neighbors.filter((nb) => !owners[nb] && !gone[nb]).length;
+    box.innerHTML = `<b>${esc(t.name)}</b> · ${t.type} 지방 · ${RING[t.ring]}<br><span>넓이 ${t.area.toLocaleString()}칸 · 이웃 영토 ${t.neighbors.length}곳 (빈 땅 ${nbFree}) · 가까운 다른 나라 ${near}곳</span>`;
+    $('btnFound').disabled = false;
+  }
+  fCanvas.addEventListener('click', (e) => {
+    const r = fCanvas.getBoundingClientRect(), k = fCanvas.width / W;
+    const mx = (e.clientX - r.left) / r.width * fCanvas.width, my = (e.clientY - r.top) / r.height * fCanvas.height;
+    let best = null, bd = 18;
+    for (const o of capOptions()) { const d = Math.hypot(o.t.altar[0] * k - mx, o.t.altar[1] * k - my); if (d < bd) { bd = d; best = o; } }
+    if (!best) return;
+    if (best.status !== 'free') { $('fMsg').textContent = best.status === 'taken' ? `${natName(best.nation)}의 수도예요` : best.status === 'near' ? '다른 나라 수도 바로 옆이라 고를 수 없어요' : '고를 수 없는 곳이에요'; return; }
+    foundSel = best.t.id; $('fMsg').textContent = ''; drawFoundMap(); showFoundInfo();
+  });
+  $('fFoundCard').addEventListener('click', () => { saveNick(); openFound('found'); });
+  $('fJoinCard').addEventListener('click', () => { saveNick(); openFound('join'); });
+  $('fWanderCard').addEventListener('click', () => { saveNick(); startWanderer(); });
+  for (const b of document.querySelectorAll('#found [data-back]')) b.addEventListener('click', () => openFound('who'));
+  $('btnFound').addEventListener('click', () => {
+    const name = $('fName').value.trim();
+    if (name.length < 2) { $('fMsg').textContent = '나라 이름을 2글자 이상 지어 주세요'; return; }
+    if (!foundSel) return;
+    if (ONLINE) { netAfterLook(); ws.send(JSON.stringify({ t: 'found', name, capital: foundSel })); }
+    else { setupOffline(foundSel, name); afterFounded(true); }
+  });
+  $('btnJoinCode').addEventListener('click', () => {
+    const code = $('fCodeIn').value.trim().toUpperCase();
+    if (code.length !== 5) { $('fMsg').textContent = '초대 코드는 5글자예요'; return; }
+    if (ONLINE) { netAfterLook(); ws.send(JSON.stringify({ t: 'join', code })); }
+  });
+  $('fCodeIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnJoinCode').click(); });
+  $('btnCopyCode').addEventListener('click', () => {
+    const code = $('fCode').textContent;
+    const done = () => { $('btnCopyCode').textContent = '복사됨'; setTimeout(() => { $('btnCopyCode').textContent = '코드 복사'; }, 1500); };
+    try { navigator.clipboard.writeText(code).then(done, () => { selectText($('fCode')); }); } catch (e) { selectText($('fCode')); }
+  });
+  function selectText(el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+  $('btnStart').addEventListener('click', () => { $('found').hidden = true; goHome(); });
+  function netAfterLook() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'look', name: player.name, look: lookPayload() })); }
+  function afterFounded(founded) {
+    if (founded) openFound('done');
+    else { $('found').hidden = true; goHome(); toast(`${myView.me.name}에 들어왔어요!`); }
+  }
+  function startWanderer() {
+    $('found').hidden = true;
+    if (!ONLINE && !OFF) setupOffline(null, null);
+    // 유랑민: 지도 아무 곳(무너진 땅 제외)에 떨어진다
+    const r = rng((Date.now() / 1000) | 0);
+    for (let i = 0; i < 500; i++) { const x = (r() * W) | 0, y = (r() * H) | 0; if (!blocked(x, y)) { teleportTo(x, y); break; } }
+    toast('유랑민으로 떨어졌어요 · 하늘 유랑민 등록소에서 귀화·용병·건국을 등록할 수 있어요');
+  }
 
   // ------------------------------------------------------------ 루프
   let dpr = 1, vw = 0, vh = 0;
@@ -1695,7 +1794,7 @@
     setupDoomCard();
     renderInv();
     $('loading').hidden = true;
-    if (ONLINE) startOnline(); else setupOffline();
+    if (ONLINE) startOnline(); else openFound('who');
     if (DAY === 5) setTimeout(() => toast('신들이 선포했다: 12월 28일, 이 세계는 끝난다.'), 600);
     else if (DOOM) { const n = terrs.filter((t) => t && gone[t.id]).length; if (n) setTimeout(() => toast(`균열이 영토 ${n}곳을 삼켰다`), 600); }
     requestAnimationFrame((n) => { last = n; frame(n); });

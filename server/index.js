@@ -76,6 +76,8 @@ const terrAtPx = (x, y) => { const tx = Math.floor(x / 32), ty = Math.floor(y / 
 const world = new World(MAP, state.world || null);
 state.world = world.s;
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const FOUNDING_LAST_DAY = process.env.FOUNDING_LAST_DAY || '2026-12-15'; // 건국은 D2(12/15)까지
+const foundingOpen = () => TEST_MODE || kstDay() <= FOUNDING_LAST_DAY;
 const online = new Map(); // id -> session
 let nextId = 1;
 
@@ -132,12 +134,12 @@ wss.on('connection', (ws) => {
       for (const o of online.values()) if (o.token === token) o.ws.close(4000, 'replaced');
       s = { id: nextId++, ws, token, acc, x: acc.x, y: acc.y, dir: 1, moving: 0, scene: acc.scene || 'ground', room: acc.room || null, lastMove: Date.now(), known: new Set() };
       online.set(s.id, s);
-      const nat = world.ensureNation(team, token, acc.name);
-      if (nat) world.refreshActions(nat, kstDay());
+      const nat = world.nationOfPlayer(token); // 나라는 건국 화면에서 세우거나 초대 코드로 들어간다
+      if (nat) { world.refreshActions(nat, kstDay()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       send(ws, {
         t: 'welcome', id: s.id, token, pos: acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room },
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
-        view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: TEST_MODE,
+        view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: TEST_MODE, foundingOpen: foundingOpen(),
       });
       if (nat) broadcastOwners();
       return;
@@ -184,6 +186,23 @@ wss.on('connection', (ws) => {
         s.acc.look = cleanLook(m.look); s.acc.name = clean(m.name, 10) || s.acc.name; dirty = true;
         const mm = { t: 'meta', p: meta(s) };
         for (const o of online.values()) if (o.known.has(s.id) || o === s) send(o.ws, mm);
+        break;
+      }
+      case 'found': case 'join': {
+        if (m.t === 'found' && !foundingOpen()) return send(ws, { t: 'err', text: '건국 기간(12/14~12/15)이 끝났어요. 유랑민으로 시작해 주세요' });
+        const r = m.t === 'found' ? world.foundNation(s.token, s.acc.name, m.name, m.capital | 0) : world.joinNation(s.token, s.acc.name, m.code);
+        if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        world.refreshActions(r.nation, kstDay());
+        dirty = true; broadcastOwners(); sendViews([r.nation.id]);
+        send(ws, { t: 'joined', founded: m.t === 'found', chat: (state.chats['nation:' + r.nation.id] || []).slice(-30) });
+        if (m.t === 'join') notifyNation(r.nation.id, `${s.acc.name}님이 우리 나라에 들어왔어요`);
+        break;
+      }
+      case 'kingTo': {
+        const n = world.nationOfPlayer(s.token); if (!n) return;
+        const r = world.transferKing(n.id, s.token, m.idx | 0);
+        if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        dirty = true; broadcastOwners(); sendViews([n.id]); notifyNation(n.id, `새 왕: ${n.kingName}`);
         break;
       }
       case 'war': { const n = world.nationOfPlayer(s.token); if (n) send(ws, { t: 'view', view: world.view(n.id, s.token) }); break; }

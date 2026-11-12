@@ -83,6 +83,27 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #wanderBox .msg { margin: 0; font-size: 13px; font-weight: 700; color: var(--muted); }
 .seg.wrap { flex-wrap: wrap; }
 .wlist { max-height: 140px; overflow-y: auto; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+#found { position: fixed; z-index: 28; inset: 0; background: rgba(27, 20, 48, 0.7); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#found .panel { padding: 16px 18px; width: min(600px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+#found [data-step] { display: flex; flex-direction: column; gap: 10px; }
+#found [data-step][hidden] { display: none; }
+#found h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 22px; }
+#found .head { display: flex; justify-content: space-between; align-items: center; }
+#found label { font-size: 13px; font-weight: 700; }
+#found input[type=text] { width: 100%; box-sizing: border-box; font: 700 16px var(--font-body); color: var(--ink); background: #ffffff; border: 3px solid var(--ink); padding: 8px 10px; }
+#found .codein { font: 700 26px var(--font-display) !important; letter-spacing: 8px; text-transform: uppercase; text-align: center; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.bigcard { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 10px 12px; min-height: 120px; color: #2b2340; text-shadow: none; border-image: none !important; border: 3px solid #2b2340 !important; background: #fff8ea !important; box-shadow: 0 4px 0 #2b2340; }
+.bigcard b { font-size: 16px; } .bigcard small { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.bigcard:hover { background: #ffefc2 !important; } .bigcard:disabled { opacity: 0.5; cursor: not-allowed; }
+.warn { color: #c22f53 !important; }
+#fMap { width: 100%; max-width: 560px; aspect-ratio: 1; height: auto; align-self: center; border: 3px solid #2b2340; image-rendering: pixelated; cursor: pointer; background: #1b1430; }
+.finfo { font-size: 13px; line-height: 1.6; background: #fff8ea; border: 2px solid #2b2340; padding: 8px 10px; }
+.finfo span { color: var(--muted); font-size: 12px; }
+.codebox { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 3px dashed #2b2340; background: #fffdf8; padding: 10px 14px; }
+.codebox b, .code { font-family: var(--font-display); font-size: 34px; letter-spacing: 8px; color: #6b4fb3; }
+.code { font-size: 22px; letter-spacing: 4px; }
+#btnFound:disabled { opacity: 0.5; cursor: not-allowed; }
 #war { position: fixed; z-index: 22; inset: 0; background: rgba(27, 20, 48, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #war .panel { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; width: min(560px, 100%); max-height: calc(100vh - 32px); }
 #war .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -160,7 +181,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 </div>
 
 <div id="tools" class="hud">
-  <button id="btnWar" type="button">전쟁 (B)</button>
+  <button id="btnWar" type="button">나라 (B)</button>
   <button id="btnMap" type="button">지도 (M)</button>
   <button id="btnHome" type="button">우리 수도 (T)</button>
   <button id="btnCoupon" type="button">쿠폰</button>
@@ -219,12 +240,37 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   </div>
 </div>
 
-<div id="join" hidden>
+<div id="found" hidden>
   <div class="panel card">
-    <h2>MP 2026 입장</h2>
-    <div><label for="joinNick">닉네임</label><input id="joinNick" type="text" maxlength="10" autocomplete="off"></div>
-    <div><label for="joinTeam">팀 번호 (테스트용, 나중엔 학번 로그인)</label><input id="joinTeam" type="number" min="1" max="60" value="1"></div>
-    <button id="btnJoin" type="button">입장하기</button>
+    <div data-step="who">
+      <h2>MP 2026 · 입장</h2>
+      <label for="fNick">닉네임</label><input id="fNick" type="text" maxlength="10" autocomplete="off">
+      <div class="cards">
+        <button id="fFoundCard" type="button" class="bigcard"><b>👑 나라 세우기</b><small>내가 왕. 나라 이름을 짓고 지도에서 수도를 골라요. 팀원은 초대 코드로 들어와요.</small><small id="fFoundNote" class="warn" hidden>건국 기간(12/14~15)이 끝났어요</small></button>
+        <button id="fJoinCard" type="button" class="bigcard"><b>🔑 초대 코드로 들어가기</b><small>왕에게 받은 5글자 코드를 넣어요.</small><small id="fJoinNote" class="warn" hidden>미리보기에선 서버가 없어서 안 돼요</small></button>
+        <button id="fWanderCard" type="button" class="bigcard"><b>🎒 유랑민으로 시작</b><small>나라 없이 지도 아무 곳에 떨어져요. 나중에 귀화·용병·건국 가능.</small></button>
+      </div>
+    </div>
+    <div data-step="found" hidden>
+      <div class="head"><h2>나라 세우기</h2><button type="button" data-back>뒤로</button></div>
+      <label for="fName">나라 이름 (2~10글자)</label><input id="fName" type="text" maxlength="10" autocomplete="off" placeholder="예: 하늘왕국">
+      <label>수도 고르기</label>
+      <canvas id="fMap" width="720" height="720" aria-label="수도 후보 지도"></canvas>
+      <div id="fInfo" class="finfo"></div>
+      <button id="btnFound" type="button">여기에 건국하기</button>
+    </div>
+    <div data-step="join" hidden>
+      <div class="head"><h2>초대 코드로 들어가기</h2><button type="button" data-back>뒤로</button></div>
+      <label for="fCodeIn">초대 코드 (5글자)</label><input id="fCodeIn" type="text" maxlength="5" autocomplete="off" class="codein" placeholder="AB3CD">
+      <button id="btnJoinCode" type="button">들어가기</button>
+    </div>
+    <div data-step="done" hidden>
+      <h2>👑 <span id="fDoneName"></span> 건국!</h2>
+      <p class="msg">팀원에게 아래 <b>초대 코드</b>를 알려 주세요. 나라 창(B)에서도 다시 볼 수 있어요.</p>
+      <div class="codebox"><b id="fCode">-----</b><button id="btnCopyCode" type="button">코드 복사</button></div>
+      <button id="btnStart" type="button">수도에서 시작하기</button>
+    </div>
+    <p id="fMsg" class="msg warn"></p>
   </div>
 </div>
 
@@ -241,9 +287,9 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 
 <div id="war" hidden>
   <div class="panel card">
-    <div class="head"><h2>전쟁 · 블로토</h2><button id="btnWarClose" type="button">닫기</button></div>
+    <div class="head"><h2>나라 · 전쟁</h2><button id="btnWarClose" type="button">닫기</button></div>
     <div id="warHead" class="warhead"></div>
-    <div id="warTabs" class="seg"><button type="button" data-tab="attack">공격</button><button type="button" data-tab="defend">방어</button><button type="button" data-tab="report">결과</button></div>
+    <div id="warTabs" class="seg"><button type="button" data-tab="nation">나라</button><button type="button" data-tab="attack">공격</button><button type="button" data-tab="defend">방어</button><button type="button" data-tab="report">결과</button></div>
     <div id="warBody" class="warbody"></div>
   </div>
 </div>

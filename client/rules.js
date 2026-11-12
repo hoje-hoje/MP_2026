@@ -14,6 +14,7 @@
   const NUM = {
     startArmy: 50, startCoin: 1000,
     maxDeclare: 2,                 // 하룻밤 선전포고 최대
+    maxMembers: 6,                 // 나라 인원 최대
     supplyPer: 0.05, supplyMax: 0.4, // 보급선: 수도에서 영토 1개 건널 때마다 -5%, 최대 -40%
     cmdPer: 0.10, cmdMax: 0.30,    // 지휘관 보너스: 그 영토에 서 있는 국민 1명당 +10%, 최대 +30%
     lossLose: 0.5, lossWin: 0.25,  // 전투 손실
@@ -23,7 +24,9 @@
   const teamColor = (n) => COLORS[((n | 0) - 1 + COLORS.length * 10) % COLORS.length];
   const FRONTS = ['A', 'B', 'C'];
 
-  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1 }; }
+  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1 }; }
+  const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const randCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
   const clampTroops = (arr) => (Array.isArray(arr) && arr.length === 3) ? arr.map((v) => Math.max(0, Math.floor(+v || 0))) : null;
   const sum = (a) => a[0] + a[1] + a[2];
 
@@ -78,12 +81,60 @@
         n = this.s.nations[id] = {
           id, team, name: `${team}팀`, king: key, kingName: name, members: [], capital: cap.id,
           army: NUM.startArmy, coin: NUM.startCoin, color: teamColor(team), actions: NUM.actionsPerDay, actionDay: '',
-          provinces: [team], dead: false, lastDef: [1, 1, 1],
+          provinces: [team], dead: false, lastDef: [1, 1, 1], code: this.newCode(), memberNames: {},
         };
         this.s.owner[cap.id] = id;
       }
       if (!n.members.includes(key)) n.members.push(key);
+      n.memberNames = n.memberNames || {}; n.memberNames[key] = name;
       return n;
+    }
+
+    // ---------------------------------------------------------- 건국 화면
+    newCode() { let c; do { c = randCode(); } while (Object.values(this.s.nations).some((n) => n.code === c)); return c; }
+    // 수도 후보 상태: free(고를 수 있음) / taken(이미 수도) / near(다른 수도 바로 옆이라 불가) / gone(무너짐)
+    capitalOptions(goneSet) {
+      const capOwner = {};
+      for (const n of this.alive()) capOwner[n.capital] = n.id;
+      return this.caps.map((c) => {
+        let status = 'free';
+        if (goneSet && goneSet.has(c.id)) status = 'gone';
+        else if (capOwner[c.id]) status = 'taken';
+        else if (this.s.owner[c.id]) status = 'owned';
+        else if (c.neighbors.some((nb) => capOwner[nb])) status = 'near';
+        return { id: c.id, status, nation: capOwner[c.id] || this.s.owner[c.id] || null };
+      });
+    }
+    foundNation(key, playerName, nationName, capitalId) {
+      if (this.nationOfPlayer(key)) return { ok: false, err: '이미 나라에 속해 있어요' };
+      const name = String(nationName || '').replace(/[<>\u0000-\u001f]/g, '').trim().slice(0, 10);
+      if (name.length < 2) return { ok: false, err: '나라 이름은 2글자 이상이에요' };
+      if (this.alive().some((n) => n.name === name)) return { ok: false, err: '같은 이름의 나라가 있어요' };
+      const opt = this.capitalOptions().find((o) => o.id === capitalId);
+      if (!opt) return { ok: false, err: '수도 후보가 아니에요' };
+      if (opt.status !== 'free') return { ok: false, err: opt.status === 'near' ? '다른 나라 수도 바로 옆에는 세울 수 없어요' : '이미 다른 나라 땅이에요' };
+      const team = this.s.nextTeam = Math.max(this.s.nextTeam || 1, ...Object.values(this.s.nations).map((n) => n.team + 1));
+      this.s.nextTeam = team + 1;
+      const n = this.ensureNation(team, key, playerName, capitalId);
+      if (!n) return { ok: false, err: '건국에 실패했어요' };
+      n.name = name;
+      return { ok: true, nation: n };
+    }
+    joinNation(key, playerName, code) {
+      if (this.nationOfPlayer(key)) return { ok: false, err: '이미 나라에 속해 있어요' };
+      const n = this.alive().find((x) => x.code === String(code || '').toUpperCase().trim());
+      if (!n) return { ok: false, err: '그런 초대 코드가 없어요' };
+      if (n.members.length >= NUM.maxMembers) return { ok: false, err: `그 나라는 ${NUM.maxMembers}명이 다 찼어요` };
+      n.members.push(key); n.memberNames = n.memberNames || {}; n.memberNames[key] = playerName;
+      return { ok: true, nation: n };
+    }
+    transferKing(nid, fromKey, toIdx) {
+      const n = this.nation(nid);
+      const toKey = n ? n.members[toIdx | 0] : null;
+      if (!n || n.king !== fromKey) return { ok: false, err: '왕만 넘길 수 있어요' };
+      if (!n.members.includes(toKey) || toKey === fromKey) return { ok: false, err: '우리 나라 국민에게만 넘길 수 있어요' };
+      n.king = toKey; n.kingName = (n.memberNames || {})[toKey] || n.kingName;
+      return { ok: true };
     }
     refreshActions(n, dayKey) { if (dayKey && n.actionDay !== dayKey) { n.actionDay = dayKey; n.actions = NUM.actionsPerDay; } }
 
@@ -208,7 +259,13 @@
       const n = this.nation(nid);
       if (!n) return null;
       return {
-        me: { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, army: n.army, coin: n.coin, actions: n.actions, isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length, declaresLeft: this.declaresLeft(n.id), provinces: n.provinces },
+        me: {
+          id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, army: n.army, coin: n.coin, actions: n.actions,
+          isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length,
+          declaresLeft: this.declaresLeft(n.id), provinces: n.provinces, code: n.code,
+          // 접속 열쇠(토큰)는 절대 내보내지 않는다: 순번만
+          memberList: n.members.map((k, i) => ({ idx: i, name: (n.memberNames || {})[k] || '?', king: k === n.king, me: k === key })),
+        },
         night: this.s.night,
         outgoing: this.s.battles.filter((b) => b.att === n.id).map((b) => ({ id: b.id, target: b.target, def: b.def, a: b.a })),
         incoming: this.s.battles.filter((b) => b.def === n.id).map((b) => ({ id: b.id, target: b.target, att: b.att, d: b.d })), // 공격 병력은 숨김
