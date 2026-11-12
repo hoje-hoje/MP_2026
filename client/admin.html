@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>MP 2026 · 신의 콘솔</title>
+<style>
+@font-face { font-family: Galmuri11; src: url(/assets/fonts/Galmuri11.woff2) format('woff2'); }
+@font-face { font-family: Galmuri11; font-weight: 700; src: url(/assets/fonts/Galmuri11-Bold.woff2) format('woff2'); }
+:root { --ink: #2b2340; --paper: #fff6d6; --card: #fffdf6; --line: #2b2340; --muted: #6b6280; --red: #c94a3c; --green: #277a58; --blue: #3d5fb8; --pink: #ff5d7a; --bg: #efe6ff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 Galmuri11, system-ui, sans-serif; }
+header { background: var(--ink); color: var(--paper); padding: 12px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: sticky; top: 0; z-index: 2; }
+header h1 { margin: 0; font-size: 18px; }
+header .sp { flex: 1; }
+header small { opacity: .75; }
+header button { color: var(--ink); }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+.card { background: var(--card); border: 3px solid var(--line); box-shadow: 4px 4px 0 var(--line); padding: 14px 16px; min-width: 0; }
+.card h2 { margin: 0 0 10px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.card h2 .hint { font-weight: 400; font-size: 12px; color: var(--muted); }
+.grid2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.stat { border: 2px solid var(--line); background: var(--paper); padding: 8px 10px; }
+.stat b { display: block; font-size: 20px; }
+.stat span { font-size: 12px; color: var(--muted); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { border: 2px solid var(--line); background: var(--paper); padding: 6px 12px; cursor: pointer; box-shadow: 2px 2px 0 var(--line); }
+button:active { transform: translate(2px, 2px); box-shadow: none; }
+button.primary { background: var(--blue); color: #fff; }
+button.danger { background: var(--red); color: #fff; }
+button.small { padding: 2px 8px; font-size: 12px; }
+button:disabled { opacity: .5; cursor: default; }
+input, select, textarea { border: 2px solid var(--line); background: #fff; padding: 6px 8px; min-width: 0; }
+textarea { width: 100%; resize: vertical; min-height: 64px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.row label { display: flex; gap: 6px; align-items: center; }
+.muted { color: var(--muted); font-size: 12px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { border-bottom: 2px solid #e4dcc4; padding: 6px 8px; text-align: left; white-space: nowrap; }
+th { background: var(--paper); position: sticky; top: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.dead td { color: var(--muted); text-decoration: line-through; }
+.dot { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--line); vertical-align: -1px; margin-right: 4px; }
+.pill { display: inline-block; padding: 0 6px; border: 2px solid var(--line); font-size: 12px; }
+.pill.on { background: #c8f0d8; } .pill.off { background: #ffd9d4; }
+.adj { display: flex; gap: 4px; align-items: center; }
+.adj input { width: 72px; }
+#login { max-width: 380px; margin: 12vh auto; }
+#msg { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 8px 16px; border: 3px solid var(--paper); outline: 3px solid var(--ink); z-index: 10; max-width: calc(100vw - 32px); }
+.codes { max-height: 260px; overflow: auto; border: 2px solid #e4dcc4; }
+code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+details summary { cursor: pointer; font-weight: 700; }
+.danger-zone { border-color: var(--red); box-shadow: 4px 4px 0 var(--red); }
+@media (max-width: 560px) { main { padding: 12px; } .card { padding: 12px; } }
+</style>
+</head>
+<body>
+<div id="login" class="card" hidden>
+  <h2>🔐 신의 콘솔</h2>
+  <p class="muted">운영진 전용이에요. Render의 <b>ADMIN_KEY</b> 값을 넣어 주세요.</p>
+  <form id="loginForm" class="row">
+    <input id="key" type="password" placeholder="관리자 비밀번호" autocomplete="current-password" style="flex:1">
+    <button class="primary">들어가기</button>
+  </form>
+  <p id="loginErr" class="muted" style="color:var(--red)"></p>
+</div>
+
+<div id="app" hidden>
+<header>
+  <h1>⚡ MP 2026 · 신의 콘솔</h1>
+  <small id="updated"></small>
+  <span class="sp"></span>
+  <button id="refresh" class="small">새로고침</button>
+  <a href="/" target="_blank" style="color:var(--paper)">게임 열기 ↗</a>
+  <button id="logout" class="small">나가기</button>
+</header>
+<main>
+  <section class="card">
+    <h2>📊 지금 상황 <span class="hint">10초마다 자동 갱신</span></h2>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>📜 전체 공지 <span class="hint">접속한 모든 학생 화면 위에 떠요</span></h2>
+      <div id="noticeNow" class="muted">지금 올라간 공지 없음</div>
+      <textarea id="noticeText" maxlength="200" placeholder="예: 오늘 밤 10시 전투는 11시로 미뤄집니다"></textarea>
+      <div class="row">
+        <button id="noticeSend" class="primary">공지 올리기</button>
+        <button id="noticeClear">공지 내리기</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>⚔ 전투 <span class="hint">매일 밤 10시에 자동 처리</span></h2>
+      <div id="battleInfo" class="muted"></div>
+      <div class="row"><button id="resolve" class="danger">지금 전투 처리하기</button></div>
+      <p class="muted">선포된 전투를 바로 계산해요. 서버가 밤 10시에 잠들어 있었거나 일정을 바꿀 때만 쓰세요.</p>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>🏰 나라 <span class="hint">병력·코인 더하기(+)/빼기(−). 바꾸면 그 나라 학생들에게 알림이 가요</span></h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>나라</th><th>왕</th><th>국민 (접속)</th><th class="num">영토</th><th class="num">병력</th><th class="num">코인</th><th>초대 코드</th><th>조정</th></tr></thead>
+      <tbody id="nations"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card">
+    <h2>🎟 쿠폰 <span class="hint">점심 이벤트에서 나눠 줄 1회용 코드. 한 번 쓰면 사라지고, 쓴 학생의 나라에 들어가요</span></h2>
+    <form id="couponForm" class="row">
+      <label>장수 <input id="cCount" type="number" min="1" max="300" value="20" style="width:72px"></label>
+      <label>보상 <select id="cKind"><option value="coin">코인</option><option value="army">병력</option></select></label>
+      <label>양 <input id="cAmount" type="number" min="1" value="1000" style="width:90px"></label>
+      <label style="flex:1">메모 <input id="cMemo" maxlength="30" placeholder="예: 12/16 점심 퍼즐" style="flex:1"></label>
+      <button class="primary">만들기</button>
+    </form>
+    <div class="row">
+      <label>보기 <select id="cFilter"><option value="all">전체</option><option value="unused">안 쓴 것</option><option value="used">쓴 것</option></select></label>
+      <label>메모 <select id="cMemoFilter"><option value="">전체</option></select></label>
+      <span class="sp" style="flex:1"></span>
+      <button id="cPrint" type="button">인쇄용 카드</button>
+      <button id="cCsv" type="button">CSV 받기</button>
+      <button id="cDelete" type="button" class="danger small">보이는 것 중 안 쓴 코드 삭제</button>
+    </div>
+    <p id="couponSummary" class="muted"></p>
+    <div class="codes tablewrap"><table>
+      <thead><tr><th>코드</th><th>보상</th><th>메모</th><th>사용</th></tr></thead>
+      <tbody id="coupons"></tbody>
+    </table></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>⚙ 설정</h2>
+      <div class="row"><label>테스트 모드
+        <select id="sTest"><option value="auto">자동 (Render 설정 따름)</option><option value="on">켜기</option><option value="off">끄기</option></select></label>
+      </div>
+      <p class="muted">켜져 있으면 학생 화면에 '지금 전투 처리' 버튼이 보이고, 날짜와 상관없이 건국할 수 있어요. <b>행사 전에 꼭 끄세요.</b></p>
+      <div class="row"><label>건국
+        <select id="sFound"><option value="auto">자동 (12/15까지)</option><option value="open">항상 열기</option><option value="closed">닫기</option></select></label>
+      </div>
+      <p class="muted" id="settingsNow"></p>
+    </section>
+
+    <section class="card">
+      <h2>📚 문제 · 서버</h2>
+      <div id="serverInfo" class="muted"></div>
+    </section>
+  </div>
+
+  <section class="card danger-zone">
+    <details>
+      <summary>⚠ 초기화 (행사 시작 전 테스트 기록 지우기)</summary>
+      <p class="muted">나라·영토·전투·채팅·유랑민 기록과 학생들이 푼 문제 기록이 지워져요. 지우기 직전 상태는 저장소에 따로 백업돼요.</p>
+      <div class="row"><label><input type="checkbox" id="rPos" checked> 캐릭터 위치도 처음으로</label></div>
+      <div class="row"><label><input type="checkbox" id="rCoupons"> 쿠폰도 모두 삭제</label></div>
+      <div class="row"><label><input type="checkbox" id="rAccounts"> 계정(닉네임·꾸미기)까지 모두 삭제</label></div>
+      <div class="row">
+        <input id="rConfirm" placeholder="'초기화'라고 입력">
+        <button id="reset" class="danger">초기화하기</button>
+      </div>
+    </details>
+  </section>
+</main>
+</div>
+<div id="msg" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = (n) => (n || 0).toLocaleString('ko-KR');
+  const ss = { get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} } };
+  let key = ss.get('mpAdminKey') || '';
+  let S = null, timer = null, msgTimer = null;
+
+  function say(text) { const el = $('msg'); el.textContent = text; el.hidden = false; clearTimeout(msgTimer); msgTimer = setTimeout(() => { el.hidden = true; }, 3500); }
+  async function api(op, data) {
+    const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key, op }, data || {})) });
+    let j = null; try { j = await r.json(); } catch (e) { j = { ok: false, err: '서버 응답 오류 (' + r.status + ')' }; }
+    if (r.status === 401) { logout(j.err); throw new Error(j.err); }
+    if (!j.ok) { say(j.err || '실패'); throw new Error(j.err); }
+    return j;
+  }
+  function logout(err) { key = ''; ss.set('mpAdminKey', null); clearInterval(timer); $('app').hidden = true; $('login').hidden = false; $('loginErr').textContent = err || ''; }
+  $('logout').onclick = () => logout();
+  $('loginForm').onsubmit = async (e) => {
+    e.preventDefault(); key = $('key').value.trim(); $('loginErr').textContent = '';
+    try { await load(); ss.set('mpAdminKey', key); start(); } catch (err) { $('loginErr').textContent = err.message; }
+  };
+  function start() { $('login').hidden = true; $('app').hidden = false; clearInterval(timer); timer = setInterval(() => load().catch(() => {}), 10000); }
+
+  async function load() { S = await api('status'); render(); }
+  $('refresh').onclick = () => load().then(() => say('새로고침했어요')).catch(() => {});
+
+  function ago(ms) { const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? `${s}초 전` : s < 3600 ? `${Math.round(s / 60)}분 전` : `${Math.round(s / 3600)}시간 전`; }
+  function render() {
+    $('updated').textContent = `한국 날짜 ${S.kstDay} · ${new Date(S.now).toLocaleTimeString('ko-KR')} 갱신`;
+    const alive = S.nations.filter((n) => !n.dead);
+    const unused = S.coupons.filter((c) => !c.used).length;
+    const stat = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
+    $('stats').innerHTML = [
+      stat(fmt(S.online), '지금 접속'), stat(fmt(S.accounts), '전체 계정'), stat(fmt(alive.length), '살아 있는 나라'),
+      stat(fmt(S.battles), '오늘 밤 전투'), stat(fmt(S.wander), '유랑민 등록'), stat(`${fmt(unused)} / ${fmt(S.coupons.length)}`, '안 쓴 쿠폰 / 전체'),
+      stat(S.testMode ? '<span class="pill on">켜짐</span>' : '<span class="pill off">꺼짐</span>', '테스트 모드'),
+      stat(S.foundingOpen ? '<span class="pill on">가능</span>' : '<span class="pill off">마감</span>', '건국'),
+    ].join('');
+
+    $('noticeNow').innerHTML = S.notice ? `지금 공지 (${ago(S.notice.ts)}): <b>${esc(S.notice.text)}</b>` : '지금 올라간 공지 없음';
+    $('battleInfo').innerHTML = `선포된 전투 <b>${S.battles}</b>건 · ${S.night}번째 밤 · 마지막 처리 ${S.lastResolved || '아직 없음'}`;
+
+    $('nations').innerHTML = S.nations.length ? S.nations.map((n) => `
+      <tr class="${n.dead ? 'dead' : ''}">
+        <td><span class="dot" style="background:${esc(n.color)}"></span>${esc(n.name)}${n.dead ? ' (흡수됨)' : ''}</td>
+        <td>${esc(n.king)}</td>
+        <td title="${esc(n.members.join(', '))}">${n.members.length}명 (${n.online})</td>
+        <td class="num">${fmt(n.territories)}</td><td class="num">${fmt(n.army)}</td><td class="num">${fmt(n.coin)}</td>
+        <td><code>${esc(n.code || '')}</code></td>
+        <td>${n.dead ? '' : `<div class="adj"><input type="number" placeholder="병력 ±" data-a="${esc(n.id)}"><input type="number" placeholder="코인 ±" data-c="${esc(n.id)}"><button class="small" data-adj="${esc(n.id)}">적용</button></div>`}</td>
+      </tr>`).join('') : '<tr><td colspan="8" class="muted">아직 나라가 없어요</td></tr>';
+
+    const memos = [...new Set(S.coupons.map((c) => c.memo).filter(Boolean))];
+    const sel = $('cMemoFilter'), cur = sel.value;
+    sel.innerHTML = '<option value="">전체</option>' + memos.map((m) => `<option>${esc(m)}</option>`).join('');
+    sel.value = memos.includes(cur) ? cur : '';
+    renderCoupons();
+
+    const sv = S.settings || {};
+    $('sTest').value = typeof sv.testMode === 'boolean' ? (sv.testMode ? 'on' : 'off') : 'auto';
+    $('sFound').value = sv.founding || 'auto';
+    $('settingsNow').textContent = `지금: 테스트 모드 ${S.testMode ? '켜짐' : '꺼짐'} (Render 설정값 ${S.envTestMode ? '켜짐' : '꺼짐'}) · 건국 ${S.foundingOpen ? '가능' : '마감'} (자동 마감일 ${S.foundingLastDay})`;
+    $('serverInfo').innerHTML = `문제 <b>${S.puzzles}</b>개 (${esc(S.puzzleFile)})${S.puzzleFile === 'puzzles.sample.json' ? ' · <span style="color:var(--red)">아직 예시 문제예요</span>' : ''}<br>저장소: ${esc(S.storage)}<br>서버 켜진 지 ${Math.round(S.uptimeSec / 60)}분`;
+  }
+
+  function visibleCoupons() {
+    const f = $('cFilter').value, mf = $('cMemoFilter').value;
+    return S.coupons.filter((c) => (f === 'all' || (f === 'used') === !!c.used) && (!mf || c.memo === mf)).sort((a, b) => b.at - a.at);
+  }
+  const rewardText = (r) => Object.entries(r).map(([k, v]) => `${k === 'coin' ? '코인' : '병력'} ${fmt(v)}`).join(', ');
+  function renderCoupons() {
+    const list = visibleCoupons();
+    $('couponSummary').textContent = `보이는 코드 ${list.length}개 (안 쓴 것 ${list.filter((c) => !c.used).length}개)`;
+    $('coupons').innerHTML = list.slice(0, 500).map((c) => `<tr><td><code>${c.code}</code></td><td>${rewardText(c.r)}</td><td>${esc(c.memo)}</td><td>${c.used ? `${esc(c.used.name)} · ${esc(c.used.nation)} · ${ago(c.used.ts)}` : '<span class="muted">안 씀</span>'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">코드 없음</td></tr>';
+  }
+  $('cFilter').onchange = renderCoupons; $('cMemoFilter').onchange = renderCoupons;
+  $('cKind').onchange = () => { $('cAmount').value = $('cKind').value === 'army' ? 20 : 1000; };
+
+  $('noticeSend').onclick = async () => {
+    const text = $('noticeText').value.trim(); if (!text) return say('공지 내용을 써 주세요');
+    const r = await api('notice', { text }); $('noticeText').value = ''; say(`공지를 올렸어요 · 지금 ${r.sent}명에게 보냄`); load();
+  };
+  $('noticeClear').onclick = async () => { await api('notice', { text: '' }); say('공지를 내렸어요'); load(); };
+  $('resolve').onclick = async () => {
+    if (!confirm(`선포된 전투 ${S.battles}건을 지금 처리할까요? 되돌릴 수 없어요.`)) return;
+    await api('resolve'); say('전투를 처리했어요'); load();
+  };
+  $('nations').onclick = async (e) => {
+    const id = e.target.dataset.adj; if (!id) return;
+    const army = +document.querySelector(`[data-a="${id}"]`).value || 0, coin = +document.querySelector(`[data-c="${id}"]`).value || 0;
+    if (!army && !coin) return say('병력이나 코인에 숫자를 넣어 주세요 (빼려면 -10 처럼)');
+    const n = S.nations.find((x) => x.id === id);
+    if (!confirm(`${n.name}: 병력 ${army >= 0 ? '+' : ''}${army}, 코인 ${coin >= 0 ? '+' : ''}${coin}\n적용할까요?`)) return;
+    await api('nationAdjust', { nid: id, army, coin }); say('적용했어요'); load();
+  };
+  $('couponForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const count = +$('cCount').value, kind = $('cKind').value, amount = +$('cAmount').value, memo = $('cMemo').value.trim();
+    if (!confirm(`${kind === 'coin' ? '코인' : '병력'} ${fmt(amount)}짜리 쿠폰 ${count}장을 만들까요?`)) return;
+    const r = await api('couponCreate', { count, kind, amount, memo });
+    say(`쿠폰 ${r.codes.length}장을 만들었어요`); await load();
+    $('cFilter').value = 'unused'; $('cMemoFilter').value = memo; renderCoupons();
+  };
+  $('cDelete').onclick = async () => {
+    const codes = visibleCoupons().filter((c) => !c.used).map((c) => c.code);
+    if (!codes.length) return say('지울 코드가 없어요');
+    if (!confirm(`안 쓴 코드 ${codes.length}개를 지울까요? 이미 나눠 준 코드라면 학생이 못 쓰게 돼요.`)) return;
+    const r = await api('couponDelete', { codes }); say(`${r.deleted}개 지웠어요`); load();
+  };
+  $('cCsv').onclick = () => {
+    const rows = [['code', 'reward', 'memo', 'used_by', 'nation']].concat(visibleCoupons().map((c) => [c.code, rewardText(c.r), c.memo, c.used ? c.used.name : '', c.used ? c.used.nation : '']));
+    const csv = '﻿' + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = `mp2026-coupons-${$('cMemoFilter').value || 'all'}.csv`; a.click();
+  };
+  $('cPrint').onclick = () => {
+    const list = visibleCoupons().filter((c) => !c.used);
+    if (!list.length) return say('인쇄할 안 쓴 코드가 없어요');
+    const w = open('', '_blank'); if (!w) return say('팝업이 막혔어요. 팝업을 허용해 주세요');
+    w.document.write(`<!doctype html><meta charset="utf-8"><title>MP 2026 쿠폰</title><style>
+      @font-face{font-family:G;src:url(${location.origin}/assets/fonts/Galmuri11-Bold.woff2)}
+      body{margin:10mm;font-family:G,sans-serif;color:#2b2340}.g{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}
+      .c{border:2px dashed #2b2340;padding:5mm;text-align:center;break-inside:avoid}.t{font-size:11px;letter-spacing:2px}.k{font-size:20px;margin:3mm 0;font-family:ui-monospace,monospace;font-weight:700}.r{font-size:13px}.h{font-size:10px;color:#6b6280;margin-top:2mm}
+      @media print{button{display:none}}</style>
+      <button onclick="print()" style="margin-bottom:6mm;padding:6px 14px">인쇄하기</button>
+      <div class="g">${list.map((c) => `<div class="c"><div class="t">MP 2026 · 신의 선물</div><div class="k">${c.code}</div><div class="r">${rewardText(c.r)}</div><div class="h">게임 상단 [쿠폰]에 입력 · 한 번만 쓸 수 있어요</div></div>`).join('')}</div>`);
+    w.document.close();
+  };
+  async function saveSettings(patch) { S = await api('settings', patch); render(); say('설정을 바꿨어요'); }
+  $('sTest').onchange = () => { const v = $('sTest').value; saveSettings({ testMode: v === 'auto' ? null : v === 'on' }); };
+  $('sFound').onchange = () => saveSettings({ founding: $('sFound').value });
+  $('reset').onclick = async () => {
+    if ($('rConfirm').value.trim() !== '초기화') return say("확인 칸에 '초기화'라고 써 주세요");
+    const opts = { confirm: '초기화', positions: $('rPos').checked, coupons: $('rCoupons').checked, accounts: $('rAccounts').checked };
+    if (!confirm('정말 초기화할까요? 접속 중인 학생은 모두 다시 연결돼요.')) return;
+    await api('reset', opts); $('rConfirm').value = ''; say('초기화했어요'); load();
+  };
+
+  if (key) load().then(start).catch(() => logout()); else logout();
+})();
+</script>
+</body>
+</html>

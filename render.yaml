@@ -17,5 +17,7 @@ services:
         sync: false
       - key: MONGODB_DB
         value: mp2026
+      - key: ADMIN_KEY       # 관리자 화면(/admin) 비밀번호: Render 화면에서 직접 넣는다 (저장소에 적지 않음)
+        sync: false
       - key: TEST_MODE       # 행사 시작 전 '0' 으로 바꾸면 '지금 전투 처리' 버튼이 사라짐
         value: "1"

@@ -18,6 +18,7 @@ function fileStore(dir) {
       fs.writeFileSync(tmp, JSON.stringify(state));
       fs.renameSync(tmp, file);
     },
+    async backup(state, id) { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, id + '.json'), JSON.stringify(state)); },
     async close() {},
   };
 }
@@ -44,6 +45,7 @@ async function mongoStore(uri, dbName) {
         lastBackupDay = day;
       }
     },
+    async backup(state, id) { await col.replaceOne({ _id: id }, { _id: id, json: JSON.stringify(state), savedAt: new Date() }, { upsert: true }); },
     async close() { await client.close(); },
   };
 }

@@ -839,7 +839,7 @@
   const VACCINE_BASE = 3000, VACCINE_STEP = 500, SKY_LIMIT = 5 * 60;
   const vaccinePrice = () => VACCINE_BASE + VACCINE_STEP * inv.bought;
   function saveInv() { store('mp2026.inv', inv); renderInv(); }
-  function renderInv() { $('invCoin').textContent = inv.coin.toLocaleString(); $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = inv.vaccine; }
+  function renderInv() { $('invCoin').textContent = (myView ? myView.me.coin : inv.coin).toLocaleString(); $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = inv.vaccine; }
   const player = {
     x: 0, y: 0, dir: 1, moving: false, scene: 'ground', room: null, entry: null,
     name: saved.name || '나', tag: '#277a58', team: store('mp2026.team') || 3,
@@ -1207,6 +1207,10 @@
     const code = /^MP[A-Z0-9]{8}$/.test(raw) ? `MP-${raw.slice(2, 6)}-${raw.slice(6)}` : raw;
     const msg = $('couponMsg');
     if (!/^MP-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) { msg.textContent = '코드 모양이 달라요. 예: MP-AB12-CD34'; return; }
+    if (window.MP_ONLINE) { // 온라인: 서버가 확인하고 우리 나라에 넣어 준다
+      if (!ws || ws.readyState !== 1) { msg.textContent = '서버에 연결되지 않았어요. 잠시 후 다시 해 주세요.'; return; }
+      ws.send(JSON.stringify({ t: 'redeem', code })); msg.textContent = '확인하는 중…'; return;
+    }
     if (usedCodes.has(code)) { msg.textContent = '이미 사용한 코드예요.'; return; }
     const r = DEMO_CODES[code];
     if (!r) { msg.textContent = '없는 코드예요. (지금은 미리보기라 MP-TEST-0001~0003만 받아요)'; return; }
@@ -1241,7 +1245,7 @@
     switch (m.t) {
       case 'welcome': {
         myId = m.id; netOn = true; store('mp2026.token', m.token);
-        testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null);
+        testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice);
         if (!m.view) openFound('who'); else $('found').hidden = true;
         chatLog = m.chat || []; renderChat();
         wanderList = m.wander || [];
@@ -1280,8 +1284,19 @@
       case 'answer': puzzleResult(m.correct, m.text); break;
       case 'err': if (!$('puzzle').hidden) puzzleResult(false, m.text); toast(m.text); break;
       case 'ok': toast(m.text); break;
+      case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
+      case 'notice': showNotice(m.notice, true); break;
+      case 'settings': testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; if (!$('war').hidden) renderWar(); break;
     }
   }
+  // 신(운영진)의 공지: 화면 위에 띄워 두고, 닫으면 같은 공지는 다시 안 띄운다
+  function showNotice(n, fresh) {
+    const el = $('notice');
+    if (!n || !n.text) { el.hidden = true; return; }
+    if (!fresh && store('mp2026.noticeSeen') === n.ts) return;
+    $('noticeText').textContent = n.text; el.hidden = false; el.dataset.ts = n.ts;
+  }
+  $('noticeClose').addEventListener('click', () => { $('notice').hidden = true; store('mp2026.noticeSeen', +$('notice').dataset.ts); });
   function netTick(dt) {
     for (const r of remotes.values()) {
       if (r.tx == null) continue;

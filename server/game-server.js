@@ -4,7 +4,7 @@
  *  - 상태는 data/state.json 에 주기적으로 저장 (재시작해도 이어짐)
  *
  *  실행:  cd server && npm install && npm start   →  http://localhost:8080
- *  환경변수: PORT(기본 8080), DATA_DIR(기본 ./data), ADMIN_KEY(신의 콘솔용, 추후)
+ *  환경변수: PORT(기본 8080), DATA_DIR(기본 ./data), ADMIN_KEY(관리자 화면 /admin 비밀번호. 없으면 관리자 화면 꺼짐)
  */
 'use strict';
 const http = require('http');
@@ -24,7 +24,9 @@ const CHAT_MAX = 120, CHAT_KEEP = 60;
 const EMOTES = ['안녕!', '거래 구함!', '동맹 할래?', 'ㅋㅋㅋ', '!', '?', '도와줘!', '고마워'];
 const BANNED = ['시발', '씨발', 'ㅅㅂ', '병신', 'ㅂㅅ', '좆', '개새', '미친놈', '꺼져'];
 const TEAM_MAX = 60;
-const TEST_MODE = process.env.TEST_MODE !== '0'; // 프로토타입 기간: '지금 전투 처리' 버튼 허용
+const ENV_TEST_MODE = process.env.TEST_MODE !== '0'; // 기본값. 관리자 화면에서 바꾸면 그 값이 우선
+const ADMIN_KEY = process.env.ADMIN_KEY || '';
+const BOOT_AT = Date.now();
 
 // ------------------------------------------------------------ 정적 파일
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
@@ -33,6 +35,7 @@ const STATIC = {
   '/index.html': path.join(ROOT, 'client', 'index.html'),
   '/game.js': path.join(ROOT, 'client', 'game.js'),
   '/rules.js': path.join(ROOT, 'client', 'rules.js'),
+  '/admin': path.join(ROOT, 'client', 'admin.html'),
   '/world.json': path.join(ROOT, 'maps', 'world.json'),
 };
 const ASSET_DIR = path.join(ROOT, 'client', 'assets');
@@ -52,6 +55,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-store' });
     return res.end('window.MP_ONLINE = true;');
   }
+  if (url.pathname === '/admin/api') return adminHttp(req, res);
   if (url.pathname === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ ok: true, players: online.size })); }
   let file = STATIC[url.pathname];
   if (!file && url.pathname.startsWith('/assets/')) {
@@ -61,7 +65,8 @@ const server = http.createServer((req, res) => {
   if (!file) { res.writeHead(404); return res.end('not found'); }
   try {
     const body = url.pathname === '/world.json' ? publicWorld() : fs.readFileSync(file);
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': url.pathname === '/world.json' ? 'public, max-age=300' : 'no-cache' });
+    const type = url.pathname === '/admin' ? MIME['.html'] : MIME[path.extname(file)] || 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': url.pathname === '/world.json' ? 'public, max-age=300' : 'no-cache' });
     res.end(body);
   } catch (e) { res.writeHead(500); res.end('error'); }
 });
@@ -84,9 +89,12 @@ function loadPuzzles() { try { PUZZLES = JSON.parse(fs.readFileSync(PUZZLE_FILE,
 loadPuzzles();
 fs.watchFile(PUZZLE_FILE, { interval: 5000 }, loadPuzzles); // 문제 파일을 고치면 서버 재시작 없이 반영
 state.world = world.s;
+state.settings = state.settings || {};   // 관리자 설정: testMode(true/false/없음=환경변수), founding('auto'|'open'|'closed')
+state.coupons = state.coupons || {};     // 쿠폰 코드 -> { r:{coin|army}, memo, at, used:{name,nation,ts} }
+const testMode = () => typeof state.settings.testMode === 'boolean' ? state.settings.testMode : ENV_TEST_MODE;
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const FOUNDING_LAST_DAY = process.env.FOUNDING_LAST_DAY || '2026-12-15'; // 건국은 D2(12/15)까지
-const foundingOpen = () => TEST_MODE || kstDay() <= FOUNDING_LAST_DAY;
+const foundingOpen = () => state.settings.founding === 'open' ? true : state.settings.founding === 'closed' ? false : testMode() || kstDay() <= FOUNDING_LAST_DAY;
 const online = new Map(); // id -> session
 let nextId = 1;
 
@@ -143,7 +151,7 @@ wss.on('connection', (ws) => {
       send(ws, {
         t: 'welcome', id: s.id, token, pos: acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room },
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
-        view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: TEST_MODE, foundingOpen: foundingOpen(),
+        view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
       });
       if (nat) broadcastOwners();
       return;
@@ -265,7 +273,23 @@ wss.on('connection', (ws) => {
         send(ws, { t: 'ok', text: m.t === 'declare' ? '선전포고 완료 · 밤 10시에 결과가 나와요' : m.t === 'cancel' ? '선전포고를 취소했어요' : '방어 배치 저장' });
         break;
       }
-      case 'resolveNow': { if (TEST_MODE) resolveNight('test'); break; }
+      case 'resolveNow': { if (testMode()) resolveNight('test'); break; }
+      case 'redeem': { // 쿠폰: 한 번 쓰면 모두에게 사라진다
+        if (now() - (s.lastRedeem || 0) < 1500) return send(ws, { t: 'redeem', ok: false, text: '잠시 후 다시 입력해 주세요' });
+        s.lastRedeem = now();
+        const raw = String(m.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const code = /^MP[A-Z0-9]{8}$/.test(raw) ? `MP-${raw.slice(2, 6)}-${raw.slice(6)}` : '';
+        const c = code && state.coupons[code];
+        if (!c) return send(ws, { t: 'redeem', ok: false, text: '없는 코드예요. 다시 확인해 주세요' });
+        if (c.used) return send(ws, { t: 'redeem', ok: false, text: '이미 사용된 코드예요' });
+        const n = world.nationOfPlayer(s.token);
+        if (!n) return send(ws, { t: 'redeem', ok: false, text: '나라에 들어간 뒤에 쓸 수 있어요' });
+        for (const [k, v] of Object.entries(c.r)) if (k === 'coin' || k === 'army') n[k] += v;
+        c.used = { name: s.acc.name, nation: n.name, ts: Date.now() }; dirty = true;
+        sendViews([n.id]);
+        send(ws, { t: 'redeem', ok: true, text: `받았어요: ${Object.entries(c.r).map(([k, v]) => `${k === 'coin' ? '코인' : '병력'} +${v}`).join(', ')} (우리 나라에 들어갔어요)` });
+        break;
+      }
       case 'wander': { // 유랑민 등록소: 귀화 신청 / 용병 등록 / 건국 대기
         if (s.scene !== 'sky' || s.room !== 'wander') return;
         const kind = ['naturalize', 'mercenary', 'found'].includes(m.kind) ? m.kind : null;
@@ -350,5 +374,118 @@ setInterval(() => {
   const k = new Date(Date.now() + 9 * 3600e3);
   if (k.getUTCHours() === 22 && state.lastResolved !== kstDay()) resolveNight('22:00');
 }, 30000);
+
+// ------------------------------------------------------------ 관리자(신) 화면 API: POST /admin/api
+// 비밀번호는 Render 환경변수 ADMIN_KEY. 없으면 관리자 기능 전체가 꺼진다.
+const adminFails = new Map(); // ip -> { n, until }
+function keyOk(k) {
+  if (!ADMIN_KEY || typeof k !== 'string') return false;
+  const a = crypto.createHash('sha256').update(k).digest(), b = crypto.createHash('sha256').update(ADMIN_KEY).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+function adminHttp(req, res) {
+  const out = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  if (req.method !== 'POST') return out(405, { ok: false, err: 'POST only' });
+  if (!ADMIN_KEY) return out(503, { ok: false, err: '서버에 ADMIN_KEY가 설정되지 않았어요 (Render → Environment)' });
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const f = adminFails.get(ip);
+  if (f && f.until > Date.now()) return out(429, { ok: false, err: '비밀번호를 여러 번 틀렸어요. 1분 뒤에 다시 해 주세요' });
+  let body = '';
+  req.on('data', (c) => { body += c; if (body.length > 64e3) req.destroy(); });
+  req.on('end', async () => {
+    let m; try { m = JSON.parse(body); } catch (e) { return out(400, { ok: false, err: '잘못된 요청' }); }
+    if (!keyOk(m.key)) {
+      const g = adminFails.get(ip) || { n: 0, until: 0 }; g.n++; if (g.n >= 5) { g.n = 0; g.until = Date.now() + 60e3; } adminFails.set(ip, g);
+      return out(401, { ok: false, err: '비밀번호가 달라요' });
+    }
+    adminFails.delete(ip);
+    try { out(200, await adminOp(m)); } catch (e) { console.error('[관리자] 오류:', e); out(500, { ok: false, err: '서버 오류: ' + e.message }); }
+  });
+}
+const COUPON_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O, 1/I/L 제외
+function newCouponCode() {
+  for (;;) {
+    const b = Array.from(crypto.randomBytes(8), (x) => COUPON_CHARS[x % COUPON_CHARS.length]).join('');
+    const code = `MP-${b.slice(0, 4)}-${b.slice(4)}`;
+    if (!state.coupons[code]) return code;
+  }
+}
+function adminStatus() {
+  const nations = Object.values(world.s.nations).map((n) => ({
+    id: n.id, name: n.name, color: n.color, king: n.kingName, dead: !!n.dead, mergedInto: n.mergedInto || null,
+    members: n.members.map((k) => (n.memberNames || {})[k] || '?'), online: n.members.filter((k) => [...online.values()].some((o) => o.token === k)).length,
+    territories: world.territoriesOf(n.id).length, army: n.army, coin: n.coin, code: n.code,
+  })).sort((a, b) => a.dead - b.dead || b.territories - a.territories);
+  const coupons = Object.entries(state.coupons).map(([code, c]) => ({ code, r: c.r, memo: c.memo || '', at: c.at, used: c.used || null }));
+  return {
+    ok: true, now: Date.now(), kstDay: kstDay(), uptimeSec: Math.round((Date.now() - BOOT_AT) / 1000), storage: store ? store.kind : '없음',
+    online: online.size, accounts: Object.keys(state.accounts).length, nations, battles: world.s.battles.length, night: world.s.night,
+    lastResolved: state.lastResolved || null, testMode: testMode(), envTestMode: ENV_TEST_MODE, settings: state.settings, foundingOpen: foundingOpen(),
+    foundingLastDay: FOUNDING_LAST_DAY, puzzles: PUZZLES.length, puzzleFile: path.basename(PUZZLE_FILE), notice: state.notice || null, coupons,
+    wander: state.wander.length,
+  };
+}
+async function adminOp(m) {
+  switch (m.op) {
+    case 'status': return adminStatus();
+    case 'notice': { // 전체 공지 (빈 글이면 공지 내리기)
+      const text = clean(m.text, 200);
+      state.notice = text ? { text, ts: Date.now() } : null; dirty = true;
+      const msg = JSON.stringify({ t: 'notice', notice: state.notice });
+      for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+      console.log(`[관리자] 공지 ${text ? '올림: ' + text : '내림'}`);
+      return { ok: true, sent: online.size };
+    }
+    case 'resolve': resolveNight('관리자'); return { ok: true };
+    case 'nationAdjust': { // 나라 병력·코인 더하기/빼기
+      const n = world.nation(String(m.nid || '')); if (!n || n.dead) return { ok: false, err: '없는 나라예요' };
+      const da = Math.trunc(+m.army || 0), dc = Math.trunc(+m.coin || 0);
+      if (Math.abs(da) > 100000 || Math.abs(dc) > 10000000) return { ok: false, err: '숫자가 너무 커요' };
+      n.army = Math.max(0, n.army + da); n.coin = Math.max(0, n.coin + dc); dirty = true;
+      sendViews([n.id]);
+      if (m.say !== false && (da || dc)) notifyNation(n.id, `✨ 신의 선물: ${[da && `병력 ${da > 0 ? '+' : ''}${da}`, dc && `코인 ${dc > 0 ? '+' : ''}${dc}`].filter(Boolean).join(', ')}`);
+      console.log(`[관리자] ${n.name}: 병력 ${da}, 코인 ${dc}`);
+      return { ok: true, army: n.army, coin: n.coin };
+    }
+    case 'couponCreate': {
+      const count = Math.max(1, Math.min(300, m.count | 0));
+      const kind = m.kind === 'army' ? 'army' : 'coin';
+      const amount = Math.max(1, Math.min(kind === 'army' ? 1000 : 100000, m.amount | 0));
+      const memo = clean(m.memo, 30);
+      const codes = [];
+      for (let i = 0; i < count; i++) { const c = newCouponCode(); state.coupons[c] = { r: { [kind]: amount }, memo, at: Date.now(), used: null }; codes.push(c); }
+      dirty = true; console.log(`[관리자] 쿠폰 ${count}장 (${kind} ${amount}, ${memo || '메모 없음'})`);
+      return { ok: true, codes };
+    }
+    case 'couponDelete': { // 아직 안 쓴 코드만 지운다
+      let n = 0;
+      for (const c of Array.isArray(m.codes) ? m.codes : []) if (state.coupons[c] && !state.coupons[c].used) { delete state.coupons[c]; n++; }
+      dirty = true; return { ok: true, deleted: n };
+    }
+    case 'settings': {
+      if ('testMode' in m) state.settings.testMode = m.testMode === null ? undefined : !!m.testMode;
+      if ('founding' in m) state.settings.founding = ['open', 'closed'].includes(m.founding) ? m.founding : 'auto';
+      dirty = true;
+      const msg = JSON.stringify({ t: 'settings', testMode: testMode(), foundingOpen: foundingOpen() });
+      for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+      console.log(`[관리자] 설정: 테스트 모드 ${testMode()}, 건국 ${foundingOpen() ? '가능' : '마감'}`);
+      return adminStatus();
+    }
+    case 'reset': { // 행사 시작 전 테스트 기록 지우기
+      if (m.confirm !== '초기화') return { ok: false, err: "확인 칸에 '초기화'라고 써 주세요" };
+      if (store && store.backup) await store.backup(state, 'before-reset-' + new Date().toISOString().replace(/[:.]/g, '-'));
+      world.s = require('../client/rules.js').emptyState(); state.world = world.s;
+      state.chats = {}; state.wander = []; state.lastResolved = null; state.notice = null;
+      if (m.coupons) state.coupons = {};
+      for (const a of Object.values(state.accounts)) { a.solved = []; if (m.positions) { a.x = null; a.y = null; a.scene = 'ground'; a.room = null; } }
+      if (m.accounts) { for (const k of Object.keys(state.accounts)) delete state.accounts[k]; }
+      dirty = true; await saveState();
+      console.log(`[관리자] 초기화 (계정 ${m.accounts ? '삭제' : '유지'}, 쿠폰 ${m.coupons ? '삭제' : '유지'})`);
+      for (const o of online.values()) o.ws.close(4001, 'reset'); // 모두 다시 접속하게
+      return { ok: true };
+    }
+  }
+  return { ok: false, err: '모르는 명령: ' + m.op };
+}
 
 server.listen(PORT, () => console.log(`MP 2026 서버: http://localhost:${PORT}  (저장: ${store ? store.kind : '없음'})`));

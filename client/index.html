@@ -48,6 +48,10 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #help { left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 8px 12px; font-size: 12px; font-weight: 700; max-width: min(420px, calc(100vw - 230px)); }
 #prompt { left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); padding: 8px 16px; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 #prompt kbd { font-family: var(--font-display); background: var(--ink); color: #ffffff; border-radius: 0; padding: 0 7px; box-shadow: 0 2px 0 #000; }
+#notice { left: 50%; transform: translateX(-50%); top: 132px; z-index: 6; max-width: min(640px, calc(100vw - 32px)); display: flex; gap: 10px; align-items: center; background: #fff6d6; color: #2b2340; padding: 10px 12px 10px 16px; border: 3px solid #2b2340; outline: 3px solid #ff5d7a; font-size: 14px; line-height: 1.45; box-shadow: 0 6px 0 rgba(43,35,64,.35); }
+#notice b { color: #c94a3c; white-space: nowrap; }
+#notice span { flex: 1; word-break: keep-all; }
+#notice button { border: 0; background: #2b2340; color: #fff6d6; width: 26px; height: 26px; cursor: pointer; font: inherit; flex: none; }
 #toast { left: 50%; transform: translateX(-50%); top: 96px; background: #2b2340; color: #fff6d6; padding: 8px 16px; border: 3px solid #fff6d6; outline: 3px solid #2b2340; border-radius: 0; font-size: 13px; font-weight: 700; }
 #bigmap { position: fixed; inset: 0; z-index: 20; background: rgba(27, 20, 48, 0.82); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #bigmap .panel { padding: 12px; display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
@@ -222,6 +226,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 
 <div id="prompt" class="hud card" hidden><span id="promptText">제단</span><kbd>E</kbd></div>
 <div id="toast" class="hud" hidden></div>
+<div id="notice" class="hud" hidden><b>📜 신의 공지</b><span id="noticeText"></span><button id="noticeClose" aria-label="공지 닫기">✕</button></div>
 
 <div id="bigmap" hidden>
   <div class="panel card">
