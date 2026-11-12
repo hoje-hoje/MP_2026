@@ -225,9 +225,11 @@
     const names = { floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
     const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
     for (const k of EXTRA) names['x_' + k] = 'extra/' + k + '.png';
+    for (const k of TEMPLE) names['x_' + k] = 'na/' + k + '.png';
     await Promise.all([meta, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
   const EXTRA = ['coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
+  const TEMPLE = ['statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
     const im = ART['x_' + key]; if (!im) return;
@@ -520,22 +522,29 @@
   const ROOMS = {
     temple: {
       name: '하늘 신전', desc: '신들의 공지 · 신탁 제단 · 멸망의 탑', w: 30, h: 18, pos: [1, 1], crowd: 10,
-      floor: 'marble', carpet: [13, 6, 4, 11], trim: '#e2b93b',
+      floor: 'floor_palace', wall: true, carpets: [[13, 2, 4, 16], [2, 7, 26, 3]], trim: '#e2b93b',
       emotes: ['신탁 봤어?', '오늘 공지 뭐임', '!', '?', '내일 어디 무너짐?', '탑이 빛난다'],
-      doors: [{ side: 'W', at: 9, to: 'market' }, { side: 'E', at: 9, to: 'council' }, { side: 'N', at: 15, to: 'plaza' }, { side: 'S', at: 15, to: 'ground' }],
+      doors: [{ side: 'W', at: 8, to: 'market' }, { side: 'E', at: 8, to: 'council' }, { side: 'N', at: 15, to: 'plaza' }, { side: 'S', at: 15, to: 'ground' }],
       props: [
         { x: 13, y: 3, w: 4, h: 3, draw: (g, x, y) => { pix(g, 'tower', x, y + 8, 0, 230); if (DOOM) pix(g, 'burst', x, y - 150, 0, 60 + Math.sin(performance.now() / 180) * 10, 0.7); sign(g, x, y - 250, DOOM ? (DAY >= 15 ? '결전의 날' : `멸망까지 D-${15 - DAY}`) : '고요한 탑'); } },
-        { x: 6, y: 3, w: 3, h: 1, board: true, draw: (g, x, y) => { pix(g, 'altar', x, y + 4); pix(g, 'book', x, y - 44); sign(g, x, y - 92, '신탁 제단'); } },
-        { x: 9, y: 4, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'bishop', x, y + 2); nameTag(g, x, y - 58, '신의 사제', '#6b4fb3'); } },
-        { x: 11, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 18, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
-        { x: 4, y: 6, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar', x, y + 4) }, { x: 4, y: 12, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar', x, y + 4) },
-        { x: 25, y: 6, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar', x, y + 4) }, { x: 25, y: 12, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar', x, y + 4) },
-        { x: 21, y: 2, w: 2, h: 1, draw: (g, x, y) => pix(g, 'rosewin', x, y + 4) },
+        { x: 6, y: 3, w: 3, h: 3, draw: (g, x, y) => pix(g, 'pool', x, y, 2) }, { x: 21, y: 3, w: 3, h: 3, draw: (g, x, y) => pix(g, 'pool', x, y, 2) },
+        { x: 3, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner1', x, y + 4, 2) }, { x: 9, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner5', x, y + 4, 2) },
+        { x: 20, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner5', x, y + 4, 2) }, { x: 26, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner1', x, y + 4, 2) },
+        { x: 11, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 18, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
+        { x: 5, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) }, { x: 24, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) },
+        { x: 3, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar_na', x, y + 4, 2) }, { x: 3, y: 13, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar_na', x, y + 4, 2) },
+        { x: 26, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar_na', x, y + 4, 2) }, { x: 26, y: 13, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar_na', x, y + 4, 2) },
+        { x: 11, y: 11, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 18, y: 11, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
+        { x: 11, y: 14, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_lion', x, y + 4, 1.5) }, { x: 18, y: 14, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_lion', x, y + 4, 1.5) },
+        { x: 5, y: 11, w: 3, h: 1, board: true, draw: (g, x, y) => { pix(g, 'altar', x, y + 4); pix(g, 'book', x, y - 44); sign(g, x, y - 92, '신탁 제단'); } },
+        { x: 8, y: 12, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'bishop', x, y + 2); nameTag(g, x, y - 58, '신의 사제', '#6b4fb3'); } },
+        { x: 2, y: 15, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) }, { x: 27, y: 15, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) },
+        { x: 22, y: 11, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
       ],
     },
     market: {
       name: '거래소', desc: '자원·병력·정보를 사고파는 곳', w: 30, h: 18, pos: [0, 1], crowd: 9,
-      floor: 'stonefloor', trim: '#e7a33e',
+      floor: 'stonefloor', wall: true, trim: '#e7a33e',
       emotes: ['열쇠 조각 팝니다', '병력 100 ↔ 코인 3천', '강화석 삼', '정보 삽니다', '흥정 ㄱ?', '너무 비쌈;;'],
       doors: [{ side: 'E', at: 9, to: 'temple' }],
       props: [
@@ -545,29 +554,33 @@
         { x: 4, y: 12, w: 4, h: 2, shop: 'vaccine', draw: (g, x, y) => stall(g, x, y, 260, 'chalice', '백신 (균열 방어)') },
         { x: 12, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 40, 'coin', '경매') },
         { x: 20, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 160, 'candles', '환전') },
+        { x: 9, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner6', x, y + 4, 2) }, { x: 17, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner3', x, y + 4, 2) }, { x: 25, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner6', x, y + 4, 2) },
       ],
     },
     council: {
       name: '회담장', desc: '나라끼리 조약을 맺는 곳 · 밀실 2개', w: 26, h: 16, pos: [2, 1], crowd: 7,
-      floor: 'stonefloor', carpet: [8, 4, 10, 8], trim: '#5b7fd6',
+      floor: 'floor_palace', wall: true, carpets: [[8, 4, 10, 8], [0, 7, 8, 3]], trim: '#5b7fd6',
       emotes: ['불가침 조약 ㄱ?', '동맹 맺자', '조건이 뭔데', '배신하면 알지?', '왕끼리 얘기하자'],
       doors: [{ side: 'W', at: 8, to: 'temple' }, { side: 'E', at: 4, to: 'secret1' }, { side: 'E', at: 12, to: 'secret2' }],
       props: [
         { x: 11, y: 6, w: 4, h: 2, draw: (g, x, y) => { pix(g, 'altar', x, y + 6, 3); pix(g, 'book', x - 20, y - 70); pix(g, 'chalice', x + 22, y - 72); sign(g, x, y - 110, '조약 제단'); } },
         { x: 9, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 16, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
         { x: 9, y: 10, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 16, y: 10, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
+        { x: 5, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner2', x, y + 4, 2) }, { x: 13, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner4', x, y + 4, 2) }, { x: 20, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner2', x, y + 4, 2) },
+        { x: 3, y: 12, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 22, y: 12, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
+        { x: 3, y: 3, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) }, { x: 22, y: 3, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) },
       ],
     },
     secret1: {
       name: '밀실 1', desc: '들어온 사람끼리만 보이는 작은 방 (예정)', w: 14, h: 10, pos: [3, 0.55], crowd: 2,
-      floor: 'stonefloor', dark: true, trim: '#6b4fb3',
+      floor: 'stonefloor', dark: true, wall: true, trim: '#6b4fb3',
       emotes: ['쉿', '여기서 한 얘기는 비밀', '...'],
       doors: [{ side: 'W', at: 5, to: 'council' }],
       props: [{ x: 6, y: 4, w: 2, h: 1, draw: smallTable }],
     },
     secret2: {
       name: '밀실 2', desc: '들어온 사람끼리만 보이는 작은 방 (예정)', w: 14, h: 10, pos: [3, 1.45], crowd: 1,
-      floor: 'stonefloor', dark: true, trim: '#6b4fb3',
+      floor: 'stonefloor', dark: true, wall: true, trim: '#6b4fb3',
       emotes: ['쉿', '...'],
       doors: [{ side: 'W', at: 5, to: 'council' }],
       props: [{ x: 6, y: 4, w: 2, h: 1, draw: smallTable }],
@@ -578,7 +591,9 @@
       emotes: ['3팀 모여~', 'ㅋㅋㅋ', '안녕!', '이벤트 언제?', '같이 다닐 사람', '우리 나라 짱'],
       doors: [{ side: 'S', at: 17, to: 'temple' }, { side: 'N', at: 17, to: 'wander' }],
       props: [
-        { x: 16, y: 9, w: 2, h: 1, draw: bonfire },
+        { x: 16, y: 11, w: 2, h: 1, draw: bonfire },
+        { x: 16, y: 4, w: 3, h: 3, draw: (g, x, y) => pix(g, 'pool', x, y, 2) },
+        { x: 10, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 23, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
         { x: 12, y: 8, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) }, { x: 20, y: 8, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) },
         { x: 12, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) }, { x: 20, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) },
         { x: 6, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'stump', x, y + 2, 3) }, { x: 27, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'berry', x, y + 2, 3) },
@@ -610,7 +625,8 @@
           R.grid[y * R.w + x] = 10 + i;
         }
       });
-      for (const p of R.props) for (let y = p.y; y < p.y + p.h; y++) for (let x = p.x; x < p.x + p.w; x++) R.grid[y * R.w + x] = 1;
+      if (R.wall) for (let x = 1; x < R.w - 1; x++) if (R.grid[R.w + x] === 0 && !R.doors.some((d) => d.side === 'N' && Math.abs(d.at - x) <= 1)) R.grid[R.w + x] = 1;
+      for (const p of R.props) for (let y = p.y; y < p.y + p.h; y++) for (let x = p.x; x < p.x + p.w; x++) if (R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1;
       R.sprites = R.props.map((p) => ({ x: (p.x + p.w / 2) * TILE, y: (p.y + p.h) * TILE, draw: p.draw, board: p.board, prop: p }));
       R.doors.forEach((d) => {
         const label = d.to === 'ground' ? '땅으로 내려가기' : ROOMS[d.to].name;
@@ -646,8 +662,13 @@
     g.fillStyle = pat(R.floor); rr(g, 18, 18, w - 36, h - 36, 18);
     if (R.dark) { g.fillStyle = 'rgba(30,20,60,0.35)'; rr(g, 18, 18, w - 36, h - 36, 18); }
     else if (R.floor === 'stonefloor') { g.fillStyle = 'rgba(255,248,235,0.22)'; rr(g, 18, 18, w - 36, h - 36, 18); }
-    if (R.carpet) { const [cx, cy, cw, ch] = R.carpet; g.fillStyle = pat('carpet'); g.fillRect(cx * TILE, cy * TILE, cw * TILE, ch * TILE); }
-    g.strokeStyle = R.trim; g.lineWidth = 4; g.beginPath(); g.roundRect ? g.roundRect(30, 30, w - 60, h - 60, 12) : g.rect(30, 30, w - 60, h - 60); g.stroke();
+    for (const [cx, cy, cw, ch] of R.carpets || []) { g.fillStyle = pat('carpet'); g.fillRect(cx * TILE, cy * TILE, cw * TILE, ch * TILE); }
+    if (R.wall) {
+      const bt = document.createElement('canvas'); bt.width = bt.height = TILE; const bg2 = bt.getContext('2d'); bg2.imageSmoothingEnabled = false; bg2.drawImage(ART.x_brick, 0, 0, TILE, TILE);
+      g.fillStyle = g.createPattern(bt, 'repeat'); g.fillRect(18, 18, w - 36, 2 * TILE - 18);
+      g.fillStyle = '#c9a77a'; g.fillRect(18, 18, w - 36, 8);
+      g.fillStyle = 'rgba(60,35,20,0.45)'; g.fillRect(18, 2 * TILE - 6, w - 36, 6);
+    }
     for (const d of R.doors) {
       g.fillStyle = d.to === 'ground' ? 'rgba(255,236,140,0.85)' : 'rgba(255,255,255,0.0)';
       if (d.side === 'N') g.fillRect((d.at - 1) * TILE, 0, TILE * 3, TILE + 20);
@@ -723,15 +744,14 @@
   function arch(g, x, y, side, label, down) {
     const vertical = side === 'W' || side === 'E';
     if (vertical) {
-      g.fillStyle = down ? '#ffe98a' : '#e2b93b';
-      g.fillRect(x - 6, y - 3 * TILE - 70, 12, 70); g.fillRect(x - 6, y - 70, 12, 70);
-      sign(g, x + (side === 'W' ? 70 : -70), y - 2 * TILE - 40, (side === 'W' ? '← ' : '') + label + (side === 'E' ? ' →' : ''));
+      pix(g, 'arch', x, y - 8, 1.6);
+      if (down) { g.fillStyle = 'rgba(255,240,170,0.45)'; g.fillRect(x - 14, y - 60, 28, 50); }
+      sign(g, x + (side === 'W' ? 80 : -80), y - 2 * TILE - 30, (side === 'W' ? '← ' : '') + label + (side === 'E' ? ' →' : ''));
     } else {
-      g.fillStyle = down ? '#ffe98a' : '#e2b93b';
-      g.fillRect(x - 1.5 * TILE - 8, y - 110, 12, 110); g.fillRect(x + 1.5 * TILE - 4, y - 110, 12, 110);
-      g.beginPath(); g.lineWidth = 12; g.strokeStyle = g.fillStyle; g.arc(x, y - 110, 1.5 * TILE + 2, Math.PI, 0); g.stroke();
-      if (down) { g.fillStyle = 'rgba(255,240,170,0.45)'; g.fillRect(x - 1.5 * TILE + 4, y - 110, 3 * TILE - 8, 110); }
-      sign(g, x, y - 180, (side === 'N' ? '↑ ' : '↓ ') + label);
+      const by = side === 'N' ? y + 8 : y;
+      if (down) { g.fillStyle = 'rgba(255,240,170,0.5)'; g.fillRect(x - 40, by - 70, 80, 70); }
+      pix(g, 'arch', x, by, 2.2);
+      sign(g, x, by - 124, (side === 'N' ? '↑ ' : '↓ ') + label);
     }
   }
 
