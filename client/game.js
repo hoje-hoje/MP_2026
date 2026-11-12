@@ -371,7 +371,8 @@
   }
   const CH_K = 3; // 16px → 48px
   function drawSprite(g, x, y, look, t, moving, face) {
-    g.fillStyle = 'rgba(0,0,0,0.22)'; ell(g, x, y, 15, 5);
+    if (look.red) { g.fillStyle = look.red >= 2 ? 'rgba(230,20,50,0.85)' : 'rgba(235,50,70,0.6)'; ell(g, x, y, 24, 9); g.fillStyle = 'rgba(120,0,20,0.5)'; ell(g, x, y, 15, 5); } // 체포당한 사람은 그림자가 빨갛게 (2번이면 더 진하게)
+    else { g.fillStyle = 'rgba(0,0,0,0.22)'; ell(g, x, y, 15, 5); }
     if (look.me) { g.strokeStyle = '#ffd23f'; g.lineWidth = 2; g.setLineDash([5, 4]); g.beginPath(); g.ellipse(x, y, 20, 7, 0, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); }
     const c = look.char | 0;
     const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
@@ -712,6 +713,16 @@
         { x: 6, y: 14, w: 1, h: 1, draw: (g, x, y) => pix(g, 'berry', x, y + 2, 3) }, { x: 27, y: 14, w: 1, h: 1, draw: (g, x, y) => pix(g, 'stump', x, y + 2, 3) },
       ],
     },
+    jail: { // 체포 3번이면 1시간. 문이 없어서 시간이 끝나야 나갈 수 있다
+      name: '감옥', desc: '오늘 3번 잡힌 사람이 갇히는 곳', w: 15, h: 10, pos: [0, -1], crowd: 0, hidden: true,
+      floor: 'stonefloor', dark: true, wall: true, trim: '#5a5a6e',
+      emotes: ['억울해', '꺼내 줘', '...', '다음엔 안 잡혀'],
+      doors: [],
+      props: [
+        { x: 3, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candles', x, y + 2) }, { x: 11, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candles', x, y + 2) },
+        { x: 7, y: 2, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'tomb', x, y + 2); sign(g, x, y - 70, '감옥 · 시간이 끝나면 풀려나요'); } },
+      ],
+    },
     wander: {
       name: '유랑민 등록소', desc: '나라 없는 사람이 귀화·용병·건국을 등록하는 곳', w: 24, h: 14, pos: [1, -1], crowd: 6,
       floor: 'na:0,5', trim: '#3fa37a',
@@ -811,7 +822,7 @@
   function enterRoom(id, fromId) {
     const R = ROOMS[id];
     const d = R.doors.find((q) => q.to === fromId) || R.doors[0];
-    [player.x, player.y] = doorInside(R, d);
+    if (d) [player.x, player.y] = doorInside(R, d); else [player.x, player.y] = [(R.w >> 1) * TILE + 16, (R.h >> 1) * TILE + 16];
     player.scene = 'sky'; player.room = R; fadeT = 0.35; lastTerr = null; netTp = true; step.on = false;
   }
   function ascend(portalTerr) {
@@ -1086,7 +1097,16 @@
   // 땅에서 할 수 있는 일: 저장소, 설치 모드, 나무 베기, 방벽 부수기
   function groundAction() {
     const ptx = player.x / TILE, pty = player.y / TILE;
-    for (const [i, nid] of STORE_AT) if (Math.hypot((i % W) + 0.5 - ptx, Math.floor(i / W) + 0.5 - pty) < 1.9) return nid === MY_NID ? { kind: 'store', text: '우리 저장소 열기' } : { kind: 'enemyStore', nid, text: `${natName(nid)} 저장소` };
+    if (MY_NID) for (const [id, r] of remotes) { // 우리 땅에 들어온 적 → 체포
+      if (r.x == null || !r.nid || r.nid === MY_NID || Math.hypot(r.x - player.x, r.y - player.y) > 52) continue;
+      if (ownerOf(terrAt(r.x / TILE | 0, r.y / TILE | 0)) === MY_NID) return { kind: 'arrest', id, text: `${r.name}${r.carry ? ' (도둑!)' : ''} 체포하기` };
+    }
+    for (const [i, nid] of STORE_AT) if (Math.hypot((i % W) + 0.5 - ptx, Math.floor(i / W) + 0.5 - pty) < 1.9) {
+      if (nid === MY_NID) return player.carry ? { kind: 'deposit', text: '훔쳐 온 것 저장소에 넣기' } : { kind: 'store', text: '우리 저장소 열기' };
+      if (!MY_NID) return { kind: 'info', text: `${natName(nid)} 저장소` };
+      if (player.carry) return { kind: 'info', text: '이미 훔친 걸 들고 있어요 · 우리 저장소로!' };
+      return { kind: 'steal', nid, hold: MPRules.NUM.stealSec * 1000, text: `${natName(nid)} 저장소 털기 · E 꾹 ${MPRules.NUM.stealSec}초` };
+    }
     const [fx, fy] = facingTile(), i = fy * W + fx, e = TILES[i];
     if (build.on && myView) {
       if ((e && e.n === MY_NID) || MY_TRAPS.has(i)) return { kind: 'pickup', x: fx, y: fy, text: `${ITEM_NAME[e ? e.k : 'trap']} 거두기` };
@@ -1099,18 +1119,20 @@
   }
   // 꾹 누르기 (나무 베기 2초, 방벽 부수기 5초)
   const hold = { on: false, t0: 0, ms: 0, kind: '', x: 0, y: 0 };
-  let stunUntil = 0;
+  let stunUntil = 0, jailUntil = 0;
   function pressE() { if (near && near.hold) startHold(near); else interact(); }
   function releaseE() { if (hold.on) cancelHold(); }
   function startHold(n) {
     Object.assign(hold, { on: true, t0: performance.now(), ms: n.hold, kind: n.kind, x: n.x, y: n.y });
+    hold.nid = n.nid;
     if (n.kind === 'break') ws.send(JSON.stringify({ t: 'breakStart', x: n.x, y: n.y }));
+    if (n.kind === 'steal') ws.send(JSON.stringify({ t: 'stealStart', nid: n.nid }));
   }
   function cancelHold() { hold.on = false; }
   function tickHold() {
     if (!hold.on || performance.now() - hold.t0 < hold.ms) return;
     hold.on = false;
-    if (netOn) ws.send(JSON.stringify({ t: hold.kind === 'chop' ? 'chop' : 'breakWall', x: hold.x, y: hold.y }));
+    if (netOn) ws.send(JSON.stringify(hold.kind === 'steal' ? { t: 'steal', nid: hold.nid } : { t: hold.kind === 'chop' ? 'chop' : 'breakWall', x: hold.x, y: hold.y }));
   }
   // 설치 모드 (G): 저장소의 바닥·방벽·덫을 바로 앞 칸에 놓기
   const build = { on: false, k: 'floor' };
@@ -1155,7 +1177,8 @@
     if (near.kind === 'hit') { HITFX.set(near.t.id, performance.now() + 120); if (netOn) ws.send(JSON.stringify({ t: 'hit', terr: near.t.id })); return; }
     if (near.kind === 'place' || near.kind === 'pickup') { if (netOn) ws.send(JSON.stringify({ t: near.kind, x: near.x, y: near.y, k: build.k })); return; }
     if (near.kind === 'info') { toast(near.text); return; }
-    if (near.kind === 'enemyStore') { toast(`${near.text} · 훔치기는 곧 열려요`); return; }
+    if (near.kind === 'deposit') { if (netOn) ws.send(JSON.stringify({ t: 'deposit' })); return; }
+    if (near.kind === 'arrest') { if (netOn) ws.send(JSON.stringify({ t: 'arrest', id: near.id })); return; }
     if (near.kind === 'node' && ONLINE) { if (mined.has(near.n.id)) { toast('이 금광은 오늘 이미 캤어요'); return; } if (netOn) ws.send(JSON.stringify({ t: 'mine', terr: near.n.id })); return; }
     if (near.kind === 'portal') ascend(near.t);
     else if (near.kind === 'node') {
@@ -1227,9 +1250,10 @@
     mg.fillStyle = '#bfe3ff'; mg.fillRect(0, 0, s, s);
     const P = (R) => [s * (0.16 + R.pos[0] * 0.23), s * (0.38 + R.pos[1] * 0.22)];
     mg.strokeStyle = '#ffffff'; mg.lineWidth = 6;
-    for (const R of Object.values(ROOMS)) for (const d of R.doors) if (d.to !== 'ground') { const [a, b] = P(R), [c, e] = P(ROOMS[d.to]); mg.beginPath(); mg.moveTo(a, b); mg.lineTo(c, e); mg.stroke(); }
+    for (const R of Object.values(ROOMS)) if (!R.hidden) for (const d of R.doors) if (d.to !== 'ground') { const [a, b] = P(R), [c, e] = P(ROOMS[d.to]); mg.beginPath(); mg.moveTo(a, b); mg.lineTo(c, e); mg.stroke(); }
     mg.font = `700 22px ${PFONT}`; mg.textAlign = 'center'; mg.textBaseline = 'middle';
     for (const R of Object.values(ROOMS)) {
+      if (R.hidden) continue;
       const [x, y] = P(R), w = R.id.startsWith('secret') ? 60 : 84, h = R.id.startsWith('secret') ? 34 : 44;
       mg.fillStyle = R === player.room ? '#2b2340' : '#fffdf8'; mg.fillRect(x - w / 2, y - h / 2, w, h); mg.beginPath(); mg.rect(x - w / 2, y - h / 2, w, h);
       mg.strokeStyle = '#2b2340'; mg.lineWidth = 3; mg.stroke();
@@ -1384,6 +1408,7 @@
     switch (m.t) {
       case 'welcome': {
         myId = m.id; netOn = true; store('mp2026.token', m.token);
+        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
         TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         if (!m.view) openFound('who'); else $('found').hidden = true;
@@ -1397,10 +1422,13 @@
         break;
       }
       case 'meta': {
-        const q = m.p; let r = remotes.get(q.id);
+        const q = m.p;
+        if (q.id === myId) { player.carry = q.carry ? (player.carry || {}) : null; player.look.red = q.red | 0; break; }
+        let r = remotes.get(q.id);
         if (!r) { r = { x: null, y: null, tx: null, ty: null, dir: 1, moving: false, emote: null, emoteT: 0 }; remotes.set(q.id, r); }
         r.name = q.name; r.team = q.team; r.tag = teamColor(q.team);
-        r.look = Object.assign({ seed: (q.id * 0.37) % 3 }, q.look);
+        r.look = Object.assign({ seed: (q.id * 0.37) % 3 }, q.look, { red: q.red | 0 });
+        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed;
         break;
       }
       case 'leave': remotes.delete(m.id); break;
@@ -1433,6 +1461,10 @@
       case 'stun': stunUntil = performance.now() + m.ms; step.on = false; toast(m.text); break;
       case 'pos': player.x = m.x; player.y = m.y; step.on = false; netTp = true; break;
       case 'mined': mined.add(m.terr); toast(m.text); break;
+      case 'warp': { const p = m.pos; if (p.scene === 'sky' && ROOMS[p.room]) { player.scene = 'sky'; player.room = ROOMS[p.room]; } else { player.scene = 'ground'; player.room = null; } player.x = p.x; player.y = p.y; step.on = false; hold.on = false; fadeT = 0.35; lastTerr = null; break; }
+      case 'carry': player.carry = m.carry; toast(m.text); break;
+      case 'arrested': player.carry = null; jailUntil = m.jailUntil || 0; toast(m.text); break;
+      case 'released': jailUntil = 0; if (player.scene === 'sky' && player.room.id === 'jail') goHome(); toast(m.text); break;
       case 'notice': showNotice(m.notice, true); break;
       case 'settings': testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; if (!$('war').hidden) renderWar(); break;
     }
@@ -1966,7 +1998,7 @@
 
     // 플레이어 이동
     stepPlayer(dt); tickHold();
-    if (player.scene === 'sky') {
+    if (player.scene === 'sky' && player.room.id !== 'jail') {
       player.skyLeft -= dt;
       if (player.skyLeft <= 0) { descend(); toast('하늘에 머물 수 있는 5분이 끝나 땅으로 내려왔어요'); }
     }
@@ -1980,7 +2012,8 @@
       hudT = 0.15;
       const sky = player.scene === 'sky';
       $('skyTimer').hidden = !sky;
-      if (sky) { const l = Math.max(0, Math.ceil(player.skyLeft)); $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.toggle('warn', l <= 60); }
+      if (sky && player.room.id === 'jail') { const l = Math.max(0, Math.ceil((jailUntil - Date.now()) / 1000)); $('skyTimer').firstChild.textContent = '감옥 '; $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.remove('warn'); }
+      else if (sky) { $('skyTimer').firstChild.textContent = '하늘 체류 '; const l = Math.max(0, Math.ceil(player.skyLeft)); $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.toggle('warn', l <= 60); }
       updateWhere(); updatePrompt(); drawMini(); if (!$('bigmap').hidden) drawBig();
     }
     requestAnimationFrame(frame);
@@ -2021,7 +2054,7 @@
     if (room ? roomBlocked(room, nx, ny) : blocked(nx, ny)) { player.x = cx * TILE + 16; player.y = cy * TILE + 16; player.moving = false; return; }
     step.on = true; step.t = 0;
     step.fx = player.x; step.fy = player.y; step.tx = nx * TILE + 16; step.ty = ny * TILE + 16;
-    step.dur = (keys.has('shift') ? 0.04 : STEP) / (room ? 1 : speedAt(nx, ny));
+    step.dur = (keys.has('shift') ? 0.04 : STEP) / (room ? 1 : speedAt(nx, ny)) * (player.carry ? 1.25 : 1); // 훔친 걸 들면 느려짐
     player.moving = true;
   }
 
@@ -2035,6 +2068,11 @@
     for (const o of list) {
       if (o.draw) continue;
       nameTag(ctx, o.x, o.y - 56, o === player ? player.name : o.name, o === player ? player.tag : o.tag);
+      if (o.carry) { // 훔친 가방: 머리 옆에 큰 자루
+        const b = Math.sin(performance.now() / 150) * 2, bx = o.x + 24, by = o.y - 40 + b;
+        ctx.fillStyle = '#2b2340'; ctx.fillRect(bx - 12, by - 14, 24, 22); ctx.fillStyle = '#9a6a35'; ctx.fillRect(bx - 10, by - 12, 20, 18); ctx.fillStyle = '#c98c4a'; ctx.fillRect(bx - 10, by - 12, 20, 5);
+        ctx.fillStyle = '#2b2340'; ctx.fillRect(bx - 6, by - 18, 12, 6); pix(ctx, 'coin', bx, by + 4, 0, 14);
+      }
       if (o.emote) bubble(ctx, o.x, o.y - 80, o.emote);
     }
   }

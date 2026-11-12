@@ -157,7 +157,20 @@ function filterBad(text) { let t = text; for (const w of BANNED) t = t.split(w).
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
-function meta(s) { return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look }; }
+function meta(s) {
+  const n = world.nationOfPlayer(s.token);
+  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, carry: !!s.acc.carry, red: arrestsToday(s.acc), jailed: jailed(s.acc) };
+}
+// 체포 횟수 (하루 단위), 감옥
+function arrestsToday(acc) { return acc.arrests && acc.arrests.day === kstDay() ? acc.arrests.n : 0; }
+const jailed = (acc) => (acc.jailUntil || 0) > Date.now();
+function sendMeta(s) { const mm = { t: 'meta', p: meta(s) }; for (const o of online.values()) if (o === s || o.known.has(s.id)) send(o.ws, mm); }
+function capitalPos(acc, token) { // 그 사람 나라 수도 포털 앞 (나라 없으면 null)
+  const n = world.nationOfPlayer(token); const t = n && world.t[n.capital];
+  return t ? { x: t.portal[0] * 32 + 16, y: (t.portal[1] + 1) * 32 + 16, scene: 'ground', room: null } : null;
+}
+const JAIL_POS = { x: 7 * 32 + 16, y: 5 * 32 + 16, scene: 'sky', room: 'jail' };
+function placeAt(s, pos) { if (!pos) return; Object.assign(s, { x: pos.x, y: pos.y, scene: pos.scene, room: pos.room }); Object.assign(s.acc, pos); dirty = true; send(s.ws, { t: 'warp', pos }); }
 
 wss.on('connection', (ws) => {
   let s = null;
@@ -185,7 +198,7 @@ wss.on('connection', (ws) => {
       const nat = world.nationOfPlayer(token); // 나라는 건국 화면에서 세우거나 초대 코드로 들어간다
       if (nat) { world.refreshActions(nat, kstDay()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       send(ws, {
-        t: 'welcome', id: s.id, token, pos: acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room },
+        t: 'welcome', id: s.id, token, pos: jailed(acc) ? JAIL_POS : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: arrestsToday(acc), jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
         tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
@@ -198,6 +211,7 @@ wss.on('connection', (ws) => {
         const now = Date.now();
         const x = +m.x, y = +m.y;
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        if (jailed(s.acc) && (m.scene !== 'sky' || m.room !== 'jail')) { send(ws, { t: 'warp', pos: JAIL_POS }); return; }
         const scene = m.scene === 'sky' ? 'sky' : 'ground';
         const room = scene === 'sky' ? clean(m.room, 16) : null;
         const sameArea = scene === s.scene && room === s.room;
@@ -257,6 +271,7 @@ wss.on('connection', (ws) => {
         world.refreshActions(r.nation, kstDay());
         dirty = true; broadcastOwners(); sendViews([r.nation.id]);
         send(ws, { t: 'joined', founded: m.t === 'found', chat: (state.chats['nation:' + r.nation.id] || []).slice(-30) });
+        sendMeta(s);
         if (m.t === 'join') notifyNation(r.nation.id, `${s.acc.name}님이 우리 나라에 들어왔어요`);
         break;
       }
@@ -420,6 +435,58 @@ wss.on('connection', (ws) => {
         send(ws, { t: 'ok', text: '방벽을 부쉈어요' });
         break;
       }
+      case 'stealStart': case 'steal': { // 적 저장소 털기: 3초 꾹 → 들 수 있는 만큼
+        const n = world.nationOfPlayer(s.token), V = world.nation(String(m.nid || ''));
+        if (!n || !V || V.dead || V.id === n.id) return;
+        const spot = storageOf(V); if (!spot || !nextTo(s, spot[0], spot[1], 2)) return send(ws, { t: 'err', text: '저장소 바로 옆에서만 털 수 있어요' });
+        if (s.acc.carry) return send(ws, { t: 'err', text: '이미 훔친 걸 들고 있어요. 우리 저장소에 먼저 넣으세요' });
+        s.acc.stoleAt = s.acc.stoleAt || {};
+        const wait = (s.acc.stoleAt[V.id] || 0) + 30 * 60e3 - Date.now();
+        if (wait > 0) return send(ws, { t: 'err', text: `이 나라 저장소는 ${Math.ceil(wait / 60e3)}분 뒤에 다시 털 수 있어요` });
+        if (m.t === 'stealStart') {
+          s.stealing = { nid: V.id, at: now() };
+          if (now() - (s.lastStealAlert || 0) > 15000) { s.lastStealAlert = now(); notifyNation(V.id, `🚨 ${n.name}의 ${s.acc.name}이(가) 우리 저장소를 털고 있어요! 수도로!`); }
+          return;
+        }
+        if (!s.stealing || s.stealing.nid !== V.id || now() - s.stealing.at < NUM.stealSec * 1000 - 300) return;
+        s.stealing = null;
+        const coin = Math.min(NUM.carry.coin, V.coin), wood = Math.min(NUM.carry.wood, V.wood || 0);
+        if (!coin && !wood) return send(ws, { t: 'err', text: '저장소가 텅 비었어요' });
+        V.coin -= coin; V.wood = (V.wood || 0) - wood; s.acc.carry = { coin, wood, from: V.id }; s.acc.stoleAt[V.id] = Date.now(); dirty = true;
+        sendViews([V.id]); sendMeta(s);
+        notifyNation(V.id, `💰 저장소를 털렸어요! 코인 −${coin}${wood ? `, 목재 −${wood}` : ''} · ${s.acc.name}을(를) 우리 땅에서 잡으면 돌려받아요`);
+        send(ws, { t: 'carry', carry: s.acc.carry, text: `훔쳤어요! 코인 ${coin}${wood ? ` · 목재 ${wood}` : ''} · 우리 저장소까지 가져가세요 (잡히면 다 뺏겨요)` });
+        break;
+      }
+      case 'deposit': { // 훔친 것 우리 저장소에 넣기
+        const n = world.nationOfPlayer(s.token), c = s.acc.carry; if (!n || !c) return;
+        const spot = storageOf(n); if (!spot || !nextTo(s, spot[0], spot[1], 2)) return;
+        n.coin += c.coin; n.wood = (n.wood || 0) + c.wood; s.acc.carry = null; dirty = true;
+        sendViews([n.id]); sendMeta(s); send(ws, { t: 'carry', carry: null, text: `우리 저장소에 넣었어요: 코인 +${c.coin}${c.wood ? `, 목재 +${c.wood}` : ''}` });
+        notifyNation(n.id, `💰 ${s.acc.name}님이 훔쳐 온 코인 ${c.coin}${c.wood ? `, 목재 ${c.wood}` : ''}을(를) 저장소에 넣었어요`);
+        break;
+      }
+      case 'arrest': { // 우리 땅에 들어온 적 체포
+        const n = world.nationOfPlayer(s.token); const o = online.get(m.id | 0);
+        if (!n || !o || o === s || now() - (s.lastArrest || 0) < 5000) return;
+        const on = world.nationOfPlayer(o.token);
+        if (!on || on.id === n.id) return send(ws, { t: 'err', text: '다른 나라 사람만 체포할 수 있어요' });
+        if (s.scene !== 'ground' || o.scene !== 'ground' || o.x == null || Math.hypot(o.x - s.x, o.y - s.y) > 56) return send(ws, { t: 'err', text: '더 가까이 가야 해요' });
+        if (world.ownerOf(terrAtPx(o.x, o.y)) !== n.id) return send(ws, { t: 'err', text: '우리 땅 안에 있는 사람만 체포할 수 있어요' });
+        s.lastArrest = now();
+        const c = o.acc.carry; let back = '';
+        if (c) { const V = world.nation(c.from); const to = V && !V.dead ? V : n; to.coin += c.coin; to.wood = (to.wood || 0) + c.wood; o.acc.carry = null; back = ` · 훔친 코인 ${c.coin}${c.wood ? `, 목재 ${c.wood}` : ''}을(를) ${to === n ? '되찾았어요' : to.name + '에 돌려줬어요'}`; sendViews([to.id]); }
+        const day = kstDay(); o.acc.arrests = o.acc.arrests && o.acc.arrests.day === day ? o.acc.arrests : { day, n: 0 }; o.acc.arrests.n++;
+        let jail = false;
+        if (o.acc.arrests.n >= NUM.arrestJail) { jail = true; o.acc.jailUntil = Date.now() + NUM.jailMin * 60e3; o.acc.arrests.n = 0; }
+        dirty = true;
+        placeAt(o, jail ? JAIL_POS : capitalPos(o.acc, o.token));
+        send(o.ws, { t: 'arrested', jailUntil: jail ? o.acc.jailUntil : 0, carry: null, text: jail ? `⛓ ${n.name}에게 오늘 ${NUM.arrestJail}번째로 잡혔어요. 감옥 ${NUM.jailMin}분!` : `🚨 ${n.name}의 ${s.acc.name}에게 잡혀서 수도로 쫓겨났어요 (오늘 ${o.acc.arrests.n}번 · ${NUM.arrestJail}번이면 감옥)` });
+        sendMeta(o);
+        notifyNation(n.id, `🚔 ${s.acc.name}님이 ${on.name}의 ${o.acc.name}을(를) 체포했어요${jail ? ' · 감옥행!' : ''}${back}`);
+        notifyNation(on.id, `🚔 ${o.acc.name}님이 ${n.name}에게 잡혔어요${jail ? ' · 감옥 ' + NUM.jailMin + '분' : ''}`);
+        break;
+      }
       case 'hit': { // 적 수정 때리기 → 10번이면 그 나라 병력이 보임
         const t = world.t[m.terr | 0]; if (!t) return;
         const own = world.ownerOf(t.id), n = world.nationOfPlayer(s.token);
@@ -513,6 +580,10 @@ function resolveNight(why) {
     send(o.ws, { t: 'night', reports: n ? reports.filter((r) => r.att === n.id || r.def === n.id || n.members.length && (world.nation(r.att) || {}).id === n.id) : [], view: n ? world.view(n.id, o.token) : null });
   }
 }
+// 감옥에서 풀어 주기
+setInterval(() => {
+  for (const o of online.values()) if (o.acc.jailUntil && !jailed(o.acc)) { o.acc.jailUntil = 0; dirty = true; placeAt(o, capitalPos(o.acc, o.token)); send(o.ws, { t: 'released', text: '감옥에서 풀려났어요. 수도로 돌아왔어요' }); sendMeta(o); }
+}, 5000);
 // 매일 밤 10시(한국 시간)에 전투 처리
 setInterval(() => {
   const k = new Date(Date.now() + 9 * 3600e3);
