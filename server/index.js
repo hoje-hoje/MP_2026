@@ -18,7 +18,7 @@ const ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
 const TICK_MS = 100;               // 위치 방송 주기 (초당 10번)
 const AOI_X = 44 * 32, AOI_Y = 30 * 32; // 땅에서 '주변'으로 보는 범위 (px)
-const MAX_SPEED = 5 * 32 * 3.4;    // 허용 최대 속도 (빨리 걷기 테스트 포함, px/s)
+const MAX_SPEED = 32 / 0.04 * 1.2;  // 칸 이동(빨리 걷기 테스트 포함) 기준 최대 속도    // 허용 최대 속도 (빨리 걷기 테스트 포함, px/s)
 const CHAT_MAX = 120, CHAT_KEEP = 60;
 const EMOTES = ['안녕!', '거래 구함!', '동맹 할래?', 'ㅋㅋㅋ', '!', '?', '도와줘!', '고마워'];
 const BANNED = ['시발', '씨발', 'ㅅㅂ', '병신', 'ㅂㅅ', '좆', '개새', '미친놈', '꺼져'];

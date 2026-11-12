@@ -6,3 +6,4 @@
 - chars.png / faces.png: 캐릭터 스프라이트 시트·얼굴 그림을 한 장으로 합친 것 (이름 목록은 chars.json)
 - towers.png(제단·신전), flags.png(깃발 8색), panel.png·btn*.png(UI 틀), facebox.png
 - 하늘 신전 장식 (같은 팩, TilesetHouse·TilesetWater·Interior/TilesetInteriorFloor 에서 잘라냄): statue_orb, statue_lion, pillar_na, plant, arch, banner0~6, pool, floor_palace, brick
+- water.png (TilesetWater, 물가 자동 타일)

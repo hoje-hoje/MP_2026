@@ -52,8 +52,24 @@
     if (x < 0 || y < 0 || x >= W || y >= H) return true;
     const t = terrain[y * W + x], o = terr[y * W + x];
     if (o !== 65535 && o > 0 && gone[o]) return true;
-    return t === T.VOID || t === T.HOLY || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1;
+    return t === T.VOID || t === T.HOLY || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1 || treeAt(x, y) !== null;
   }
+  // 나무: 바닥에 굽지 않고 따로 그려서(깊이 정렬) 뒤로 지나갈 수 있게, 줄기 칸은 못 지나가게.
+  let noTree = new Uint8Array(1);
+  function treeAt(x, y) {
+    if (x < 0 || y < 0 || x >= W || y >= H || noTree[y * W + x]) return null;
+    const t = terrain[y * W + x];
+    if (t !== T.FOREST && t !== T.GRASS) return null;
+    const o = terr[y * W + x]; if (o !== 65535 && o > 0 && gone[o]) return null;
+    const h = hash(x, y, 7);
+    if (t === T.FOREST) {
+      if (h < 0.07 && (x + y) % 3 === 0) return h < 0.035 ? 'treeA' : 'treeB';
+      if (h < 0.26 && (x + 2 * y) % 2 === 0) return h < 0.17 ? 'midA' : 'midB';
+      return null;
+    }
+    return h < 0.004 ? 'midA' : null;
+  }
+  function clearTrees(cx, cy, r) { for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) if (x >= 0 && y >= 0 && x < W && y < H) noTree[y * W + x] = 1; }
   function speedAt(x, y) { const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
 
   // 영토 이름 (번호로 고정)
@@ -81,6 +97,8 @@
     gone = new Uint8Array(data.territories.length + 2);
     for (const t of data.territories) { terrs[t.id] = t; t.name = terrName(t); if (t.rift && WAVE_DAY[t.rift] <= DAY) gone[t.id] = 1; }
     solid = new Uint8Array(W * H);
+    noTree = new Uint8Array(W * H);
+    for (const t of data.territories) { clearTrees(t.altar[0], t.altar[1], 3); if (t.portal) clearTrees(t.portal[0], t.portal[1], 3); }
     ulleung = data.ulleung;
     // 프로토타입: 지도 가운데에서 가장 가까운 수도 후보를 '우리 수도'로 삼는다
     const caps = terrs.filter((t) => t && t.capitalCandidate && !gone[t.id]);
@@ -115,6 +133,7 @@
         const nx = ax + Math.round((hash(t.id, k, 11) - 0.5) * 18), ny = ay + Math.round((hash(t.id, k, 12) - 0.5) * 18);
         if (Math.abs(nx - ax) + Math.abs(ny - ay) < 4 || blocked(nx, ny) || terrAt(nx, ny) !== t.id) continue;
         const n = { id: t.id, t, x: P(nx) + 16, y: P(ny) + 24 };
+        clearTrees(nx, ny, 1);
         nodes.push(n);
         sprites.push({ x: n.x, y: n.y, draw: (g, x, y) => drawOre(g, x, y, mined.has(n.id)) });
         break;
@@ -222,7 +241,7 @@
   const ART = {};
   function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('그림 파일을 불러오지 못했어요: ' + src)); i.src = src; }); }
   async function loadArt() {
-    const names = { floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
+    const names = { water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
     const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
     for (const k of EXTRA) names['x_' + k] = 'extra/' + k + '.png';
     for (const k of TEMPLE) names['x_' + k] = 'na/' + k + '.png';
@@ -248,10 +267,12 @@
   }
   // 바닥 타일 (floor.png 의 16px 칸 좌표)
   const TL = {
-    grass: [[11, 12], [11, 12], [11, 12], [11, 12], [11, 12], [11, 12], [11, 12], [11, 12], [11, 12], [12, 12], [13, 12], [14, 12]],
-    forest: [[0, 12], [0, 12], [0, 12], [1, 12], [2, 12], [3, 12]],
+    grass: [[0, 12], [0, 12], [0, 12], [0, 12], [0, 12], [0, 12], [0, 12], [0, 12], [1, 12], [2, 12], [3, 12]],
+    forest: [[11, 12], [11, 12], [11, 12], [12, 12], [13, 12], [14, 12]],
     sand: [[0, 5], [0, 5], [0, 5], [1, 5], [2, 5], [3, 5]],
     water: [[1, 22]],
+    // water.png 의 작은 연못(3x3): 물가 자동 타일
+    shore: { c: [1, 7], n: [1, 6], s: [1, 8], w: [0, 7], e: [2, 7], nw: [0, 6], ne: [2, 6], sw: [0, 8], se: [2, 8] },
     rock: [[13, 16]],
   };
   function tile(g, list, h, px, py) { const [cx, cy] = list[(h * list.length) | 0]; g.drawImage(ART.floor, cx * 16, cy * 16, 16, 16, px, py, TILE, TILE); }
@@ -362,13 +383,12 @@
           case T.FOREST: tile(g, TL.forest, h, px, py); break;
           case T.SAND: tile(g, TL.sand, h, px, py); break;
           case T.WATER: {
-            tile(g, TL.water, h, px, py);
-            g.fillStyle = '#eaf7ff';
             const land = (a, b) => { const q = tileAt(a, b); return q !== T.WATER && q !== T.VOID; };
-            if (land(x, y - 1)) g.fillRect(px, py, TILE, 4);
-            if (land(x, y + 1)) g.fillRect(px, py + TILE - 4, TILE, 4);
-            if (land(x - 1, y)) g.fillRect(px, py, 4, TILE);
-            if (land(x + 1, y)) g.fillRect(px + TILE - 4, py, 4, TILE);
+            const N = land(x, y - 1), S = land(x, y + 1), Wd = land(x - 1, y), E = land(x + 1, y);
+            const sh = TL.shore;
+            const key = N && Wd ? 'nw' : N && E ? 'ne' : S && Wd ? 'sw' : S && E ? 'se' : N ? 'n' : S ? 's' : Wd ? 'w' : E ? 'e' : 'c';
+            const [cx, cy] = sh[key];
+            g.drawImage(ART.water, cx * 16, cy * 16, 16, 16, px, py, TILE, TILE);
             break;
           }
           case T.MOUNTAIN: {
@@ -416,12 +436,11 @@
         const px = (x - x0) * TILE, py = (y - y0) * TILE;
         const og = terrAt(x, y);
         if (og > 0 && gone[og]) continue;
+        if (treeAt(x, y)) continue;
         if (t === T.FOREST) {
-          if (h < 0.07 && (x + y) % 3 === 0) spr(g, h < 0.035 ? 'treeA' : 'treeB', px + 16, py + 30);
-          else if (h < 0.26 && (x + 2 * y) % 2 === 0) spr(g, h < 0.17 ? 'midA' : 'midB', px + 16, py + 30);
-          else if (h < 0.29) pix(g, h < 0.275 ? 'stump' : 'berry', px + 16, py + 30);
+          if (h >= 0.26 && h < 0.29) pix(g, h < 0.275 ? 'stump' : 'berry', px + 16, py + 30);
         } else if (t === T.GRASS) {
-          if (h < 0.004) spr(g, 'midA', px + 16, py + 30);
+          if (h < 0.004) { /* 나무 자리 */ }
           else if (h < 0.010) spr(g, 'bush', px + 16, py + 30);
           else if (h < 0.016) pix(g, h < 0.013 ? 'flower_r' : 'flower_y', px + 16, py + 30);
           else if (h < 0.019) pix(g, 'mushroom', px + 16, py + 30);
@@ -700,7 +719,7 @@
     const R = ROOMS[id];
     const d = R.doors.find((q) => q.to === fromId) || R.doors[0];
     [player.x, player.y] = doorInside(R, d);
-    player.scene = 'sky'; player.room = R; fadeT = 0.35; lastTerr = null; netTp = true;
+    player.scene = 'sky'; player.room = R; fadeT = 0.35; lastTerr = null; netTp = true; step.on = false;
   }
   function ascend(portalTerr) {
     player.entry = portalTerr;
@@ -710,7 +729,7 @@
   }
   function descend() {
     const t = player.entry || home;
-    player.scene = 'ground'; player.room = null; fadeT = 0.35; lastTerr = null; netTp = true;
+    player.scene = 'ground'; player.room = null; fadeT = 0.35; lastTerr = null; netTp = true; step.on = false;
     player.x = t.portal[0] * TILE + 16; player.y = (t.portal[1] + 1) * TILE + 16;
     if (!free(player.x, player.y, null)) teleportTo(t.portal[0], t.portal[1] + 1);
     toast(`${t.name} 포털로 내려왔어요`);
@@ -976,7 +995,7 @@
     if (player.scene === 'sky') { descend(); return; }
     player.x = home.portal[0] * TILE + 16; player.y = (home.portal[1] + 1) * TILE + 16;
     if (!free(player.x, player.y, null)) teleportTo(home.portal[0], home.portal[1] + 1);
-    lastTerr = null; netTp = true;
+    lastTerr = null; netTp = true; step.on = false;
     toast(`우리 수도 ${home.name}(으)로 돌아왔어요`);
   }
 
@@ -1042,7 +1061,7 @@
   function teleportTo(tx, ty) {
     for (let r = 0; r < 30; r++) for (let a = 0; a < 16; a++) {
       const x = Math.round(tx + Math.cos(a / 16 * Math.PI * 2) * r), y = Math.round(ty + Math.sin(a / 16 * Math.PI * 2) * r);
-      if (!blocked(x, y)) { netTp = true; player.scene = 'ground'; player.room = null; lastTerr = null; player.x = x * TILE + 16; player.y = y * TILE + 16; return true; }
+      if (!blocked(x, y)) { netTp = true; step.on = false; player.scene = 'ground'; player.room = null; lastTerr = null; player.x = x * TILE + 16; player.y = y * TILE + 16; return true; }
     }
     return false;
   }
@@ -1306,22 +1325,7 @@
     const t = now / 1000;
 
     // 플레이어 이동
-    let mx = 0, my = 0;
-    if (keys.has('arrowleft') || keys.has('a')) mx -= 1;
-    if (keys.has('arrowright') || keys.has('d')) mx += 1;
-    if (keys.has('arrowup') || keys.has('w')) my -= 1;
-    if (keys.has('arrowdown') || keys.has('s')) my += 1;
-    if (stick.on) { mx = stick.vx; my = stick.vy; }
-    const mag = Math.hypot(mx, my);
-    player.moving = mag > 0.15;
-    if (player.moving) {
-      const terrainK = player.scene === 'sky' ? 1 : speedAt(player.x / TILE | 0, player.y / TILE | 0);
-      const sp = WALK * (keys.has('shift') ? 3 : 1) * terrainK * Math.min(1, mag);
-      tryMove(player, mx / mag * sp * dt, my / mag * sp * dt);
-      if (Math.abs(mx) > 0.1) player.dir = mx < 0 ? -1 : 1;
-      player.face = faceOf(mx, my, player.face);
-      if (player.scene === 'sky') checkDoor();
-    }
+    stepPlayer(dt);
     if (player.scene === 'sky') {
       player.skyLeft -= dt;
       if (player.skyLeft <= 0) { descend(); toast('하늘에 머물 수 있는 5분이 끝나 땅으로 내려왔어요'); }
@@ -1340,6 +1344,42 @@
       updateWhere(); updatePrompt(); drawMini(); if (!$('bigmap').hidden) drawBig();
     }
     requestAnimationFrame(frame);
+  }
+
+  // 칸 단위 이동: 방향키를 한 번 누르면 한 칸, 누르고 있으면 계속. (좀 더 빠르게: 한 칸 0.11초)
+  const STEP = 0.11;
+  const step = { on: false, fx: 0, fy: 0, tx: 0, ty: 0, t: 0, dur: STEP };
+  let lastDirKey = null;
+  addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if (DIRS[k]) lastDirKey = k; });
+  const DIRS = { arrowleft: [-1, 0], a: [-1, 0], arrowright: [1, 0], d: [1, 0], arrowup: [0, -1], w: [0, -1], arrowdown: [0, 1], s: [0, 1] };
+  function wantDir() {
+    if (stick.on && Math.hypot(stick.vx, stick.vy) > 0.35) return Math.abs(stick.vx) > Math.abs(stick.vy) ? [Math.sign(stick.vx), 0] : [0, Math.sign(stick.vy)];
+    if (lastDirKey && keys.has(lastDirKey)) return DIRS[lastDirKey];
+    for (const k in DIRS) if (keys.has(k)) return DIRS[k];
+    return null;
+  }
+  function stepPlayer(dt) {
+    if (step.on) {
+      step.t += dt;
+      const k = Math.min(1, step.t / step.dur);
+      player.x = step.fx + (step.tx - step.fx) * k; player.y = step.fy + (step.ty - step.fy) * k;
+      if (k < 1) return;
+      step.on = false;
+      if (player.scene === 'sky') { checkDoor(); if (step.on) return; }
+    }
+    const d = wantDir();
+    if (!d) { player.moving = false; return; }
+    player.face = faceOf(d[0], d[1], player.face);
+    if (d[0]) player.dir = d[0];
+    // 지금 칸의 가운데로 맞춘 뒤 한 칸 옆으로
+    const cx = Math.floor(player.x / TILE), cy = Math.floor(player.y / TILE);
+    const nx = cx + d[0], ny = cy + d[1];
+    const room = player.scene === 'sky' ? player.room : null;
+    if (room ? roomBlocked(room, nx, ny) : blocked(nx, ny)) { player.x = cx * TILE + 16; player.y = cy * TILE + 16; player.moving = false; return; }
+    step.on = true; step.t = 0;
+    step.fx = player.x; step.fy = player.y; step.tx = nx * TILE + 16; step.ty = ny * TILE + 16;
+    step.dur = (keys.has('shift') ? 0.04 : STEP) / (room ? 1 : speedAt(nx, ny));
+    player.moving = true;
   }
 
   function drawActors(list, t) {
@@ -1396,6 +1436,11 @@
     const x0 = camX - 300, x1 = camX + vw / zoom + 300, y0 = camY - 100, y1 = camY + vh / zoom + 350;
     const list = [];
     for (const s of sprites) if (s.x > x0 && s.x < x1 && s.y > y0 && s.y < y1) list.push(s);
+    const tx0 = Math.floor(x0 / TILE), tx1 = Math.ceil(x1 / TILE), ty0 = Math.floor(y0 / TILE), ty1 = Math.ceil(y1 / TILE);
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      const k = treeAt(tx, ty);
+      if (k) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => spr(g, k, X, Y) });
+    }
     for (const b of others('ground', null)) if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1) list.push(b);
     list.push(player);
     drawActors(list, t);
