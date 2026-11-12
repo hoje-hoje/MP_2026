@@ -16,6 +16,8 @@ from collections import deque
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+import gyeongbuk as GB
+
 # ---------------------------------------------------------------- 설정
 TILE_PX = 32               # 게임 안 타일 한 칸의 픽셀 크기
 SCREEN_TILES = (40, 22)    # 1280x720 화면에 보이는 타일 수
@@ -108,6 +110,7 @@ def main():
     ap.add_argument("--size", type=int, default=720)
     ap.add_argument("--territories", type=int, default=240)
     ap.add_argument("--capitals", type=int, default=48)
+    ap.add_argument("--shape", default="gyeongbuk", choices=["gyeongbuk", "round"])
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "..", "maps"))
     args = ap.parse_args()
 
@@ -123,7 +126,12 @@ def main():
     elev = fbm(W, H, 64, 5, rng)
     moist = fbm(W, H, 80, 4, rng)
 
-    land = dist / land_r + (shape_noise - 0.5) * 0.18 < 1.0
+    island = np.zeros((H, W), dtype=bool)
+    if args.shape == "gyeongbuk":
+        land, island, to_tile = gyeongbuk_mask(W, H, rng)
+    else:
+        land = dist / land_r + (shape_noise - 0.5) * 0.18 < 1.0
+        to_tile = None
     terrain = np.full((H, W), T_VOID, dtype=np.uint8)
     terrain[land] = T_GRASS
 
@@ -143,10 +151,30 @@ def main():
 
     passable = np.isin(terrain, list(PASSABLE))
     ys_p, xs_p = np.nonzero(passable)
+    if args.shape == "gyeongbuk":
+        cx, cy = int(xs_p.mean()), int(ys_p.mean())
+        dist = np.hypot(xx - cx, yy - cy)
     k0 = int(np.argmin((xs_p - cx) ** 2 + (ys_p - cy) ** 2))
     reach = bfs_reach(passable, (int(xs_p[k0]), int(ys_p[k0])))
     terrain[passable & ~reach] = T_MOUNTAIN
     passable = passable & reach
+    # 울릉도: 신들의 섬 (중립). 본토와 바다(공허)로 떨어져 있어 걸어서는 못 간다. 영토가 아님.
+    terrain[island] = T_HOLY
+    passable[island] = False
+    # 해안·경계까지 거리 (변방 판정용)
+    edge = np.full((H, W), -1, dtype=np.int32)
+    q = deque()
+    for y, x in zip(*np.nonzero(~passable)):
+        edge[y, x] = 0
+        q.append((int(x), int(y)))
+    while q:
+        x, y = q.popleft()
+        for dx, dy in NEIGH4:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < W and 0 <= ny < H and edge[ny, nx] < 0:
+                edge[ny, nx] = edge[y, x] + 1
+                q.append((nx, ny))
+    edge_max = float(np.percentile(edge[passable], 99))
 
     # ---------------------------------------------------- 영토 씨앗
     holy_mask = np.zeros((H, W), dtype=bool)
@@ -290,7 +318,7 @@ def main():
         mx, my = float(xs_t.mean()), float(ys_t.mean())
         k = int(np.argmin((xs_t - mx) ** 2 + (ys_t - my) ** 2))
         ax, ay = int(xs_t[k]), int(ys_t[k])
-        dc = math.hypot(mx - cx, my - cy) / land_r
+        dc = 1 - min(1.0, edge[ay, ax] / edge_max) if args.shape == "gyeongbuk" else math.hypot(mx - cx, my - cy) / land_r
         ang = math.atan2(my - cy, mx - cx) + (angle_noise[ay, ax] - 0.5) * 1.2
         ring_name = "inner" if dc < 0.36 else ("middle" if dc < 0.74 else "frontier")
         terrs.append({
@@ -300,6 +328,7 @@ def main():
             "area": int(len(xs_t)),
             "ang": (ang + math.pi) % (2 * math.pi),
             "ring": ring_name,
+            "region": nearest_region(mx, my, to_tile) if to_tile else None,
             "dc": round(dc, 3),
             "neighbors": sorted(int(v) for v in adj.get(t, ()) if v != t),
         })
@@ -380,7 +409,9 @@ def main():
         "tilePx": TILE_PX,
         "terrainNames": TERRAIN_NAMES,
         "passable": [TERRAIN_NAMES[t] for t in sorted(PASSABLE)],
-        "sky": "중립 지역은 하늘(별도 맵, 방으로 구성). 각 수도의 포털로 오르내린다.",
+        "shape": args.shape,
+        "ulleung": ({"center": list(to_tile(*GB.ULLEUNG["center"])), "rx": round(GB.ULLEUNG["rx"] * to_tile.s), "ry": round(GB.ULLEUNG["ry"] * to_tile.s)} if to_tile else None),
+        "neutral": "중립 지역은 울릉도(신들의 섬). 별도 맵(방으로 구성)이며 각 수도의 포털로 오간다.",
         "riftAnnounce": "D5 (12/18)",
         "riftSchedule": {"1": "D6 (12/19)", "2": "D8 (12/21)", "3": "D10 (12/23)", "4": "D12 (12/25)", "5": "D14 (12/27)"},
         "riftNote": "운영진 전용 데이터. 실제 서버는 rift 필드를 참가자에게 보내지 않는다.",
@@ -408,6 +439,52 @@ def main():
         "rift": {k: sum(1 for t in terrs if t["rift"] == k) for k in (1, 2, 3, 4, 5)},
         "types": {ty: sum(1 for t in terrs if t["type"] == ty) for ty in TYPES},
     }, ensure_ascii=False))
+
+
+def gyeongbuk_mask(W, H, rng, margin=14):
+    s = min((W - 2 * margin) / GB.SRC_W, (H - 2 * margin) / GB.SRC_H)
+    ox = (W - GB.SRC_W * s) / 2
+    oy = (H - GB.SRC_H * s) / 2
+
+    def to_tile(x, y):
+        return (round(ox + x * s), round(oy + y * s))
+    to_tile.s = s
+
+    def jitter(pts, levels=3, amp=0.10):
+        for _ in range(levels):
+            out = []
+            n = len(pts)
+            for i in range(n):
+                (x1, y1), (x2, y2) = pts[i], pts[(i + 1) % n]
+                L = math.hypot(x2 - x1, y2 - y1)
+                nx_, ny_ = -(y2 - y1) / (L or 1), (x2 - x1) / (L or 1)
+                off = rng.normal(0, amp) * L
+                out.append((x1, y1))
+                out.append(((x1 + x2) / 2 + nx_ * off, (y1 + y2) / 2 + ny_ * off))
+            pts = out
+        return pts
+
+    main_pts = jitter([(ox + x * s, oy + y * s) for x, y in GB.OUTLINE])
+    im = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(im).polygon(main_pts, fill=1)
+    land = np.array(im, dtype=bool)
+    ux, uy = to_tile(*GB.ULLEUNG["center"])
+    rx, ry = GB.ULLEUNG["rx"] * s, GB.ULLEUNG["ry"] * s
+    blob = [(ux + math.cos(a) * rx, uy + math.sin(a) * ry) for a in np.linspace(0, 2 * math.pi, 14, endpoint=False)]
+    im2 = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(im2).polygon(jitter(blob, 2, 0.12), fill=1)
+    island = np.array(im2, dtype=bool) & ~land
+    return land, island, to_tile
+
+
+def nearest_region(mx, my, to_tile):
+    best, bd = None, 1e18
+    for name, x, y in GB.REGIONS:
+        tx, ty = to_tile(x, y)
+        d = (tx - mx) ** 2 + (ty - my) ** 2
+        if d < bd:
+            best, bd = name, d
+    return best
 
 
 # ---------------------------------------------------------------- 렌더링
@@ -459,7 +536,7 @@ def render_overview(terrain, terr, terrs, picked, center, path, scale=2):
         d.ellipse([px_ - 5, py_ - 5, px_ + 5, py_ + 5], fill=(255, 236, 140), outline=(43, 35, 64))
     # 한 화면 크기 표시
     sw, sh = SCREEN_TILES[0] * scale, SCREEN_TILES[1] * scale
-    x0, y0 = 30, im.height - 30 - sh
+    x0, y0 = im.width - 30 - sw - 190, im.height - 30 - sh
     d.rectangle([x0, y0, x0 + sw, y0 + sh], outline=(255, 255, 255), width=3)
     d.text((x0 + sw + 10, y0 + sh // 2), "= 게임 화면 1장", fill=(255, 255, 255), anchor="lm", font=font(20))
     im.save(path)

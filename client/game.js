@@ -35,6 +35,7 @@
   let solid = null;      // 건물·제단 등 막힌 칸
   let sprites = [];      // 깊이 정렬해서 그리는 큰 물체
   const nodes = [];      // 금광 (온라인 자원 지점)
+  let ulleung = null;    // 울릉도 (신들의 섬, 중립) — 본토에서 걸어갈 수 없음
   let names = [];
 
   // ------------------------------------------------------------ 유틸
@@ -51,14 +52,18 @@
     if (x < 0 || y < 0 || x >= W || y >= H) return true;
     const t = terrain[y * W + x], o = terr[y * W + x];
     if (o !== 65535 && o > 0 && gone[o]) return true;
-    return t === T.VOID || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1;
+    return t === T.VOID || t === T.HOLY || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1;
   }
   function speedAt(x, y) { const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
 
   // 영토 이름 (번호로 고정)
   const SYL = ['라온', '솔빛', '미르', '벼리', '가람', '누리', '다온', '초롱', '하람', '윤슬', '아라', '한결', '새벽', '별하', '온새', '나린', '해솔', '그루', '여울', '도담', '마루', '보람', '시나', '이든'];
   const SUFFIX = { inner: '령', middle: '주', frontier: ' 변경' };
-  function terrName(t) { const a = SYL[(t.id * 7) % SYL.length]; const b = ['', '', '동', '서', '남', '북'][(t.id * 13) % 6]; return a + b + SUFFIX[t.ring]; }
+  function terrName(t) {
+    const a = SYL[(t.id * 7) % SYL.length];
+    if (t.region) return `${t.region} ${a}`;
+    const b = ['', '', '동', '서', '남', '북'][(t.id * 13) % 6]; return a + b + SUFFIX[t.ring];
+  }
 
   // ------------------------------------------------------------ 불러오기
   async function loadWorld() {
@@ -76,6 +81,7 @@
     gone = new Uint8Array(data.territories.length + 2);
     for (const t of data.territories) { terrs[t.id] = t; t.name = terrName(t); if (t.rift && WAVE_DAY[t.rift] <= DAY) gone[t.id] = 1; }
     solid = new Uint8Array(W * H);
+    ulleung = data.ulleung;
     // 프로토타입: 지도 가운데에서 가장 가까운 수도 후보를 '우리 수도'로 삼는다
     const caps = terrs.filter((t) => t && t.capitalCandidate && !gone[t.id]);
     home = caps.sort((a, b) => Math.hypot(a.center[0] - W / 2, a.center[1] - H / 2) - Math.hypot(b.center[0] - W / 2, b.center[1] - H / 2))[0];
@@ -88,6 +94,10 @@
   function buildSprites() {
     const P = (tx) => tx * TILE;
     sprites = [];
+    if (ulleung) {
+      const [ux, uy] = ulleung.center;
+      sprites.push({ x: P(ux) + 16, y: P(uy) + 16, draw: (g, x, y) => { drawTower(g, x, y); sign(g, x, y - 330, '울릉도 · 신들의 섬'); } });
+    }
     for (const t of terrs) {
       if (!t || gone[t.id]) continue;
       const [ax, ay] = t.altar;
@@ -122,7 +132,7 @@
     g.fillStyle = `rgba(255,255,255,${tw})`; g.fillRect(x - 9, y - 12, 2, 2); g.fillRect(x + 8, y - 10, 2, 2);
   }
 
-  // 하늘로 가는 빛기둥
+  // 울릉도로 가는 빛기둥
   function drawPortal(g, x, y, mine) {
     const now = performance.now() / 1000;
     const pulse = 0.5 + Math.sin(now * 3) * 0.15;
@@ -133,7 +143,7 @@
     g.fillStyle = grd; g.fillRect(x - 16, y - 220, 32, 220);
     g.fillStyle = 'rgba(255,255,255,0.9)';
     for (let i = 0; i < 4; i++) { const k = (now * 0.6 + i / 4) % 1; circ(g, x + Math.sin(i * 2.1 + now) * 10, y - k * 200, 2.2); }
-    if (mine) sign(g, x, y - 236, '우리 수도 · 하늘 포털');
+    if (mine) sign(g, x, y - 236, '우리 수도 · 울릉도 포털');
   }
 
   function drawTower(g, x, y) {
@@ -283,7 +293,8 @@
             if (h < 0.3) { g.fillStyle = '#a9a1b6'; g.fillRect(px + 4, py + 6, 10, 8); }
             break;
           case T.HOLY: {
-            g.fillStyle = '#efe8da'; g.fillRect(px, py, TILE, TILE);
+            g.fillStyle = '#f3ecdc'; g.fillRect(px, py, TILE, TILE);
+            if (tileAt(x, y - 1) === T.VOID || tileAt(x - 1, y) === T.VOID || tileAt(x + 1, y) === T.VOID || tileAt(x, y + 1) === T.VOID) { g.fillStyle = '#efdcae'; g.fillRect(px, py, TILE, TILE); }
             g.fillStyle = '#e2d8c4';
             g.fillRect(px, py + TILE - 2, TILE, 2);
             g.fillRect(px + ((y & 1) ? 0 : TILE / 2), py, 2, TILE);
@@ -409,11 +420,11 @@
     g.fillStyle = '#2b2340'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, x, y);
   }
 
-  // ------------------------------------------------------------ 하늘 (중립 지역, 방으로 나뉨)
-  // 각 나라 수도의 포털로 올라오고, 내려갈 땐 올라온 포털(=자기 나라 수도)로만 내려간다.
+  // ------------------------------------------------------------ 울릉도 (신들의 섬, 중립 지역, 방으로 나뉨)
+  // 각 나라 수도의 포털로 건너오고, 돌아갈 땐 건너온 포털(=자기 나라 수도)로만 돌아간다.
   const ROOMS = {
     temple: {
-      name: '하늘 신전', desc: '신들의 공지 · 신탁 게시판 · 멸망 시계', w: 30, h: 18, pos: [1, 1], crowd: 10,
+      name: '신전', desc: '신들의 공지 · 신탁 게시판 · 멸망 시계', w: 30, h: 18, pos: [1, 1], crowd: 10,
       floor: '#f4efff', line: '#e6ddf7', trim: '#e2b93b',
       emotes: ['신탁 봤어?', '오늘 공지 뭐임', '!', '?', '내일 어디 무너짐?', '시계 빨개졌다'],
       doors: [{ side: 'W', at: 9, to: 'market' }, { side: 'E', at: 9, to: 'council' }, { side: 'N', at: 15, to: 'plaza' }, { side: 'S', at: 15, to: 'ground' }],
@@ -497,7 +508,7 @@
       for (const p of R.props) for (let y = p.y; y < p.y + p.h; y++) for (let x = p.x; x < p.x + p.w; x++) R.grid[y * R.w + x] = 1;
       R.sprites = R.props.map((p) => ({ x: (p.x + p.w / 2) * TILE, y: (p.y + p.h) * TILE, draw: p.draw, board: p.board, prop: p }));
       R.doors.forEach((d) => {
-        const label = d.to === 'ground' ? '땅으로 내려가기' : ROOMS[d.to].name;
+        const label = d.to === 'ground' ? '본토로 돌아가기' : ROOMS[d.to].name;
         const [x, y] = d.side === 'N' ? [(d.at + 0.5) * TILE, TILE] : d.side === 'S' ? [(d.at + 0.5) * TILE, R.h * TILE] : d.side === 'W' ? [TILE, (d.at + 1) * TILE] : [(R.w - 1) * TILE, (d.at + 1) * TILE];
         R.sprites.push({ x, y, draw: (g, X, Y) => arch(g, X, Y, d.side, label, d.to === 'ground') });
       });
@@ -515,11 +526,11 @@
     const step = 26;
     for (let x = 0; x <= w; x += step) { rim.push([x, 0]); rim.push([x, h]); }
     for (let y = 0; y <= h; y += step) { rim.push([0, y]); rim.push([w, y]); }
-    g.fillStyle = 'rgba(110,130,200,0.22)';
-    for (const [x, y] of rim) circ(g, x, y + 30, 30 + hash(x, y) * 14);
-    g.fillStyle = '#e4ebfb';
+    g.fillStyle = 'rgba(255,255,255,0.45)';
+    for (const [x, y] of rim) circ(g, x, y + 14, 36 + hash(x, y) * 14);
+    g.fillStyle = '#e9d39c';
     for (const [x, y] of rim) circ(g, x, y + 8, 28 + hash(x, y, 2) * 14);
-    g.fillStyle = '#ffffff';
+    g.fillStyle = '#f6e7bf';
     for (const [x, y] of rim) circ(g, x, y, 26 + hash(x, y, 3) * 14);
     g.fillStyle = R.floor; rr(g, 18, 18, w - 36, h - 36, 18);
     g.strokeStyle = R.line; g.lineWidth = 2;
@@ -563,14 +574,14 @@
     player.entry = portalTerr;
     player.skyLeft = SKY_LIMIT;
     enterRoom('temple', 'ground');
-    toast('하늘 신전에 올라왔어요 · 여기선 싸울 수 없어요');
+    toast('울릉도 신전에 도착했어요 · 여기선 싸울 수 없어요');
   }
   function descend() {
     const t = player.entry || home;
     player.scene = 'ground'; player.room = null; fadeT = 0.35; lastTerr = null;
     player.x = t.portal[0] * TILE + 16; player.y = (t.portal[1] + 1) * TILE + 16;
     if (!free(player.x, player.y, null)) teleportTo(t.portal[0], t.portal[1] + 1);
-    toast(`${t.name} 포털로 내려왔어요`);
+    toast(`${t.name} 포털로 돌아왔어요`);
   }
   function checkDoor() {
     const R = player.room;
@@ -661,12 +672,12 @@
 
   function drawSkyBackground(t) {
     const grd = ctx.createLinearGradient(0, 0, 0, vh);
-    grd.addColorStop(0, DOOM ? '#cbb6ee' : '#a9dcff'); grd.addColorStop(1, DOOM ? '#ffd2dc' : '#fdf3ff');
+    grd.addColorStop(0, DOOM ? '#5a5fa8' : '#4fb3d9'); grd.addColorStop(1, DOOM ? '#7a4f8f' : '#2f86b8');
     ctx.fillStyle = grd; ctx.fillRect(0, 0, vw, vh);
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    for (let i = 0; i < 9; i++) {
-      const x = ((i * 337 + t * (8 + i * 2)) % (vw + 400)) - 200, y = (i * 173) % Math.max(1, vh);
-      ell(ctx, x, y, 120 + (i % 3) * 40, 26 + (i % 2) * 10);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    for (let i = 0; i < 26; i++) {
+      const x = ((i * 211 + t * (14 + (i % 4) * 4)) % (vw + 200)) - 100, y = (i * 97) % Math.max(1, vh);
+      ctx.beginPath(); ctx.arc(x, y, 14, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
     }
   }
 
@@ -798,10 +809,10 @@
       if (lastTerr === 'sky:' + R.id) return;
       lastTerr = 'sky:' + R.id;
       $('whereChips').textContent = '';
-      $('whereName').textContent = `하늘 · ${R.name}`;
+      $('whereName').textContent = `울릉도 · ${R.name}`;
       $('whereSub').textContent = R.desc;
       chip('중립 · 전투 불가', '#2b2340');
-      if (R.id === 'council' || R.id.startsWith('secret')) chip('작전 회의는 나라 구글챗에서', null, true);
+      if (R.id === 'council' || R.id.startsWith('secret')) chip('작전 회의는 나라 채팅에서', null, true);
       return;
     }
     const tx = player.x / TILE | 0, ty = player.y / TILE | 0;
@@ -815,7 +826,7 @@
       $('whereSub').textContent = `영토 #${t.id} · ${t.type} 지방 · ${RING[t.ring]} · 넓이 ${t.area.toLocaleString()}칸`;
       chip(`${t.type} 문제`, TYPE_TAG[t.type]);
       if (t === home) chip('우리 수도 (테스트)', '#277a58'); else chip('주인 없음 (중립)', null, true);
-      if (t.capitalCandidate) chip('수도 후보 · 하늘 포털', '#c22f53');
+      if (t.capitalCandidate) chip('수도 후보 · 울릉도 포털', '#c22f53');
     } else {
       $('whereName').textContent = '알 수 없는 땅';
       $('whereSub').textContent = '';
@@ -836,7 +847,7 @@
       if (o > 0) {
         const t = terrs[o];
         const n = nodes.find((q) => q.id === t.id);
-        if (t.portal && Math.hypot(t.portal[0] + 0.5 - tx, t.portal[1] + 0.5 - ty) < 1.8) best = { kind: 'portal', t, text: '하늘로 올라가기' };
+        if (t.portal && Math.hypot(t.portal[0] + 0.5 - tx, t.portal[1] + 0.5 - ty) < 1.8) best = { kind: 'portal', t, text: '울릉도로 건너가기' };
         else if (n && Math.hypot(n.x - player.x, n.y - player.y) < 52) best = { kind: 'node', n, text: mined.has(n.id) ? '오늘은 다 캤어요 (내일 다시)' : '금광 캐기 · 코인' };
         else if (Math.hypot(t.altar[0] + 0.5 - tx, t.altar[1] + 0.5 - ty) < 2.4) best = { kind: 'altar', t, text: `${t.name} 제단 · ${t.type} 문제 풀기` };
       }
@@ -887,7 +898,7 @@
     const g = c.getContext('2d');
     const img = g.createImageData(W, H);
     const d = img.data;
-    const base = { [T.VOID]: [27, 20, 48], [T.WATER]: [111, 183, 232], [T.MOUNTAIN]: [138, 129, 151] };
+    const base = { [T.VOID]: [27, 20, 48], [T.WATER]: [111, 183, 232], [T.MOUNTAIN]: [138, 129, 151], [T.HOLY]: [250, 238, 200] };
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x, t = terrain[i], o = terr[i];
       let c3 = base[t];
@@ -910,7 +921,7 @@
   const mini = $('miniCanvas'), mg = mini.getContext('2d');
   function drawSkyMini() {
     const s = mini.width;
-    mg.fillStyle = '#d7ecff'; mg.fillRect(0, 0, s, s);
+    mg.fillStyle = '#bfe4f2'; mg.fillRect(0, 0, s, s);
     const P = (R) => [s * (0.16 + R.pos[0] * 0.23), s * (0.38 + R.pos[1] * 0.22)];
     mg.strokeStyle = '#ffffff'; mg.lineWidth = 6;
     for (const R of Object.values(ROOMS)) for (const d of R.doors) if (d.to !== 'ground') { const [a, b] = P(R), [c, e] = P(ROOMS[d.to]); mg.beginPath(); mg.moveTo(a, b); mg.lineTo(c, e); mg.stroke(); }
@@ -920,7 +931,7 @@
       mg.fillStyle = R === player.room ? '#2b2340' : '#ffffff'; rr(mg, x - w / 2, y - h / 2, w, h, 10);
       mg.strokeStyle = '#2b2340'; mg.lineWidth = 3; mg.stroke();
       mg.fillStyle = R === player.room ? '#ffffff' : '#2b2340';
-      mg.fillText(R.name.replace('하늘 ', '').replace('유랑민 ', ''), x, y + 1);
+      mg.fillText(R.name.replace('유랑민 ', ''), x, y + 1);
       R._mini = [x, y, w, h];
     }
   }
@@ -987,7 +998,7 @@
     const L = $('legend');
     for (const ty of TYPES) { const s = document.createElement('span'); s.className = 'chip'; s.style.background = TYPE_TAG[ty]; s.textContent = `${ty} 지방`; L.appendChild(s); }
     const c = document.createElement('span'); c.className = 'chip'; c.style.background = '#c22f53'; c.textContent = '■ 수도 후보'; L.appendChild(c);
-    const q = document.createElement('span'); q.className = 'chip'; q.style.background = '#7a5c00'; q.textContent = '● 하늘 포털'; L.appendChild(q);
+    const q = document.createElement('span'); q.className = 'chip'; q.style.background = '#7a5c00'; q.textContent = '● 울릉도 포털'; L.appendChild(q);
     const n = document.createElement('span'); n.className = 'chip line'; n.textContent = '지도를 누르면 그곳으로 이동 (테스트)'; L.appendChild(n);
   })();
 
@@ -1067,7 +1078,7 @@
     }
     if (player.scene === 'sky') {
       player.skyLeft -= dt;
-      if (player.skyLeft <= 0) { descend(); toast('하늘에 머물 수 있는 5분이 끝나 땅으로 내려왔어요'); }
+      if (player.skyLeft <= 0) { descend(); toast('울릉도에 머물 수 있는 5분이 끝나 본토로 돌아왔어요'); }
     }
     for (const b of bots) updateBot(b, dt);
     if (player.scene === 'sky') drawSky(t); else drawGround(t);
