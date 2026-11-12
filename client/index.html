@@ -1,0 +1,129 @@
+<meta charset="utf-8">
+<title>MP 2026 세계</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* 한 화면 게임: 캔버스가 화면 전체, HUD는 네 모서리에 떠 있는 두꺼운 테두리 카드. 단일 테마(밝은 게임 UI). */
+:root {
+  --ink: #2b2340;
+  --paper: #fffdf8;
+  --muted: #5f5877;
+  --danger: #c22f53;
+  --danger-fill: #e5486a;
+  --void: #1b1430;
+  --grass: #9fd88a;
+  --font-display: 'Jua', 'Noto Sans KR', system-ui, sans-serif;
+  --font-body: 'Noto Sans KR', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--void); color: var(--ink); font-family: var(--font-body); overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+.card { background: var(--paper); border: 3px solid var(--ink); border-radius: 16px; box-shadow: 0 4px 0 var(--ink); }
+.hud { position: fixed; z-index: 5; }
+#where { left: max(12px, env(safe-area-inset-left, 0px)); top: calc(12px + env(safe-area-inset-top, 0px)); padding: 10px 14px; min-width: 210px; max-width: min(320px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 6px; }
+#where .name { font-family: var(--font-display); font-size: 22px; line-height: 1.1; }
+#where .sub { font-size: 12px; font-weight: 700; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { border-radius: 999px; padding: 0 9px; font-size: 11px; font-weight: 700; line-height: 20px; color: #ffffff; background: var(--ink); }
+.chip.line { background: var(--paper); color: var(--ink); border: 2px solid var(--ink); line-height: 16px; }
+#doom { left: 50%; transform: translateX(-50%); top: calc(12px + env(safe-area-inset-top, 0px)); width: min(360px, 40vw); padding: 6px 14px 8px; display: flex; flex-direction: column; gap: 4px; }
+#doom .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 700; color: var(--muted); }
+#doom .d { font-family: var(--font-display); font-size: 26px; line-height: 26px; color: var(--danger); }
+.bar { height: 14px; background: #f4e9ec; border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; }
+.bar > div { height: 100%; width: 62%; background: var(--danger-fill); }
+#tools { right: max(12px, env(safe-area-inset-right, 0px)); top: calc(12px + env(safe-area-inset-top, 0px)); display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 46vw; }
+button { font-family: var(--font-display); font-size: 16px; color: var(--ink); background: var(--paper); border: 3px solid var(--ink); border-radius: 12px; box-shadow: 0 3px 0 var(--ink); min-height: 44px; padding: 0 14px; cursor: pointer; }
+button:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2px; }
+#mini { right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 6px; }
+#mini canvas { display: block; width: 168px; height: 168px; border-radius: 10px; cursor: crosshair; }
+#mini .cap { font-size: 11px; font-weight: 700; color: var(--muted); text-align: center; margin-top: 4px; }
+#help { left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 8px 12px; font-size: 12px; font-weight: 700; max-width: min(420px, calc(100vw - 230px)); }
+#prompt { left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); padding: 8px 16px; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+#prompt kbd { font-family: var(--font-display); background: var(--ink); color: #ffffff; border-radius: 6px; padding: 0 7px; }
+#toast { left: 50%; transform: translateX(-50%); top: 96px; background: var(--ink); color: #ffffff; padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+#bigmap { position: fixed; inset: 0; z-index: 20; background: rgba(27, 20, 48, 0.82); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#bigmap .panel { padding: 12px; display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
+#bigmap .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+#bigmap h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 22px; }
+#bigmap canvas { width: min(78vmin, 720px); height: min(78vmin, 720px); max-width: 100%; border-radius: 12px; cursor: crosshair; display: block; }
+#bigmap .legend { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; font-weight: 700; }
+#closet { position: fixed; z-index: 20; inset: 0; background: rgba(27, 20, 48, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#closet .panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; width: min(380px, 100%); }
+#closet h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 24px; }
+#closet label { font-size: 13px; font-weight: 700; display: block; margin-bottom: 6px; }
+#closet input[type=text] { width: 100%; box-sizing: border-box; font: 700 16px var(--font-body); color: var(--ink); background: #ffffff; border: 3px solid var(--ink); border-radius: 10px; padding: 8px 10px; }
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.sw { width: 40px; height: 40px; min-height: 40px; padding: 0; border-radius: 999px; box-shadow: none; }
+.sw[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--paper), 0 0 0 6px var(--ink); }
+.seg { display: flex; gap: 8px; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: #ffffff; }
+#loading { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: var(--void); color: #f3dcff; font-family: var(--font-display); font-size: 24px; text-align: center; padding: 16px; }
+#loading small { font-family: var(--font-body); font-size: 13px; color: #cbbbe8; }
+#stick { position: fixed; z-index: 6; width: 110px; height: 110px; border-radius: 999px; border: 3px solid rgba(255,255,255,0.8); background: rgba(43,35,64,0.25); pointer-events: none; }
+#stick div { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 999px; background: rgba(255,255,255,0.9); border: 3px solid var(--ink); }
+@media (max-width: 720px) {
+  #doom { display: none; }
+  #help { display: none; }
+  #mini canvas { width: 120px; height: 120px; }
+  #tools button { font-size: 14px; padding: 0 10px; }
+}
+@media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+</style>
+
+<canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
+
+<div id="where" class="hud card" aria-live="polite">
+  <div class="name" id="whereName">중립 성지</div>
+  <div class="sub" id="whereSub">전투 불가 구역</div>
+  <div class="chips" id="whereChips"></div>
+</div>
+
+<div id="doom" class="hud card">
+  <div class="row"><span>세계 멸망까지</span><span class="d">D-14</span><span>1일차 · 건국기</span></div>
+  <div class="bar"><div></div></div>
+</div>
+
+<div id="tools" class="hud">
+  <button id="btnMap" type="button">지도 (M)</button>
+  <button id="btnHome" type="button">성지로 (T)</button>
+  <button id="btnCloset" type="button">꾸미기</button>
+</div>
+
+<div id="mini" class="hud card">
+  <canvas id="miniCanvas" width="336" height="336" aria-label="미니맵, 누르면 그 위치로 이동(테스트)"></canvas>
+  <div class="cap">누르면 순간이동 (테스트용)</div>
+</div>
+
+<div id="help" class="hud card">WASD·방향키 이동 · Shift 빨리 걷기(테스트) · 휠 확대/축소</div>
+
+<div id="prompt" class="hud card" hidden><span id="promptText">제단</span><kbd>E</kbd></div>
+<div id="toast" class="hud" hidden></div>
+
+<div id="bigmap" hidden>
+  <div class="panel card">
+    <div class="head"><h2>세계 지도</h2><button id="btnMapClose" type="button">닫기</button></div>
+    <canvas id="bigCanvas" width="720" height="720" aria-label="세계 지도, 누르면 그 위치로 이동(테스트)"></canvas>
+    <div class="legend" id="legend"></div>
+  </div>
+</div>
+
+<div id="closet" hidden>
+  <div class="panel card">
+    <h2>캐릭터 꾸미기</h2>
+    <div><label for="nick">닉네임</label><input id="nick" type="text" maxlength="10" value="나"></div>
+    <div><label>머리색</label><div class="swatches" id="hairSw"></div></div>
+    <div><label>옷 색</label><div class="swatches" id="outfitSw"></div></div>
+    <div><label>헤어스타일</label><div class="seg" id="lenSeg"><button type="button" data-long="0">짧은 머리</button><button type="button" data-long="1">긴 머리</button></div></div>
+    <button id="btnClosetDone" type="button">완료</button>
+  </div>
+</div>
+
+<div id="stick" hidden><div></div></div>
+
+<div id="loading">지도 불러오는 중…<small id="loadingSub">세계 720×720칸, 영토 239개</small></div>
+
+<script src="game.js"></script>
