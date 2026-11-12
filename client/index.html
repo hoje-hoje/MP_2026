@@ -1,11 +1,14 @@
 <meta charset="utf-8">
 <title>MP 2026 세계</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<link rel="preload" href="assets/fonts/Galmuri11.sub.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/Galmuri11-Bold.sub.woff2" as="font" type="font/woff2" crossorigin>
 <style>
-@font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11.woff2) format('woff2'); font-display: swap; }
-@font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11-Bold.woff2) format('woff2'); font-weight: 700; font-display: swap; }
+/* 자주 쓰는 글자만 담은 가벼운 글꼴 (tools/fonts/subset_galmuri.py). 드문 글자는 Galmuri11Full 이 필요할 때만 받아진다 */
+@font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11.sub.woff2) format('woff2'); font-display: swap; }
+@font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11-Bold.sub.woff2) format('woff2'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Galmuri11Full'; src: url(assets/fonts/Galmuri11.woff2) format('woff2'); unicode-range: U+0020-024F, U+1100-11FF, U+2000-2BFF, U+3000-33FF, U+AC00-D7A3, U+FF00-FFEF; font-display: swap; }
+@font-face { font-family: 'Galmuri11Full'; src: url(assets/fonts/Galmuri11-Bold.woff2) format('woff2'); font-weight: 700; unicode-range: U+0020-024F, U+1100-11FF, U+2000-2BFF, U+3000-33FF, U+AC00-D7A3, U+FF00-FFEF; font-display: swap; }
 /* 한 화면 게임: 캔버스가 화면 전체, HUD는 네 모서리에 떠 있는 두꺼운 테두리 카드. 단일 테마(밝은 게임 UI). */
 :root {
   --ink: #2b2340;
@@ -15,8 +18,8 @@
   --danger-fill: #e5486a;
   --void: #1b1430;
   --grass: #9fd88a;
-  --font-display: 'Galmuri11', 'Jua', 'Noto Sans KR', system-ui, sans-serif;
-  --font-body: 'Galmuri11', 'Noto Sans KR', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
+  --font-display: 'Galmuri11', 'Galmuri11Full', system-ui, sans-serif;
+  --font-body: 'Galmuri11', 'Galmuri11Full', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
   color-scheme: light;
 }
 [hidden] { display: none !important; }
@@ -114,7 +117,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #puzzle h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 22px; }
 #puzzle .mode { margin: 0; font-size: 13px; font-weight: 700; color: #6b4fb3; }
 #puzzle img { max-width: 100%; background: #ffffff; border: 2px solid #2b2340; }
-#puzzle .q { margin: 0; font-family: 'Noto Sans KR', system-ui, sans-serif; font-size: 15px; line-height: 1.6; }
+#puzzle .q { margin: 0; font-family: system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; font-size: 15px; line-height: 1.6; }
 #puzzle .row { display: flex; gap: 8px; }
 #puzzle input { flex: 1; min-width: 0; font: 700 22px var(--font-display); color: var(--ink); background: #ffffff; border: 3px solid var(--ink); padding: 6px 10px; }
 #puzzle .msg { margin: 0; font-size: 13px; font-weight: 700; color: var(--muted); }

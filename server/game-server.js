@@ -64,9 +64,15 @@ const server = http.createServer((req, res) => {
   }
   if (!file) { res.writeHead(404); return res.end('not found'); }
   try {
-    const body = url.pathname === '/world.json' ? publicWorld() : fs.readFileSync(file);
+    // 브라우저 캐시: 그림·글꼴은 받아 둔 것을 바로 쓰고 뒤에서 몰래 확인, 나머지는 바뀌었는지만 물어본다(304)
+    const st = fs.statSync(file);
+    const isWorld = url.pathname === '/world.json', isAsset = url.pathname.startsWith('/assets/');
+    const etag = `"${isWorld ? 'w' : ''}${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
+    const cache = isAsset ? 'public, max-age=600, stale-while-revalidate=604800' : 'no-cache';
+    if (String(req.headers['if-none-match'] || '').replace(/^W\//, '') === etag) { res.writeHead(304, { ETag: etag, 'Cache-Control': cache }); return res.end(); }
+    const body = isWorld ? publicWorld() : fs.readFileSync(file);
     const type = url.pathname === '/admin' ? MIME['.html'] : MIME[path.extname(file)] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': url.pathname === '/world.json' ? 'public, max-age=300' : 'no-cache' });
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache, ETag: etag });
     res.end(body);
   } catch (e) { res.writeHead(500); res.end('error'); }
 });

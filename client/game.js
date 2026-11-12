@@ -237,7 +237,7 @@
     g.fillStyle = '#5a3a20'; g.fillText(text, x + 1, y + 2);
     g.fillStyle = '#fff6d6'; g.fillText(text, x, y + 1);
   }
-  const PFONT = "'Galmuri11', 'Noto Sans KR', sans-serif";
+  const PFONT = "'Galmuri11', 'Galmuri11Full', sans-serif";
 
   // 도형 도우미
   function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); g.fill(); }
@@ -257,7 +257,7 @@
     });
     for (const k of EXTRA) names['x_' + k] = 'extra/' + k + '.png';
     for (const k of TEMPLE) names['x_' + k] = 'na/' + k + '.png';
-    const fonts = document.fonts ? Promise.all([document.fonts.load(`11px ${PFONT}`), document.fonts.load(`700 22px ${PFONT}`)]).catch(() => {}) : Promise.resolve();
+    const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
     await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
   const EXTRA = ['coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
