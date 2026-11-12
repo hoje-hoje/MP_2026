@@ -27,7 +27,7 @@ const TEAM_MAX = 60;
 const TEST_MODE = process.env.TEST_MODE !== '0'; // 프로토타입 기간: '지금 전투 처리' 버튼 허용
 
 // ------------------------------------------------------------ 정적 파일
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 const STATIC = {
   '/': path.join(ROOT, 'client', 'index.html'),
   '/index.html': path.join(ROOT, 'client', 'index.html'),
@@ -56,7 +56,7 @@ const server = http.createServer((req, res) => {
   let file = STATIC[url.pathname];
   if (!file && url.pathname.startsWith('/assets/')) {
     const f = path.normalize(path.join(ASSET_DIR, decodeURIComponent(url.pathname.slice(8))));
-    if (f.startsWith(ASSET_DIR + path.sep) && /\.(png|json)$/.test(f) && fs.existsSync(f)) file = f;
+    if (f.startsWith(ASSET_DIR + path.sep) && /\.(png|json|woff2)$/.test(f) && fs.existsSync(f)) file = f;
   }
   if (!file) { res.writeHead(404); return res.end('not found'); }
   try {
