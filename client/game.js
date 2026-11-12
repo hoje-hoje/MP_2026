@@ -1271,7 +1271,7 @@
     switch (m.t) {
       case 'welcome': {
         myId = m.id; netOn = true; store('mp2026.token', m.token);
-        testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice);
+        testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         if (!m.view) openFound('who'); else $('found').hidden = true;
         chatLog = m.chat || []; renderChat();
         wanderList = m.wander || [];
@@ -1517,9 +1517,94 @@
     showNight(reps.filter((r) => r.att === OFF_ME || r.def === OFF_ME));
   }
   function showNight(reps) {
-    warTab = 'report'; $('war').hidden = false; renderWar();
-    if (!reps.length) toast('밤 10시: 우리 나라는 이번 밤 전투가 없었어요');
-    else { const w = reps.filter((r) => (r.winner === 'att') === (r.att === myView.me.id)).length; toast(`밤 10시 전투 결과: ${reps.length}전 ${w}승`); }
+    if (!reps.length) { toast('밤 10시: 우리 나라는 이번 밤 전투가 없었어요'); return; }
+    playBattles(reps, () => {
+      warTab = 'report'; $('war').hidden = false; renderWar();
+      const w = reps.filter((r) => (r.winner === 'att') === (r.att === myView.me.id)).length; toast(`밤 10시 전투 결과: ${reps.length}전 ${w}승`);
+    });
+  }
+  // ---- 밤 전투 장면: 전투마다 약 3.5초 연출 + 왼쪽 요약. 화면을 누르면 결과로 건너뛴다
+  const BT = { list: [], i: 0, t0: 0, done: null, raf: 0 };
+  function playBattles(reps, done) {
+    const seen = new Set(store('mp2026.battleSeen') || []);
+    BT.list = reps.slice(); BT.i = 0; BT.done = done;
+    store('mp2026.battleSeen', [...seen, ...reps.map((r) => r.id)].slice(-80));
+    $('battle').hidden = false; startBattle();
+  }
+  // 접속했을 때 아직 못 본 지난밤 전투가 있으면 보여 준다
+  function unseenBattles() {
+    if (!myView || !myView.reports || !myView.reports.length) return;
+    const seen = new Set(store('mp2026.battleSeen') || []);
+    const last = Math.max(...myView.reports.map((r) => r.night));
+    const reps = myView.reports.filter((r) => r.night === last && !seen.has(r.id));
+    if (reps.length) setTimeout(() => playBattles(reps, () => {}), 600);
+  }
+  function startBattle() {
+    const r = BT.list[BT.i]; BT.t0 = performance.now();
+    const meAtt = myView && r.att === myView.me.id;
+    const won = (r.winner === 'att') === meAtt;
+    $('btSide').innerHTML = `<h3>⚔ ${r.night}번째 밤</h3><div class="where">${esc(terrLabel(r.target))}${r.capital ? ' · <b>수도</b>' : ''}</div>
+      <div class="vs"><b style="color:${natColor(r.att)}">${esc(r.attName)}</b> 공격 ×${r.mA}<br><b style="color:${natColor(r.def)}">${esc(r.defName)}</b> 방어 ×${r.mD}${r.autoDef ? ' (자동 배치)' : ''}</div>
+      <table>${['A', 'B', 'C'].map((f, i) => `<tr data-lane="${i}"><th>${f}</th><td>${r.effA[i]}</td><td>vs</td><td>${r.effD[i]}</td><td class="res"></td></tr>`).join('')}</table>
+      <div class="sum" hidden>${won ? '🎉 승리' : '패배'} · 전선 ${r.fronts.filter((x) => x === 'att').length}:${r.fronts.filter((x) => x === 'def').length}<br>${r.winner === 'att' ? (meAtt ? '영토를 점령했어요' : '영토를 빼앗겼어요') : (meAtt ? '공격이 막혔어요' : '방어 성공!')}${r.merged ? '<br><b>수도 함락 · 나라 병합</b>' : ''}<br><small>잃은 병력 ${esc(r.attName)} −${r.lossA} · ${esc(r.defName)} −${r.lossD}</small></div>
+      <div class="btns"><button id="btNext">${BT.i < BT.list.length - 1 ? `다음 전투 (${BT.i + 2}/${BT.list.length})` : '닫기'}</button></div>`;
+    $('btNext').onclick = (e) => { e.stopPropagation(); nextBattle(); };
+    cancelAnimationFrame(BT.raf); const loop = () => { drawBattle(r, (performance.now() - BT.t0) / 1000); BT.raf = requestAnimationFrame(loop); }; loop();
+  }
+  function nextBattle() {
+    if (++BT.i < BT.list.length) return startBattle();
+    cancelAnimationFrame(BT.raf); $('battle').hidden = true; if (BT.done) BT.done();
+  }
+  $('battle').addEventListener('click', () => { if (performance.now() - BT.t0 < BT_END * 1000) BT.t0 = performance.now() - BT_END * 1000; });
+  const BT_LANE = (i) => 0.9 + i * 0.55, BT_END = 2.9; // 전선별 충돌 시작 시각, 결과 시각
+  function drawBattle(r, t) {
+    const cv = $('btCanvas'), W2 = cv.clientWidth, H2 = cv.clientHeight;
+    if (cv.width !== W2 || cv.height !== H2) { cv.width = W2; cv.height = H2; }
+    const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+    const ease = (x) => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x), lerp = (a, b, k) => a + (b - a) * k;
+    const sc = Math.max(2, Math.min(4, Math.floor(H2 / 160)));
+    g.fillStyle = '#4f7a3a'; g.fillRect(0, 0, W2, H2);
+    for (let i = 0; i < 140; i++) { g.fillStyle = i % 3 ? '#5c8a44' : '#456b32'; g.fillRect((i * 97) % W2, (i * 53) % H2, 6, 3); }
+    const lanes = [0.25, 0.5, 0.75].map((k) => H2 * k), mid = W2 / 2;
+    const cA = natColor(r.att), cD = natColor(r.def);
+    g.fillStyle = cA; g.fillRect(0, 0, 8, H2); g.fillStyle = cD; g.fillRect(W2 - 8, 0, 8, H2);
+    const march = ease(t / 0.8), walk = Math.floor(t * 8) % 4;
+    const spr = (name, col, row, x, y, a) => { const k = Math.max(0, CHARS.names.indexOf(name)); g.globalAlpha = a; g.drawImage(ART.chars, (k % CHARS.cols) * 64 + col * 16, Math.floor(k / CHARS.cols) * 112 + row * 16, 16, 16, Math.round(x - 8 * sc), Math.round(y - 16 * sc), 16 * sc, 16 * sc); g.globalAlpha = 1; };
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 0; i < 3; i++) {
+      const y = lanes[i], local = t - BT_LANE(i), win = r.fronts[i];
+      g.fillStyle = 'rgba(60,40,30,.35)'; g.fillRect(20, y - 4, W2 - 40, 10);
+      const nA = Math.max(1, Math.min(5, Math.round(r.a[i] / 5))), nD = Math.max(1, Math.min(5, Math.round(r.d[i] / 5)));
+      const fight = local > 0 && local < 0.45, done = local >= 0.45;
+      let ax = lerp(30 + 16 * sc, mid - 18 * sc, march), dx = lerp(W2 - 30 - 16 * sc, mid + 18 * sc, march);
+      if (fight) { const sh = Math.sin(local * 70) * 3; ax += sh; dx -= sh; }
+      if (done) { const k = ease((local - 0.45) / 0.3) * 14 * sc; ax += win === 'att' ? k : -k; dx += win === 'att' ? k : -k; }
+      for (let k = 0; k < nA; k++) spr('SamuraiBlue', 3, fight ? 4 : march < 1 ? walk : 0, ax - (k % 3) * 11 * sc, y + 6 + Math.floor(k / 3) * 7 * sc - 4, done && win !== 'att' && k >= Math.floor(nA / 2) ? 0.25 : 1);
+      for (let k = 0; k < nD; k++) spr('CamouflageRed', 2, fight ? 4 : march < 1 ? walk : 0, dx + (k % 3) * 11 * sc, y + 6 + Math.floor(k / 3) * 7 * sc - 4, done && win === 'att' && k >= Math.floor(nD / 2) ? 0.25 : 1);
+      g.font = `700 ${6 * sc}px ${PFONT}`; g.lineWidth = 4; g.lineJoin = 'round';
+      for (const [v, x, col] of [[r.effA[i], ax - 10 * sc, cA], [r.effD[i], dx + 10 * sc, cD]]) { g.strokeStyle = col; g.strokeText(v, x, y - 19 * sc); g.fillStyle = '#fff'; g.fillText(v, x, y - 19 * sc); }
+      if (local > 0 && local < 0.55) { const s2 = (1 + local * 3) * sc * 9, a = 1 - local / 0.55; g.globalAlpha = a; g.drawImage(ART.x_burst, mid - s2 / 2, y - s2 * 0.65, s2, s2); g.globalAlpha = 1; }
+      if (local > 0.4) {
+        const p = ease((local - 0.4) / 0.2), col = win === 'att' ? cA : cD;
+        g.save(); g.translate(mid, y - 2); g.scale(lerp(2, 1, p), lerp(2, 1, p)); g.rotate(-0.08); g.globalAlpha = p;
+        g.fillStyle = col; g.fillRect(-23 * sc, -7 * sc, 46 * sc, 14 * sc); g.fillStyle = '#fff6d6'; g.fillRect(-22 * sc, -6 * sc, 44 * sc, 12 * sc);
+        g.fillStyle = col; g.font = `700 ${7 * sc}px ${PFONT}`; g.fillText(win === 'att' ? '공격 승' : '방어 승', 0, 1);
+        g.restore(); g.globalAlpha = 1;
+        const row = document.querySelector(`#btSide tr[data-lane="${i}"]`);
+        if (row && !row.dataset.done) { row.dataset.done = 1; row.querySelector('.res').textContent = win === 'att' ? '공격 승' : '방어 승'; row.className = win; }
+      }
+    }
+    if (t < 0.6) { // 시작 글자
+      g.globalAlpha = 1 - ease((t - 0.3) / 0.3); g.font = `700 ${12 * sc}px ${PFONT}`; g.lineWidth = 6; g.strokeStyle = '#c22f53'; g.strokeText('⚔ 전투 시작', mid, H2 / 2); g.fillStyle = '#fff'; g.fillText('⚔ 전투 시작', mid, H2 / 2); g.globalAlpha = 1;
+    }
+    if (t >= BT_END) {
+      const sum = document.querySelector('#btSide .sum'); if (sum && sum.hidden) { sum.hidden = false; for (let i = 0; i < 3; i++) { const row = document.querySelector(`#btSide tr[data-lane="${i}"]`); if (!row.dataset.done) { row.dataset.done = 1; row.querySelector('.res').textContent = r.fronts[i] === 'att' ? '공격 승' : '방어 승'; row.className = r.fronts[i]; } } }
+      const meAtt = myView && r.att === myView.me.id, won = (r.winner === 'att') === meAtt;
+      const p = ease((t - BT_END) / 0.35);
+      g.globalAlpha = p * 0.55; g.fillStyle = '#1b1430'; g.fillRect(0, 0, W2, H2); g.globalAlpha = p;
+      g.font = `700 ${16 * sc}px ${PFONT}`; g.lineWidth = 8; g.strokeStyle = won ? '#c27a00' : '#7a1f3a'; g.strokeText(won ? '승리!' : '패배', mid, H2 / 2); g.fillStyle = won ? '#ffd34d' : '#ffb3c4'; g.fillText(won ? '승리!' : '패배', mid, H2 / 2);
+      g.globalAlpha = 1;
+    }
   }
 
   // ---- 전쟁 창

@@ -53,6 +53,23 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #help { left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 8px 12px; font-size: 12px; font-weight: 700; max-width: min(420px, calc(100vw - 230px)); }
 #prompt { left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); padding: 8px 16px; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 #prompt kbd { font-family: var(--font-display); background: var(--ink); color: #ffffff; border-radius: 0; padding: 0 7px; box-shadow: 0 2px 0 #000; }
+#battle { position: fixed; inset: 0; z-index: 40; background: rgba(27,20,48,.85); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px; }
+#battle[hidden] { display: none; }
+#battle .frame { display: flex; width: min(1000px, 100%); height: min(520px, calc(100vh - 60px)); border: 4px solid #fff6d6; outline: 4px solid #2b2340; background: #2b2340; }
+#btSide { width: 230px; flex: none; background: #fff6d6; color: #2b2340; padding: 12px; font-size: 13px; line-height: 1.5; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+#btSide h3 { margin: 0; font-family: var(--font-display); font-size: 20px; color: #c22f53; }
+#btSide .where { font-weight: 700; }
+#btSide table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+#btSide td, #btSide th { padding: 3px 2px; text-align: center; border-bottom: 2px solid #e4dcc4; }
+#btSide td.res { font-weight: 700; font-size: 12px; min-width: 52px; }
+#btSide tr.att td.res { color: #3d5fb8; } #btSide tr.def td.res { color: #c94a3c; }
+#btSide .sum { background: #2b2340; color: #fff6d6; padding: 8px; }
+#btSide .sum small { color: #d9cfee; }
+#btSide .btns { margin-top: auto; }
+#btSide .btns button { width: 100%; }
+#btCanvas { flex: 1; min-width: 0; height: 100%; display: block; image-rendering: pixelated; cursor: pointer; }
+#battle .skip { color: #d9cfee; font-size: 12px; margin: 8px 0 0; }
+@media (max-width: 640px) { #battle .frame { flex-direction: column; height: calc(100vh - 60px); } #btSide { width: auto; max-height: 45%; } #btCanvas { height: auto; min-height: 0; } }
 #warAlert { position: fixed; inset: 0; z-index: 30; background: rgba(43,10,30,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #warAlert[hidden] { display: none; }
 #warAlert .box { background: #fff6d6; color: #2b2340; border: 4px solid #2b2340; outline: 4px solid #c22f53; max-width: 440px; width: 100%; padding: 18px 20px; box-shadow: 0 8px 0 rgba(0,0,0,.35); animation: warShake .5s; }
@@ -241,6 +258,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 
 <div id="prompt" class="hud card" hidden><span id="promptText">제단</span><kbd>E</kbd></div>
 <div id="toast" class="hud" hidden></div>
+<div id="battle" hidden><div class="frame"><aside id="btSide"></aside><canvas id="btCanvas"></canvas></div><p class="skip">화면을 누르면 결과로 건너뛰어요</p></div>
 <div id="warAlert" hidden role="alertdialog" aria-labelledby="warAlertTitle"><div class="box"><h2 id="warAlertTitle">⚔ 선전포고가 왔습니다!</h2><ul id="warAlertList"></ul><p id="warAlertNote"></p><div class="row"><button id="warAlertGo">방어 배치하러 가기</button><button id="warAlertClose" class="ghost">닫기</button></div></div></div>
 <div id="notice" class="hud" hidden><b>📜 신의 공지</b><span id="noticeText"></span><button id="noticeClose" aria-label="공지 닫기">✕</button></div>
 
