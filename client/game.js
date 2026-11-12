@@ -303,7 +303,7 @@
     const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
     await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
-  const EXTRA = ['store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
+  const EXTRA = ['door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
   const TEMPLE = ['emote0', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'emote6', 'emote7', 'statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
@@ -656,6 +656,34 @@
 
   // ------------------------------------------------------------ 하늘 (신들의 땅, 중립 지역, 방으로 나뉨)
   // 각 나라 수도의 포털로 올라오고, 내려갈 땐 올라온 포털(=자기 나라 수도)로만 내려간다.
+  // 직접 그린 바닥 무늬 (64×64, 2px 도트): 잔디·꽃밭·자갈길·나무 판자
+  const GEN_FLOOR = {
+    lawn: (g) => { g.fillStyle = '#9edb86'; g.fillRect(0, 0, 64, 64); for (let i = 0; i < 70; i++) { const x = (hash(i, 1, 41) * 32 | 0) * 2, y = (hash(i, 2, 41) * 32 | 0) * 2; g.fillStyle = hash(i, 3, 41) > 0.5 ? '#8fd078' : '#b2e69a'; g.fillRect(x, y, 2, hash(i, 4, 41) > 0.6 ? 4 : 2); } },
+    meadow: (g) => { GEN_FLOOR.lawn(g); g.fillStyle = 'rgba(70,140,60,0.18)'; g.fillRect(0, 0, 64, 64); const cols = ['#ff8fb1', '#ffd84d', '#ffffff', '#b197fc', '#ff6b6b']; for (let i = 0; i < 16; i++) { const x = (hash(i, 5, 41) * 30 | 0) * 2, y = (hash(i, 6, 41) * 30 | 0) * 2; g.fillStyle = cols[i % cols.length]; g.fillRect(x + 2, y, 2, 2); g.fillRect(x, y + 2, 2, 2); g.fillRect(x + 4, y + 2, 2, 2); g.fillRect(x + 2, y + 4, 2, 2); g.fillStyle = '#ffe066'; g.fillRect(x + 2, y + 2, 2, 2); } },
+    cobble: (g) => { g.fillStyle = '#e9e2d4'; g.fillRect(0, 0, 64, 64); for (let y = 0; y < 64; y += 16) for (let x = (y / 16 % 2) * 8; x < 72; x += 16) { g.fillStyle = hash(x, y, 43) > 0.5 ? '#f6f1e6' : '#ddd4c2'; g.fillRect(x - 6, y + 2, 12, 12); g.fillStyle = '#c9bea8'; g.fillRect(x - 6, y + 12, 12, 2); } },
+    planks: (g) => { for (let y = 0; y < 64; y += 8) { g.fillStyle = (y / 8) % 2 ? '#c98f55' : '#d9a066'; g.fillRect(0, y, 64, 8); g.fillStyle = '#9a6a3a'; g.fillRect(0, y + 6, 64, 2); const off = (y * 13) % 48; g.fillRect(off, y, 2, 6); g.fillRect((off + 32) % 64, y, 2, 6); } },
+  };
+  // 구름 광장 꾸미기: 꽃밭 소품, 이벤트 무대(무지개), 유랑민 모집 게시판
+  function gardenProps(x0, y0) {
+    const kinds = ['flower_r', 'flower_y', 'fern', 'flower_r', 'mushroom', 'flower_y', 'berry', 'fern'];
+    const out = [];
+    for (let k = 0; k < 8; k++) out.push({ x: x0 + 1 + (k % 4) * 3, y: y0 + 1 + Math.floor(k / 4) * 4, w: 1, h: 1, walk: true, draw: (g, X, Y) => pix(g, kinds[k], X, Y + 2, 2) });
+    out.push({ x: x0 + 6, y: y0 + 3, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'plant', X, Y + 2, 2.5) });
+    return out;
+  }
+  function plazaStage(g, x, y) {
+    const cols = ['#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#4dabf7', '#9775fa']; // 픽셀 무지개
+    for (let b = 0; b < cols.length; b++) { const r = 210 - b * 10; g.fillStyle = cols[b]; for (let a = 0; a <= 64; a++) { const t = Math.PI + a / 64 * Math.PI, px = Math.round((x + Math.cos(t) * r) / 4) * 4, py = Math.round((y - 20 + Math.sin(t) * r * 0.55) / 4) * 4; g.fillRect(px, py, 8, 8); } }
+    for (const dx of [-200, -120, 120, 200]) pix(g, dx < 0 ? 'banner3' : 'banner6', x + dx, y + 4, 2);
+    sign(g, x, y - 40, '이벤트 무대');
+  }
+  function posterBoard(g, x, y) {
+    g.fillStyle = '#5a4630'; g.fillRect(x - 56, y - 60, 6, 60); g.fillRect(x + 50, y - 60, 6, 60);
+    g.fillStyle = '#8a6a44'; g.fillRect(x - 60, y - 96, 120, 50); g.fillStyle = '#6b5034'; g.fillRect(x - 60, y - 50, 120, 4);
+    const papers = [['용병', '구함', '#fff6d6'], ['건국', '동료', '#ffe3e3'], ['귀화', '환영', '#e3f6ff']];
+    papers.forEach(([a, b, c], i) => { const px = x - 52 + i * 38; g.fillStyle = c; g.fillRect(px, y - 90, 32, 38); g.fillStyle = '#c0392b'; g.fillRect(px + 14, y - 92, 4, 4); g.fillStyle = '#2b2340'; g.font = `700 11px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(a, px + 16, y - 77); g.fillText(b, px + 16, y - 63); });
+    sign(g, x, y - 112, '모집 게시판');
+  }
   const ROOMS = {
     temple: {
       name: '하늘 신전', desc: '신들의 공지 · 신탁 제단 · 멸망의 탑', w: 30, h: 18, pos: [1, 1], crowd: 10,
@@ -721,21 +749,26 @@
       doors: [{ side: 'W', at: 5, to: 'council' }],
       props: [{ x: 6, y: 4, w: 2, h: 1, draw: smallTable }],
     },
-    plaza: {
-      name: '구름 광장', desc: '모여서 노는 곳 · 이벤트가 열리는 곳', w: 34, h: 20, pos: [1, 0], crowd: 14,
-      floor: 'na:11,12', trim: '#4bb3c4',
-      emotes: ['3팀 모여~', 'ㅋㅋㅋ', '안녕!', '이벤트 언제?', '같이 다닐 사람', '우리 나라 짱'],
-      doors: [{ side: 'S', at: 17, to: 'temple' }, { side: 'N', at: 17, to: 'wander' }],
+    plaza: { // 넓은 구름 광장: 가운데 분수 광장, 네 귀퉁이 꽃밭, 위쪽 이벤트 무대
+      name: '구름 광장', desc: '모여서 노는 곳 · 이벤트가 열리는 곳', w: 56, h: 34, pos: [1, 0], crowd: 24,
+      floor: 'lawn', trim: '#4bb3c4',
+      patches: [[26, 2, 4, 31, 'cobble', 0], [3, 16, 50, 3, 'cobble', 0], [17, 11, 22, 12, 'floor_palace', 30], [4, 4, 13, 7, 'meadow', 22], [39, 4, 13, 7, 'meadow', 22], [4, 23, 13, 7, 'meadow', 22], [39, 23, 13, 7, 'meadow', 22], [20, 3, 16, 5, 'planks', 6]],
+      emotes: ['3팀 모여~', 'ㅋㅋㅋ', '안녕!', '이벤트 언제?', '같이 다닐 사람', '우리 나라 짱', '분수 예쁘다', '무대 올라가 봐'],
+      doors: [{ side: 'S', at: 28, to: 'temple' }, { side: 'N', at: 28, to: 'wander' }],
       props: [
-        { x: 16, y: 11, w: 2, h: 1, draw: bonfire },
-        { x: 16, y: 4, w: 3, h: 3, draw: (g, x, y) => pix(g, 'pool', x, y, 2) },
-        { x: 8, y: 9, w: 1, h: 1, draw: (g, x, y) => pix(g, 'u:chick', x, y + 2, 2) }, { x: 9, y: 10, w: 1, h: 1, draw: (g, x, y) => pix(g, 'u:hen', x, y + 2, 2) },
-        { x: 25, y: 10, w: 1, h: 1, draw: (g, x, y) => pix(g, 'u:rabbit', x, y + 2, 2) }, { x: 26, y: 15, w: 2, h: 1, draw: (g, x, y) => pix(g, 'u:pig', x, y + 2, 2) },
-        { x: 10, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 23, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
-        { x: 12, y: 8, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) }, { x: 20, y: 8, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) },
-        { x: 12, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) }, { x: 20, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'log', x, y + 2, 3) },
-        { x: 6, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'stump', x, y + 2, 3) }, { x: 27, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'berry', x, y + 2, 3) },
-        { x: 6, y: 14, w: 1, h: 1, draw: (g, x, y) => pix(g, 'berry', x, y + 2, 3) }, { x: 27, y: 14, w: 1, h: 1, draw: (g, x, y) => pix(g, 'stump', x, y + 2, 3) },
+        { x: 21, y: 3, w: 14, h: 2, draw: plazaStage },
+        { x: 26, y: 15, w: 4, h: 3, draw: (g, x, y) => { pix(g, 'pool', x, y + 8, 3); } },
+        { x: 20, y: 13, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 35, y: 13, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
+        { x: 20, y: 20, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 35, y: 20, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
+        ...[[24, 9], [31, 9], [24, 25], [31, 25], [24, 29], [31, 29]].map(([x, y]) => ({ x, y, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'candelabra', X, Y + 2) })),
+        { x: 9, y: 16, w: 2, h: 1, draw: bonfire },
+        ...[[7, 15], [12, 15], [7, 18], [12, 18]].map(([x, y]) => ({ x, y, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'log', X, Y + 2, 2) })),
+        { x: 45, y: 16, w: 2, h: 1, draw: smallTable }, { x: 43, y: 16, w: 1, h: 1, draw: (g, x, y) => pix(g, 'stump', x, y + 2, 3) }, { x: 48, y: 16, w: 1, h: 1, draw: (g, x, y) => pix(g, 'stump', x, y + 2, 3) },
+        ...gardenProps(4, 4), ...gardenProps(39, 4), ...gardenProps(4, 23), ...gardenProps(39, 23),
+        { x: 8, y: 7, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:chick', x, y + 2, 2) }, { x: 44, y: 8, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:rabbit', x, y + 2, 2) },
+        { x: 10, y: 26, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:hen', x, y + 2, 2) }, { x: 46, y: 27, w: 2, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:pig', x, y + 2, 2) },
+        { x: 2, y: 2, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'cloud', x + 20, y + 20, 0, 60, 0.9) }, { x: 53, y: 2, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'cloud', x - 10, y + 20, 0, 60, 0.9) },
+        { x: 2, y: 31, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'cloud', x + 20, y + 10, 0, 56, 0.9) }, { x: 53, y: 31, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'cloud', x - 10, y + 10, 0, 56, 0.9) },
       ],
     },
     jail: { // 체포 3번이면 1시간. 문이 없어서 시간이 끝나야 나갈 수 있다
@@ -748,15 +781,23 @@
         { x: 7, y: 2, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'tomb', x, y + 2); sign(g, x, y - 70, '감옥 · 시간이 끝나면 풀려나요'); } },
       ],
     },
-    wander: {
-      name: '유랑민 등록소', desc: '나라 없는 사람이 귀화·용병·건국을 등록하는 곳', w: 24, h: 14, pos: [1, -1], crowd: 6,
-      floor: 'na:0,5', trim: '#3fa37a',
-      emotes: ['용병 구합니다', '귀화시켜 주세요', '우리 4명 모이면 건국함', '몸값 얼마?', '어느 나라가 좋음?'],
-      doors: [{ side: 'S', at: 12, to: 'plaza' }],
+    wander: { // 유랑민 캠프: 등록 창구, 모집 게시판, 천막과 모닥불
+      name: '유랑민 등록소', desc: '나라 없는 사람이 귀화·용병·건국을 등록하는 곳', w: 32, h: 18, pos: [1, -1], crowd: 8,
+      floor: 'lawn', trim: '#3fa37a',
+      patches: [[14, 4, 5, 14, 'cobble', 0], [2, 8, 10, 8, 'meadow', 18], [21, 8, 9, 8, 'meadow', 18], [11, 2, 10, 3, 'planks', 6]],
+      emotes: ['용병 구합니다', '귀화시켜 주세요', '우리 4명 모이면 건국함', '몸값 얼마?', '어느 나라가 좋음?', '여기 따뜻하다'],
+      doors: [{ side: 'S', at: 16, to: 'plaza' }],
       props: [
-        { x: 9, y: 2, w: 6, h: 2, board: true, desk: 'wander', draw: (g, x, y) => { pix(g, 'cabin', x, y + 6, 3); sign(g, x, y - 132, '등록 창구'); } },
-        { x: 4, y: 8, w: 1, h: 1, draw: (g, x, y) => pix(g, 'woodpile', x, y + 2, 3) }, { x: 15, y: 9, w: 2, h: 1, draw: (g, x, y) => pix(g, 'u:cow', x, y + 2, 2) }, { x: 19, y: 8, w: 1, h: 1, draw: bonfire },
-        { x: 5, y: 3, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'keeper', x, y + 2); nameTag(g, x, y - 58, '등록 담당', '#277a58'); } },
+        { x: 13, y: 2, w: 6, h: 2, board: true, desk: 'wander', draw: (g, x, y) => { pix(g, 'cabin', x, y + 6, 3); sign(g, x, y - 132, '등록 창구'); } },
+        { x: 11, y: 4, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'keeper', x, y + 2); nameTag(g, x, y - 58, '등록 담당', '#277a58'); } },
+        { x: 21, y: 3, w: 4, h: 1, draw: posterBoard },
+        { x: 4, y: 9, w: 2, h: 1, draw: (g, x, y) => pix(g, 'tent', x, y + 4, 3) }, { x: 8, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'tent', x, y + 4, 3) }, { x: 4, y: 14, w: 2, h: 1, draw: (g, x, y) => pix(g, 'tent', x, y + 4, 3) },
+        { x: 25, y: 11, w: 2, h: 1, draw: bonfire },
+        ...[[23, 10], [28, 10], [23, 13], [28, 13]].map(([x, y]) => ({ x, y, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'log', X, Y + 2, 2) })),
+        { x: 2, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'woodpile', x, y + 2, 3) }, { x: 29, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'woodpile', x, y + 2, 3) },
+        { x: 21, y: 15, w: 2, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:cow', x, y + 2, 2) }, { x: 10, y: 15, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:rabbit', x, y + 2, 2) },
+        ...[[3, 11], [10, 9], [27, 15], [22, 8], [29, 9]].map(([x, y], i) => ({ x, y, w: 1, h: 1, walk: true, draw: (g, X, Y) => pix(g, ['flower_y', 'fern', 'mushroom', 'berry', 'flower_r'][i], X, Y + 2, 2) })),
+        { x: 24, y: 6, w: 1, h: 1, draw: (g, x, y) => { g.fillStyle = '#5a4630'; g.fillRect(x - 2, y - 40, 4, 40); sign(g, x, y - 44, '유랑민 캠프'); } },
       ],
     },
   };
@@ -774,7 +815,7 @@
         }
       });
       if (R.wall) for (let x = 1; x < R.w - 1; x++) if (R.grid[R.w + x] === 0 && !R.doors.some((d) => d.side === 'N' && Math.abs(d.at - x) <= 1)) R.grid[R.w + x] = 1;
-      for (const p of R.props) for (let y = p.y; y < p.y + p.h; y++) for (let x = p.x; x < p.x + p.w; x++) if (R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1;
+      for (const p of R.props) if (!p.walk) for (let y = p.y; y < p.y + p.h; y++) for (let x = p.x; x < p.x + p.w; x++) if (R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; // walk: 밟고 지나가는 장식(꽃·동물)
       R.sprites = R.props.map((p) => ({ x: (p.x + p.w / 2) * TILE, y: (p.y + p.h) * TILE, draw: p.draw, board: p.board, prop: p }));
       R.doors.forEach((d) => {
         const label = d.to === 'ground' ? '땅으로 내려가기' : ROOMS[d.to].name;
@@ -803,6 +844,7 @@
     for (const [x, y] of rim) circ(g, x, y, 26 + hash(x, y, 3) * 14);
     const pat = (key) => {
       const tc = document.createElement('canvas'); const tg = tc.getContext('2d');
+      if (GEN_FLOOR[key]) { tc.width = tc.height = 64; tg.imageSmoothingEnabled = false; GEN_FLOOR[key](tg); return g.createPattern(tc, 'repeat'); }
       if (key.startsWith('na:')) { const [cx, cy] = key.slice(3).split(',').map(Number); tc.width = tc.height = TILE; tg.imageSmoothingEnabled = false; tg.drawImage(ART.floor, cx * 16, cy * 16, 16, 16, 0, 0, TILE, TILE); }
       else { const im = ART['x_' + key]; tc.width = im.width * 2; tc.height = im.height * 2; tg.imageSmoothingEnabled = false; tg.drawImage(im, 0, 0, tc.width, tc.height); }
       return g.createPattern(tc, 'repeat');
@@ -811,6 +853,7 @@
     if (R.dark) { g.fillStyle = 'rgba(30,20,60,0.35)'; rr(g, 18, 18, w - 36, h - 36, 18); }
     else if (R.floor === 'stonefloor') { g.fillStyle = 'rgba(255,248,235,0.22)'; rr(g, 18, 18, w - 36, h - 36, 18); }
     for (const [cx, cy, cw, ch] of R.carpets || []) { g.fillStyle = pat('carpet'); g.fillRect(cx * TILE, cy * TILE, cw * TILE, ch * TILE); }
+    for (const [px, py, pw, ph, key, rad] of R.patches || []) { g.fillStyle = pat(key); rr(g, px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0); g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 3; g.beginPath(); g.roundRect ? g.roundRect(px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0) : g.rect(px * TILE, py * TILE, pw * TILE, ph * TILE); g.stroke(); } // 꽃밭·길·광장 바닥
     if (R.wall) {
       const bt = document.createElement('canvas'); bt.width = bt.height = TILE; const bg2 = bt.getContext('2d'); bg2.imageSmoothingEnabled = false; bg2.drawImage(ART.x_brick, 0, 0, TILE, TILE);
       g.fillStyle = g.createPattern(bt, 'repeat'); g.fillRect(18, 18, w - 36, 2 * TILE - 18);
@@ -892,19 +935,19 @@
   }
   function arch(g, x, y, side, label, down) {
     const vertical = side === 'W' || side === 'E';
+    const art = down ? 'door_cloud' : 'door_gold'; // 땅으로 내려가는 문은 구름 문, 나머지는 금빛 대문
     if (vertical) {
-      pix(g, 'arch', x, y - 8, 1.6);
-      if (down) { g.fillStyle = 'rgba(255,240,170,0.45)'; g.fillRect(x - 14, y - 60, 28, 50); }
+      pix(g, art, x, y - 4, 1.7);
       sign(g, x + (side === 'W' ? 80 : -80), y - 2 * TILE - 30, (side === 'W' ? '← ' : '') + label + (side === 'E' ? ' →' : ''));
     } else {
       const by = side === 'N' ? y + 8 : y;
-      if (down) { g.fillStyle = 'rgba(255,240,170,0.5)'; g.fillRect(x - 40, by - 70, 80, 70); }
-      pix(g, 'arch', x, by, 2.2);
-      sign(g, x, by - 124, (side === 'N' ? '↑ ' : '↓ ') + label);
+      pix(g, art, x, by, 2.4);
+      sign(g, x, by - 130, (side === 'N' ? '↑ ' : '↓ ') + label);
     }
   }
 
   function drawSkyBackground(t) {
+    if (ONLINE && SLOT === 'night') { drawStarSky(t); return; }
     const grd = ctx.createLinearGradient(0, 0, 0, vh);
     grd.addColorStop(0, DOOM ? '#cbb6ee' : '#a9dcff'); grd.addColorStop(1, DOOM ? '#ffd2dc' : '#fdf3ff');
     ctx.fillStyle = grd; ctx.fillRect(0, 0, vw, vh);
@@ -912,6 +955,27 @@
       const x = ((i * 337 + t * (8 + i * 2)) % (vw + 400)) - 200, y = (i * 173) % Math.max(1, vh);
       pix(ctx, 'cloud', x, y + 60, 0, 70 + (i % 3) * 30, 0.85);
     }
+  }
+
+  // 밤 하늘: 별이 반짝이며 천천히 흐르고, 가끔 별똥별
+  function drawStarSky(t) {
+    const grd = ctx.createLinearGradient(0, 0, 0, vh);
+    grd.addColorStop(0, DOOM ? '#140a2e' : '#0a1030'); grd.addColorStop(1, DOOM ? '#3a1d5c' : '#24306a');
+    ctx.fillStyle = grd; ctx.fillRect(0, 0, vw, vh);
+    for (let i = 0; i < 280; i++) {
+      const sp = 3 + (i % 5) * 2, x = ((hash(i, 1, 31) * (vw + 200) + t * sp) % (vw + 200)) - 100, y = hash(i, 2, 31) * vh;
+      const tw = 0.45 + 0.55 * Math.abs(Math.sin(t * (0.8 + hash(i, 3, 31) * 2.2) + i)), big = hash(i, 4, 31) > 0.82;
+      ctx.globalAlpha = tw; ctx.fillStyle = hash(i, 5, 31) > 0.8 ? '#ffe9a8' : hash(i, 6, 31) > 0.7 ? '#b8d8ff' : '#ffffff';
+      const sz = big ? 4 : 2; ctx.fillRect(Math.round(x), Math.round(y), sz, sz);
+      if (big && tw > 0.85) { ctx.fillRect(Math.round(x) - 2, Math.round(y) + 1, 7, 1); ctx.fillRect(Math.round(x) + 1, Math.round(y) - 2, 1, 7); } // 반짝
+    }
+    ctx.globalAlpha = 1;
+    const cyc = t % 7; // 별똥별 (7초에 한 번)
+    if (cyc < 0.9) { const k = cyc / 0.9, sx = vw * (0.2 + hash(Math.floor(t / 7), 1, 9) * 0.6), sy = vh * 0.1; const x = sx + k * 260, y = sy + k * 130; for (let j = 0; j < 14; j++) { ctx.globalAlpha = (1 - j / 14) * (1 - k); ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(x - j * 6), Math.round(y - j * 3), 3, 2); } ctx.globalAlpha = 1; }
+    // 큰 픽셀 달
+    const mx = vw - 210, my = Math.min(vh * 0.36, 300), R2 = 6;
+    for (let yy = -8; yy <= 8; yy++) for (let xx = -8; xx <= 8; xx++) { const a = Math.hypot(xx, yy), b = Math.hypot(xx - 3, yy + 2); if (a <= 7.5 && b > 6) { ctx.fillStyle = a > 6.5 ? '#c9b860' : '#fff1a8'; ctx.fillRect(mx + xx * R2, my + yy * R2, R2, R2); } }
+    for (let i = 0; i < 6; i++) { const x = ((i * 337 + t * (5 + i)) % (vw + 400)) - 200, y = (i * 173) % Math.max(1, vh); pix(ctx, 'cloud', x, y + 60, 0, 70 + (i % 3) * 30, 0.25); }
   }
 
   // ------------------------------------------------------------ 플레이어와 가짜 참가자
