@@ -53,6 +53,16 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #help { left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 8px 12px; font-size: 12px; font-weight: 700; max-width: min(420px, calc(100vw - 230px)); }
 #prompt { left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); padding: 8px 16px; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 #prompt kbd { font-family: var(--font-display); background: var(--ink); color: #ffffff; border-radius: 0; padding: 0 7px; box-shadow: 0 2px 0 #000; }
+#warAlert { position: fixed; inset: 0; z-index: 30; background: rgba(43,10,30,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#warAlert[hidden] { display: none; }
+#warAlert .box { background: #fff6d6; color: #2b2340; border: 4px solid #2b2340; outline: 4px solid #c22f53; max-width: 440px; width: 100%; padding: 18px 20px; box-shadow: 0 8px 0 rgba(0,0,0,.35); animation: warShake .5s; }
+#warAlert h2 { margin: 0 0 10px; color: #c22f53; font-family: var(--font-display); font-size: 24px; }
+#warAlert ul { margin: 0 0 10px; padding-left: 18px; line-height: 1.8; }
+#warAlert .cap { color: #c22f53; }
+#warAlert small { color: #6b6280; }
+#warAlert p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
+#warAlert .row { display: flex; gap: 8px; flex-wrap: wrap; }
+@keyframes warShake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-8px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(5px); } }
 #notice { left: 50%; transform: translateX(-50%); top: 132px; z-index: 6; max-width: min(640px, calc(100vw - 32px)); display: flex; gap: 10px; align-items: center; background: #fff6d6; color: #2b2340; padding: 10px 12px 10px 16px; border: 3px solid #2b2340; outline: 3px solid #ff5d7a; font-size: 14px; line-height: 1.45; box-shadow: 0 6px 0 rgba(43,35,64,.35); }
 #notice b { color: #c94a3c; white-space: nowrap; }
 #notice span { flex: 1; word-break: keep-all; }
@@ -231,6 +241,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 
 <div id="prompt" class="hud card" hidden><span id="promptText">제단</span><kbd>E</kbd></div>
 <div id="toast" class="hud" hidden></div>
+<div id="warAlert" hidden role="alertdialog" aria-labelledby="warAlertTitle"><div class="box"><h2 id="warAlertTitle">⚔ 선전포고가 왔습니다!</h2><ul id="warAlertList"></ul><p id="warAlertNote"></p><div class="row"><button id="warAlertGo">방어 배치하러 가기</button><button id="warAlertClose" class="ghost">닫기</button></div></div></div>
 <div id="notice" class="hud" hidden><b>📜 신의 공지</b><span id="noticeText"></span><button id="noticeClose" aria-label="공지 닫기">✕</button></div>
 
 <div id="bigmap" hidden>

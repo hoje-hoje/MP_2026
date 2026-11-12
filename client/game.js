@@ -1308,7 +1308,7 @@
       case 'night': applyWorld(null, null, m.view); showNight(m.reports || []); break;
       case 'puzzle': showPuzzle(m); break;
       case 'answer': puzzleResult(m.correct, m.text); break;
-      case 'err': if (!$('puzzle').hidden) puzzleResult(false, m.text); toast(m.text); break;
+      case 'err': if (!$('puzzle').hidden) puzzleResult(false, m.text); toast(m.text); if (!$('war').hidden) renderWar(); break;
       case 'ok': toast(m.text); break;
       case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
       case 'notice': showNotice(m.notice, true); break;
@@ -1423,7 +1423,27 @@
     if (myView && terrs[myView.me.capital]) { home = terrs[myView.me.capital]; player.tag = myView.me.color; }
     chunks.clear(); buildMapImage(); lastTerr = null; renderInv();
     if (!$('war').hidden) renderWar();
+    checkWarAlert();
   }
+  // 선전포고 알림: 처음 보는 '우리 땅 공격'이 있으면 창을 띄운다 (접속했을 때도, 접속 중에도)
+  function checkWarAlert() {
+    if (!myView || !myView.incoming || !myView.incoming.length) return;
+    const seen = new Set(store('mp2026.warSeen') || []);
+    const fresh = myView.incoming.filter((b) => !seen.has(myView.night + ':' + b.id));
+    if (!fresh.length) return;
+    $('warAlertList').innerHTML = fresh.map((b) => `<li><b style="color:${natColor(b.att)}">${esc(natName(b.att))}</b> → ${esc(terrLabel(b.target))}${myView.me.capital === b.target ? ' <b class="cap">수도!</b>' : ''} ${b.d ? '<small>(방어 배치 완료)</small>' : '<small>(미배치)</small>'}</li>`).join('');
+    $('warAlertNote').textContent = myView.me.isKing ? '오늘 밤 10시 전에 세 전선(A·B·C)에 방어 병력을 나눠 두세요. 안 하면 자동으로 나눠져요.' : '왕에게 알려서 방어 배치를 하게 하세요. 그 땅에 서 있으면 지휘관 보너스도 생겨요.';
+    $('warAlert').hidden = false;
+    $('warAlert').dataset.keys = JSON.stringify(fresh.map((b) => myView.night + ':' + b.id));
+  }
+  function closeWarAlert(goDefend) {
+    const keys = JSON.parse($('warAlert').dataset.keys || '[]');
+    store('mp2026.warSeen', [...new Set([...(store('mp2026.warSeen') || []), ...keys])].slice(-50));
+    $('warAlert').hidden = true;
+    if (goDefend) { warTab = 'defend'; toggleWar(true); }
+  }
+  $('warAlertGo').addEventListener('click', () => closeWarAlert(true));
+  $('warAlertClose').addEventListener('click', () => closeWarAlert(false));
   function offSync() { applyWorld(OFF.s.owner, OFF.publicNations(), OFF_ME ? OFF.view(OFF_ME, 'me') : null); }
   let OFF_ME = null;
 
@@ -1506,7 +1526,7 @@
   let warTab = 'nation', warTarget = null;
   const troopsOf = (id) => [0, 1, 2].map((i) => Math.max(0, parseInt($(id + i).value, 10) || 0));
   function troopInputs(prefix, vals, disabled) {
-    return `<div class="fronts">${['A', 'B', 'C'].map((f, i) => `<label class="front"><span>${f} 전선</span><input id="${prefix}${i}" type="number" min="0" step="1" value="${vals[i] | 0}" ${disabled ? 'disabled' : ''}></label>`).join('')}</div>`;
+    return `<div class="fronts">${['A', 'B', 'C'].map((f, i) => `<label class="front"><span>${f} 전선</span><input id="${prefix}${i}" type="number" min="0" max="99999" step="1" inputmode="numeric" value="${vals[i] | 0}" ${disabled ? 'disabled' : ''}></label>`).join('')}</div>`;
   }
   function renderWar() {
     const v = myView, box = $('warBody');
@@ -1539,7 +1559,7 @@
       h += `<h3>오늘 밤 우리 땅을 노리는 공격 (${v.incoming.length})</h3>`;
       if (!v.incoming.length) h += '<p class="msg">지금은 공격받는 곳이 없어요.</p>';
       h += v.incoming.map((b) => `<div class="plan"><div class="row"><span>🛡 ${esc(terrLabel(b.target))} ← <i style="color:${natColor(b.att)}">${esc(natName(b.att))}</i>${nationsPub[me.id] && me.capital === b.target ? ' · <b>수도!</b>' : ''}</span><span>${b.d ? '배치 완료' : '<b>미배치</b> (안 하면 자동 배치)'}</span></div>
-        ${troopInputs('def' + b.id + '_', b.d || [0, 0, 0], !king)}${king ? `<div class="row"><span>상대 병력은 비밀이에요</span><button data-defend="${b.target}" data-bid="${b.id}">방어 배치 저장</button></div>` : ''}</div>`).join('');
+        ${troopInputs('def' + b.id + '_', b.d || [0, 0, 0], !king)}${king ? `<div class="row"><span id="defSum${b.id}" data-max="${me.army + (b.d ? b.d[0] + b.d[1] + b.d[2] : 0)}">합계 ${b.d ? b.d[0] + b.d[1] + b.d[2] : 0} / ${me.army + (b.d ? b.d[0] + b.d[1] + b.d[2] : 0)} · 상대 병력은 비밀</span><button data-defend="${b.target}" data-bid="${b.id}">방어 배치 저장</button></div>` : ''}</div>`).join('');
     } else {
       h += `<h3>지난 전투 결과</h3>`;
       if (!v.reports.length) h += '<p class="msg">아직 전투 기록이 없어요.</p>';
@@ -1559,10 +1579,17 @@
     for (const b of box.querySelectorAll('[data-king]')) b.onclick = () => warAction('kingTo', { idx: +b.dataset.king });
     for (const b of box.querySelectorAll('[data-tgt]')) b.onclick = () => { warTarget = +b.dataset.tgt; renderWar(); };
     for (const b of box.querySelectorAll('[data-cancel]')) b.onclick = () => warAction('cancel', { battle: +b.dataset.cancel });
-    for (const b of box.querySelectorAll('[data-defend]')) b.onclick = () => warAction('defend', { terr: +b.dataset.defend, troops: troopsOf('def' + b.dataset.bid + '_') });
-    const upd = () => { const t = troopsOf('atk'); const el = $('atkSum'); if (el) { const s = t[0] + t[1] + t[2]; el.textContent = `합계 ${s} / ${me.army}`; el.style.color = s > me.army ? '#c22f53' : ''; } };
+    // 방어 배치: 쓸 수 있는 병력(지금 병력 + 이 전투에 이미 배치한 병력)을 넘으면 저장 막기
+    for (const b of box.querySelectorAll('[data-defend]')) {
+      const bid = b.dataset.bid, sumEl = $('defSum' + bid), max = +sumEl.dataset.max;
+      const check = () => { const t = troopsOf('def' + bid + '_'), s = t[0] + t[1] + t[2]; sumEl.textContent = s > max ? `합계 ${s} / ${max} · 병력이 모자라요!` : `합계 ${s} / ${max} · 상대 병력은 비밀`; sumEl.style.color = s > max ? '#c22f53' : ''; b.disabled = s > max; return s <= max; };
+      for (let i = 0; i < 3; i++) $('def' + bid + '_' + i).oninput = check;
+      check();
+      b.onclick = () => { if (check()) warAction('defend', { terr: +b.dataset.defend, troops: troopsOf('def' + bid + '_') }); };
+    }
+    const upd = () => { const t = troopsOf('atk'); const el = $('atkSum'); if (el) { const s = t[0] + t[1] + t[2]; el.textContent = s > me.army ? `합계 ${s} / ${me.army} · 병력이 모자라요!` : `합계 ${s} / ${me.army}`; el.style.color = s > me.army ? '#c22f53' : ''; if ($('btnDeclare')) $('btnDeclare').disabled = s > me.army || s <= 0; } };
     for (let i = 0; i < 3; i++) { const el = document.getElementById('atk' + i); if (el) el.oninput = upd; }
-    if ($('btnDeclare')) $('btnDeclare').onclick = () => warAction('declare', { terr: warTarget, troops: troopsOf('atk') });
+    if ($('btnDeclare')) { upd(); $('btnDeclare').onclick = () => warAction('declare', { terr: warTarget, troops: troopsOf('atk') }); }
     if ($('btnResolve')) $('btnResolve').onclick = () => warAction('resolveNow', {});
   }
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
