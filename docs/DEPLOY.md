@@ -23,32 +23,45 @@ node test/bots.js 150 ws://localhost:8080/ws 30
 2026-11-12 측정: 150명 동시 접속, 오류 0, 서버 CPU 한 코어의 약 6%, 메모리 약 80MB.
 → 가장 작은 서버로 충분하다.
 
-## 2. 인터넷에 올리기: 추천
+## 2. 인터넷에 올리기: Render 무료 + MongoDB Atlas 무료 (0원)
 
-| | **Render (추천)** | AWS Lightsail 서울 | Oracle Cloud 무료 |
-|---|---|---|---|
-| 비용 | 테스트 무료 → 오픈 때 월 $7 + 디스크 월 $0.25 | 월 $5 | 0원 |
-| 설정 난이도 | 쉬움 (GitHub 연결, 클릭 몇 번) | 중간 (SSH, 도메인·HTTPS 직접) | 어려움 (가입 심사, 방화벽) |
-| 업데이트 | git push 하면 자동 반영 | 서버에 접속해서 git pull | 서버에 접속해서 git pull |
-| 주소 | `https://mp2026.onrender.com` (HTTPS 자동) | 도메인 필요 | 도메인 필요 |
-| 속도 | 싱가포르 (한국에서 약 70ms, 충분) | 서울 (가장 빠름) | 춘천/서울 |
+무료 Render 서버는 15분 동안 아무도 없으면 잠들고, 다시 켜질 때 서버 안의 파일이 지워진다.
+그래서 게임 상태(나라·영토·병력·전투 기록)는 **MongoDB Atlas 무료 DB**에 저장한다.
+서버는 `MONGODB_URI` 가 있으면 자동으로 Atlas에 저장하고, 하루 한 번 백업본도 남긴다.
 
-**추천: Render.** "git에 올려 두고 그대로 옮긴다"는 방식에 딱 맞다. 코드가 바뀌면 git push 한 번으로 서버도 바뀐다.
+### ① MongoDB Atlas (5분)
+1. https://www.mongodb.com/cloud/atlas/register 에서 가입 (구글 계정 가능, **카드 필요 없음**).
+2. **Create a cluster → M0 (Free)** 선택. 지역은 가까운 곳(서울 또는 도쿄)을 고른다.
+3. **Database Access → Add New Database User**: 아이디/비밀번호를 만든다. 비밀번호는 영문+숫자만 쓰면 편하다 (특수문자는 주소에서 깨질 수 있음).
+4. **Network Access → Add IP Address → Allow Access from Anywhere (0.0.0.0/0)**. Render 서버 주소가 바뀌기 때문에 필요하다.
+5. **Connect → Drivers** 에서 연결 문자열을 복사한다.
+   `mongodb+srv://아이디:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority`
+   → `<password>` 를 3번에서 만든 비밀번호로 바꾼다.
+   ⚠ 이 문자열은 비밀번호다. 저장소나 단톡방에 올리지 않는다.
 
-### Render 순서
-1. https://render.com 에서 GitHub 계정으로 가입.
-2. **New → Blueprint** → 이 저장소(`hoje-hoje/MP_2026`) 선택 → 저장소의 `render.yaml` 대로 서버가 만들어진다.
-3. 몇 분 뒤 `https://mp2026.onrender.com` (이름은 다를 수 있음) 접속 확인.
-4. **학교 크롬북과 학교 와이파이로 접속 테스트** (가장 중요: 학교 관리 정책이 막는지 확인).
-5. 오픈 1주 전(12/7쯤): 플랜을 **Starter** 로 올리고 `render.yaml` 의 disk 주석을 풀어 데이터가 사라지지 않게 한다.
-   - 무료 플랜은 15분 동안 아무도 없으면 잠들고(첫 접속이 30초쯤 걸림), 재시작하면 데이터가 지워진다. 테스트용으로만 쓴다.
-6. 12/28 끝나면 서비스 삭제 → 비용 멈춤. 예상 비용: 12월 한 달 약 1만 원대.
+### ② Render (5분)
+1. https://render.com 에 **GitHub 계정으로 가입** (무료 플랜은 카드 필요 없음).
+2. **New → Blueprint** → 이 저장소(`hoje-hoje/MP_2026`) 선택. Render는 보통 기본 브랜치(main)를 배포한다.
+3. 설정 화면에서 **MONGODB_URI** 칸에 ①-5의 문자열을 붙여 넣고 만든다.
+4. 몇 분 뒤 로그에 `저장소: MongoDB (mp2026.state)` 가 보이면 성공. 주소: `https://mp2026.onrender.com` (이름은 다를 수 있음).
+5. **학교 크롬북 + 학교 와이파이로 접속 테스트.**
 
-Render는 보통 저장소의 기본 브랜치를 배포한다. 작업 브랜치(`claude/...`)를 main 에 합친 뒤 연결하거나, Render 설정에서 배포할 브랜치를 고른다.
+### ③ 잠들지 않게 깨우기 (UptimeRobot, 3분)
+1. https://uptimerobot.com 무료 가입.
+2. **New Monitor → HTTP(s)**, 주소 `https://(내 서버).onrender.com/health`, 간격 **5분**.
+3. 이제 5분마다 서버를 깨워서 잠들지 않는다. (무료 750시간/월 → 서버 하나는 한 달 내내 켜 둘 수 있다)
 
-### 다른 서버로 옮길 때
-`Dockerfile` 이 있어서 Fly.io, Lightsail 등 어디서든 같은 방식으로 돌릴 수 있다.
+### 업데이트
+저장소(main)에 코드가 올라가면 Render가 자동으로 새 버전을 배포한다. 배포·재시작 때 10~20초 끊기지만 데이터는 Atlas에 있어서 그대로 이어진다.
+
+### 행사 시작 전 할 일
+- Render 환경변수 `TEST_MODE` 를 `0` 으로 → '지금 전투 처리' 테스트 버튼이 사라지고, 건국은 12/15까지만 열린다.
+- 진짜 문제 파일 `server/puzzles.local.json` 은 저장소에 없으므로 Render에서는 **Secret File** 로 넣는다 (Render → 서비스 → Environment → Secret Files → 파일 이름 `puzzles.local.json` 으로 내용 붙여 넣기. 서버가 `/etc/secrets/puzzles.local.json` 을 자동으로 읽는다).
+
+### 무료로 버벅이면
+Render 서비스 플랜만 **Starter(월 $7)** 로 바꾸면 된다. 데이터는 Atlas에 있으니 그대로 이어진다. (해외 결제 카드 필요)
 
 ## 3. 주의
 - 저장소는 **공개**다. 운영진 비밀번호, 진짜 쿠폰 코드는 저장소에 넣지 말고 서버 환경변수로만 넣는다.
 - 균열 위치(`rift`)는 서버가 참가자에게 보내는 지도에서 지운다 (`/world.json`).
+- `MONGODB_URI`(DB 비밀번호 포함)는 Render 환경변수에만 넣는다.

@@ -1,5 +1,5 @@
 # Render 블루프린트: GitHub 저장소를 연결하면 이 설정으로 서버가 만들어진다.
-# 무료(free)로 먼저 테스트하고, 오픈 전에 starter + 디스크로 올린다 (docs/DEPLOY.md 참고).
+# 무료 플랜 + MongoDB Atlas 무료 저장소 (docs/DEPLOY.md 참고)
 services:
   - type: web
     name: mp2026
@@ -13,10 +13,9 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
-      - key: DATA_DIR
-        value: /var/data
-    # starter 로 올린 뒤 아래 주석을 풀면 재시작해도 데이터가 남는다
-    # disk:
-    #   name: mp2026-data
-    #   mountPath: /var/data
-    #   sizeGB: 1
+      - key: MONGODB_URI     # Atlas 연결 문자열: Render 화면에서 직접 넣는다 (저장소에 적지 않음)
+        sync: false
+      - key: MONGODB_DB
+        value: mp2026
+      - key: TEST_MODE       # 행사 시작 전 '0' 으로 바꾸면 '지금 전투 처리' 버튼이 사라짐
+        value: "1"
