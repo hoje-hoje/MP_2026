@@ -34,6 +34,7 @@
   let W = 0, H = 0, terrain = null, terr = null, terrs = [], home = null;
   let solid = null;      // 건물·제단 등 막힌 칸
   let sprites = [];      // 깊이 정렬해서 그리는 큰 물체
+  const nodes = [];      // 금광 (온라인 자원 지점)
   let names = [];
 
   // ------------------------------------------------------------ 유틸
@@ -99,7 +100,26 @@
         const [qx, qy] = t.portal;
         sprites.push({ x: P(qx) + 16, y: P(qy) + 20, portal: t, draw: (g, x, y) => drawPortal(g, x, y, t === home) });
       }
+      // 금광 (온라인 자원 지점): 영토마다 1곳, 하루 1번 캘 수 있음
+      for (let k = 0; k < 40; k++) {
+        const nx = ax + Math.round((hash(t.id, k, 11) - 0.5) * 18), ny = ay + Math.round((hash(t.id, k, 12) - 0.5) * 18);
+        if (Math.abs(nx - ax) + Math.abs(ny - ay) < 4 || blocked(nx, ny) || terrAt(nx, ny) !== t.id) continue;
+        const n = { id: t.id, t, x: P(nx) + 16, y: P(ny) + 24 };
+        nodes.push(n);
+        sprites.push({ x: n.x, y: n.y, draw: (g, x, y) => drawOre(g, x, y, mined.has(n.id)) });
+        break;
+      }
     }
+  }
+
+  function drawOre(g, x, y, empty) {
+    g.fillStyle = 'rgba(0,0,0,0.16)'; ell(g, x, y, 20, 6);
+    g.fillStyle = '#8a8197'; tri(g, x - 20, y, x - 4, y - 26, x + 8, y); tri(g, x - 6, y, x + 8, y - 20, x + 20, y);
+    g.fillStyle = '#6d6580'; tri(g, x - 4, y - 26, x + 8, y, x, y);
+    if (empty) return;
+    g.fillStyle = '#f2c14e'; circ(g, x - 8, y - 10, 4); circ(g, x + 9, y - 8, 3.5); circ(g, x + 1, y - 17, 3);
+    const tw = (Math.sin(performance.now() / 250 + x) + 1) / 2;
+    g.fillStyle = `rgba(255,255,255,${tw})`; g.fillRect(x - 9, y - 12, 2, 2); g.fillRect(x + 8, y - 10, 2, 2);
   }
 
   // 하늘로 가는 빛기둥
@@ -413,7 +433,7 @@
         { x: 4, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#e86a5c', '자원') },
         { x: 12, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#5b7fd6', '병력') },
         { x: 20, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#3fa37a', '정보') },
-        { x: 4, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#b06fd8', '아이템') },
+        { x: 4, y: 12, w: 4, h: 2, shop: 'vaccine', draw: (g, x, y) => stall(g, x, y, '#b06fd8', '백신 (균열 방어)') },
         { x: 12, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#e2a33b', '경매') },
         { x: 20, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, '#4bb3c4', '환전') },
       ],
@@ -541,6 +561,7 @@
   }
   function ascend(portalTerr) {
     player.entry = portalTerr;
+    player.skyLeft = SKY_LIMIT;
     enterRoom('temple', 'ground');
     toast('하늘 신전에 올라왔어요 · 여기선 싸울 수 없어요');
   }
@@ -651,6 +672,14 @@
 
   // ------------------------------------------------------------ 플레이어와 가짜 참가자
   const saved = store('mp2026.look') || {};
+  // 프로토타입 인벤토리 (이 브라우저에만 저장. 실제 게임은 서버가 관리)
+  const inv = Object.assign({ coin: 1200, army: 40, vaccine: 0, bought: 0 }, store('mp2026.inv') || {});
+  const usedCodes = new Set(store('mp2026.codes') || []);
+  const mined = new Set(store('mp2026.mined.d' + DAY) || []);
+  const VACCINE_BASE = 3000, VACCINE_STEP = 500, SKY_LIMIT = 5 * 60;
+  const vaccinePrice = () => VACCINE_BASE + VACCINE_STEP * inv.bought;
+  function saveInv() { store('mp2026.inv', inv); renderInv(); }
+  function renderInv() { $('invCoin').textContent = inv.coin.toLocaleString(); $('invArmy').textContent = inv.army.toLocaleString(); $('invVac').textContent = inv.vaccine; }
   const player = {
     x: 0, y: 0, dir: 1, moving: false, scene: 'ground', room: null, entry: null,
     name: saved.name || '나', tag: '#277a58',
@@ -734,7 +763,7 @@
     if (k === 't') goHome();
     if (k === 'e') interact();
     if (k === '[' || k === ']') { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; }
+    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; }
   });
   addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
   addEventListener('blur', () => keys.clear());
@@ -797,13 +826,18 @@
   function updatePrompt() {
     let best = null;
     if (player.scene === 'sky') {
-      for (const sp of player.room.sprites) if (sp.board && Math.hypot(sp.x - player.x, sp.y + 16 - player.y) < 90) best = { kind: 'board', text: '게시판 읽기' };
+      for (const sp of player.room.sprites) {
+        if (sp.board && Math.hypot(sp.x - player.x, sp.y + 16 - player.y) < 90) best = { kind: 'board', text: '게시판 읽기' };
+        if (sp.prop && sp.prop.shop === 'vaccine' && Math.hypot(sp.x - player.x, sp.y + 20 - player.y) < 100) best = { kind: 'vaccine', text: `백신 사기 · 코인 ${vaccinePrice().toLocaleString()}` };
+      }
     } else {
       const tx = player.x / TILE, ty = player.y / TILE;
       const o = terrAt(tx | 0, ty | 0);
       if (o > 0) {
         const t = terrs[o];
+        const n = nodes.find((q) => q.id === t.id);
         if (t.portal && Math.hypot(t.portal[0] + 0.5 - tx, t.portal[1] + 0.5 - ty) < 1.8) best = { kind: 'portal', t, text: '하늘로 올라가기' };
+        else if (n && Math.hypot(n.x - player.x, n.y - player.y) < 52) best = { kind: 'node', n, text: mined.has(n.id) ? '오늘은 다 캤어요 (내일 다시)' : '금광 캐기 · 코인' };
         else if (Math.hypot(t.altar[0] + 0.5 - tx, t.altar[1] + 0.5 - ty) < 2.4) best = { kind: 'altar', t, text: `${t.name} 제단 · ${t.type} 문제 풀기` };
       }
     }
@@ -819,6 +853,17 @@
   function interact() {
     if (!near) return;
     if (near.kind === 'portal') ascend(near.t);
+    else if (near.kind === 'node') {
+      if (mined.has(near.n.id)) { toast('이 금광은 오늘 이미 캤어요'); return; }
+      const got = 300 + Math.round(hash(near.n.id, DAY, 5) * 30) * 10;
+      inv.coin += got; mined.add(near.n.id); store('mp2026.mined.d' + DAY, [...mined]); saveInv(); near = null;
+      toast(`금광에서 코인 ${got}을 캤어요`);
+    } else if (near.kind === 'vaccine') {
+      const price = vaccinePrice();
+      if (inv.coin < price) { toast(`코인이 ${(price - inv.coin).toLocaleString()} 모자라요`); return; }
+      inv.coin -= price; inv.vaccine += 1; inv.bought += 1; saveInv(); near = null;
+      toast(`백신을 샀어요 · 보유 ${inv.vaccine}개 (다음 가격 ${vaccinePrice().toLocaleString()})`);
+    }
     else if (near.kind === 'altar') toast(`'${near.t.type}' 퍼즐은 다음 단계에서 붙일 예정이에요`);
     else if (near.kind === 'board') {
       if (player.room.id === 'wander') toast('[모집] 4팀 용병 1명 · 몸값 협의 / [귀화] 라온주가 국민을 받습니다');
@@ -969,6 +1014,27 @@
   $('btnCloset').addEventListener('click', () => { $('nick').value = player.name; closetUI(); $('closet').hidden = false; });
   $('btnClosetDone').addEventListener('click', () => { $('closet').hidden = true; });
 
+  // 쿠폰 (오프라인에서 받은 1회용 코드). 실제 게임에서는 서버가 확인하고, 한 번 쓰면 모두에게 사라진다.
+  const DEMO_CODES = { 'MP-TEST-0001': { coin: 1000 }, 'MP-TEST-0002': { army: 30 }, 'MP-TEST-0003': { vaccine: 1 } };
+  const REWARD_NAME = { coin: '코인', army: '병력', vaccine: '백신' };
+  function redeem() {
+    const raw = $('couponIn').value.toUpperCase().replace(/\s+/g, '');
+    const code = /^MP[A-Z0-9]{8}$/.test(raw) ? `MP-${raw.slice(2, 6)}-${raw.slice(6)}` : raw;
+    const msg = $('couponMsg');
+    if (!/^MP-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) { msg.textContent = '코드 모양이 달라요. 예: MP-AB12-CD34'; return; }
+    if (usedCodes.has(code)) { msg.textContent = '이미 사용한 코드예요.'; return; }
+    const r = DEMO_CODES[code];
+    if (!r) { msg.textContent = '없는 코드예요. (지금은 미리보기라 MP-TEST-0001~0003만 받아요)'; return; }
+    for (const [k, v] of Object.entries(r)) inv[k] += v;
+    usedCodes.add(code); store('mp2026.codes', [...usedCodes]); saveInv();
+    msg.textContent = `받았어요: ${Object.entries(r).map(([k, v]) => `${REWARD_NAME[k]} +${v}`).join(', ')}`;
+    $('couponIn').value = '';
+  }
+  $('btnCoupon').addEventListener('click', () => { $('couponMsg').textContent = '점심시간에 받은 코드를 입력하세요. 코드는 한 번만 쓸 수 있어요.'; $('coupon').hidden = false; $('couponIn').focus(); });
+  $('btnCouponUse').addEventListener('click', redeem);
+  $('couponIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') redeem(); });
+  $('btnCouponClose').addEventListener('click', () => { $('coupon').hidden = true; });
+
   // ------------------------------------------------------------ 루프
   let dpr = 1, vw = 0, vh = 0;
   function resize() {
@@ -999,12 +1065,22 @@
       if (Math.abs(mx) > 0.1) player.dir = mx < 0 ? -1 : 1;
       if (player.scene === 'sky') checkDoor();
     }
+    if (player.scene === 'sky') {
+      player.skyLeft -= dt;
+      if (player.skyLeft <= 0) { descend(); toast('하늘에 머물 수 있는 5분이 끝나 땅으로 내려왔어요'); }
+    }
     for (const b of bots) updateBot(b, dt);
     if (player.scene === 'sky') drawSky(t); else drawGround(t);
     if (fadeT > 0) { fadeT -= dt; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = `rgba(255,255,255,${Math.max(0, fadeT / 0.35)})`; ctx.fillRect(0, 0, vw, vh); }
 
     hudT -= dt;
-    if (hudT <= 0) { hudT = 0.15; updateWhere(); updatePrompt(); drawMini(); if (!$('bigmap').hidden) drawBig(); }
+    if (hudT <= 0) {
+      hudT = 0.15;
+      const sky = player.scene === 'sky';
+      $('skyTimer').hidden = !sky;
+      if (sky) { const l = Math.max(0, Math.ceil(player.skyLeft)); $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.toggle('warn', l <= 60); }
+      updateWhere(); updatePrompt(); drawMini(); if (!$('bigmap').hidden) drawBig();
+    }
     requestAnimationFrame(frame);
   }
 
@@ -1093,6 +1169,7 @@
     goHome();
     $('toast').hidden = true;
     setupDoomCard();
+    renderInv();
     $('loading').hidden = true;
     if (DAY === 5) setTimeout(() => toast('신들이 선포했다: 12월 28일, 이 세계는 끝난다.'), 600);
     else if (DOOM) { const n = terrs.filter((t) => t && gone[t.id]).length; if (n) setTimeout(() => toast(`균열이 영토 ${n}곳을 삼켰다`), 600); }

@@ -51,6 +51,17 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #bigmap h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 22px; }
 #bigmap canvas { width: min(78vmin, 720px); height: min(78vmin, 720px); max-width: 100%; border-radius: 12px; cursor: crosshair; display: block; }
 #bigmap .legend { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; font-weight: 700; }
+#inv { right: max(12px, env(safe-area-inset-right, 0px)); top: calc(70px + env(safe-area-inset-top, 0px)); padding: 6px 12px; display: flex; gap: 12px; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#inv b { color: var(--muted); font-weight: 700; margin-right: 2px; }
+#skyTimer { left: 50%; transform: translateX(-50%); top: calc(84px + env(safe-area-inset-top, 0px)); padding: 4px 14px; font-size: 13px; font-weight: 700; }
+#skyTimer b { font-family: var(--font-display); font-size: 18px; font-weight: 400; font-variant-numeric: tabular-nums; }
+#skyTimer.warn { background: #ffe1e8; }
+#coupon { position: fixed; z-index: 20; inset: 0; background: rgba(27, 20, 48, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#coupon .panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; width: min(380px, 100%); }
+#coupon h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 24px; }
+#coupon label { font-size: 13px; font-weight: 700; display: block; margin-bottom: 6px; }
+#coupon input { width: 100%; box-sizing: border-box; font: 700 20px var(--font-display); letter-spacing: 2px; text-transform: uppercase; color: var(--ink); background: #ffffff; border: 3px solid var(--ink); border-radius: 10px; padding: 8px 10px; }
+#coupon .msg { margin: 0; font-size: 13px; font-weight: 700; color: var(--muted); min-height: 2.6em; }
 #closet { position: fixed; z-index: 20; inset: 0; background: rgba(27, 20, 48, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #closet .panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; width: min(380px, 100%); }
 #closet h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 24px; }
@@ -67,6 +78,8 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #stick div { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 999px; background: rgba(255,255,255,0.9); border: 3px solid var(--ink); }
 @media (max-width: 720px) {
   #doom { display: none; }
+  #skyTimer { top: calc(120px + env(safe-area-inset-top, 0px)); }
+  #inv { top: calc(122px + env(safe-area-inset-top, 0px)); }
   #help { display: none; }
   #mini canvas { width: 120px; height: 120px; }
   #tools button { font-size: 14px; padding: 0 10px; }
@@ -90,15 +103,24 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 <div id="tools" class="hud">
   <button id="btnMap" type="button">지도 (M)</button>
   <button id="btnHome" type="button">우리 수도 (T)</button>
+  <button id="btnCoupon" type="button">쿠폰</button>
   <button id="btnCloset" type="button">꾸미기</button>
 </div>
+
+<div id="inv" class="hud card" aria-label="보유 자원">
+  <span><b>코인</b> <span id="invCoin">0</span></span>
+  <span><b>병력</b> <span id="invArmy">0</span></span>
+  <span><b>백신</b> <span id="invVac">0</span></span>
+</div>
+
+<div id="skyTimer" class="hud card" hidden>하늘 체류 <b id="skyLeft">5:00</b> 남음</div>
 
 <div id="mini" class="hud card">
   <canvas id="miniCanvas" width="336" height="336" aria-label="미니맵, 누르면 그 위치로 이동(테스트)"></canvas>
   <div class="cap">누르면 순간이동 (테스트용)</div>
 </div>
 
-<div id="help" class="hud card">WASD·방향키 이동 · E 포털·제단 · Shift 빨리 걷기 · 휠 확대/축소 · [ ] 날짜 바꾸기 (테스트)</div>
+<div id="help" class="hud card">WASD·방향키 이동 · E 포털·금광·제단 · Shift 빨리 걷기 · 휠 확대/축소 · [ ] 날짜 바꾸기 (테스트)</div>
 
 <div id="prompt" class="hud card" hidden><span id="promptText">제단</span><kbd>E</kbd></div>
 <div id="toast" class="hud" hidden></div>
@@ -119,6 +141,15 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
     <div><label>옷 색</label><div class="swatches" id="outfitSw"></div></div>
     <div><label>헤어스타일</label><div class="seg" id="lenSeg"><button type="button" data-long="0">짧은 머리</button><button type="button" data-long="1">긴 머리</button></div></div>
     <button id="btnClosetDone" type="button">완료</button>
+  </div>
+</div>
+
+<div id="coupon" hidden>
+  <div class="panel card">
+    <h2>쿠폰 코드</h2>
+    <div><label for="couponIn">코드</label><input id="couponIn" type="text" maxlength="14" placeholder="MP-AB12-CD34" autocomplete="off" spellcheck="false"></div>
+    <p id="couponMsg" class="msg"></p>
+    <div class="seg"><button id="btnCouponUse" type="button">사용하기</button><button id="btnCouponClose" type="button">닫기</button></div>
   </div>
 </div>
 
