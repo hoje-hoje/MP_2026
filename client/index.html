@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>MP 2026 세계</title>
 <link rel="icon" href="assets/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
@@ -47,6 +48,8 @@ button:hover { border-image-source: url(assets/na/btn_hover.png); }
 button:active { border-image-source: url(assets/na/btn_pressed.png); transform: translateY(1px); }
 .sw, .facebtn, .charbtn { border-image: none; text-shadow: none; }
 button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2px; }
+#zoomBox { right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(232px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 4px; }
+#zoomBox button { width: 44px; min-height: 40px; font-size: 20px; padding: 0; }
 #mini { right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 6px; }
 #mini canvas { display: block; width: 168px; height: 168px; border-radius: 10px; cursor: crosshair; }
 #mini .cap { font-size: 11px; font-weight: 700; color: var(--muted); text-align: center; margin-top: 4px; }
@@ -108,7 +111,10 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 .shopItem small { color: var(--muted); font-size: 11px; }
 .shopItem .seg { display: flex; gap: 4px; flex: none; }
 .shopItem button { min-height: 36px; font-size: 13px; }
-#buildBar { left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 6px; align-items: center; padding: 6px 10px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 32px); }
+#buildBar { left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 4px; align-items: center; padding: 6px 10px; max-width: calc(100vw - 32px); }
+#buildBar .r { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; font-size: 13px; }
+#buildBar .r[hidden] { display: none; }
+#buildColors button { min-height: 30px; min-width: 44px; font-size: 12px; color: #fff; border: 3px solid #2b2340; border-image: none; text-shadow: 0 1px 0 #000; padding: 0 6px; }
 #buildBar[hidden] { display: none; }
 #buildBar button { min-height: 36px; font-size: 13px; }
 #buildBar button[aria-pressed="true"] { filter: brightness(1.25); outline: 3px solid #ffd34d; }
@@ -259,6 +265,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 
 <div id="skyTimer" class="hud card" hidden>하늘 체류 <b id="skyLeft">5:00</b> 남음</div>
 
+<div id="zoomBox" class="hud"><button id="zoomIn" type="button" aria-label="지도 크게">＋</button><button id="zoomOut" type="button" aria-label="지도 작게">－</button></div>
 <div id="mini" class="hud card">
   <canvas id="miniCanvas" width="336" height="336" aria-label="미니맵, 누르면 그 위치로 이동(테스트)"></canvas>
   <div class="cap">누르면 순간이동 (테스트용)</div>
@@ -297,7 +304,9 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   </div>
 </div>
 
-<div id="buildBar" class="hud card" hidden><b>설치 모드</b><button data-k="floor" type="button">▦ 바닥 <small>0</small></button><button data-k="wall" type="button">🧱 방벽 <small>0</small></button><button data-k="trap" type="button">🪤 덫 <small>0</small></button><button id="buildOff" type="button">끄기 (G)</button></div>
+<div id="buildBar" class="hud card" hidden><div class="r"><b>설치 모드</b><button data-k="floor" type="button">▦ 바닥 <small>0</small></button><button data-k="wall" type="button">🧱 방벽 <small>0</small></button><button data-k="trap" type="button">🪤 덫 <small>0</small></button><button id="buildOff" type="button">끄기 (G)</button></div>
+<div class="r"><span>모양</span><button data-shape="1" type="button">1칸</button><button data-shape="h3" type="button">가로 3칸</button><button data-shape="v3" type="button">세로 3칸</button><button data-shape="s3" type="button">3×3</button></div>
+<div class="r" id="buildColors"></div></div>
 <div id="storeBox" class="modalbox" hidden><div class="panel card"><h2>📦 우리 저장소</h2><div id="storeBody"></div><div class="seg"><button id="storeBuild" type="button">설치 모드 켜기</button><button id="storeClose" type="button">닫기</button></div></div></div>
 <div id="shopBox" class="modalbox" hidden><div class="panel card"><h2>🛒 하늘 거래소</h2><div id="shopBody"></div><div class="seg"><button id="shopClose" type="button">닫기</button></div></div></div>
 <div id="coupon" hidden>

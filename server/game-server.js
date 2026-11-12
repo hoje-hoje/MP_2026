@@ -463,30 +463,41 @@ wss.on('connection', (ws) => {
         notifyNation(n.id, `🛒 ${s.acc.name}님이 ${label} 구매 (코인 −${cost})`);
         break;
       }
-      case 'place': case 'pickup': { // 우리 땅에 바닥·방벽·덫 놓기 / 거두기
+      case 'place': case 'pickup': { // 우리 땅에 바닥·방벽·덫 놓기 / 거두기. 바닥·방벽은 한 번에 최대 9칸 (1칸·가로3·세로3·3×3)
         const n = world.nationOfPlayer(s.token); if (!n) return send(ws, { t: 'err', text: '나라가 있어야 설치할 수 있어요' });
-        const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y);
-        if (!nextTo(s, x, y)) return send(ws, { t: 'err', text: '바로 앞 칸에만 놓을 수 있어요' });
-        if (world.ownerOf(terrAtTile(x, y)) !== n.id) return send(ws, { t: 'err', text: '우리 나라 땅에만 놓을 수 있어요' });
+        const k = ['floor', 'wall', 'trap'].includes(m.k) ? m.k : null;
+        let list = Array.isArray(m.tiles) ? m.tiles.slice(0, 9) : [[m.x, m.y]];
+        if (k === 'trap' && m.t === 'place') list = list.slice(0, 1);
+        list = list.map((p) => [p[0] | 0, p[1] | 0]);
         n.items = n.items || {};
-        if (m.t === 'pickup') {
-          const e = world.s.tiles[i];
-          if (e && e.n === n.id) { delete world.s.tiles[i]; n.items[e.k] = (n.items[e.k] || 0) + 1; sendTile(i); }
-          else if (world.s.traps[i] === n.id) { delete world.s.traps[i]; n.items.trap = (n.items.trap || 0) + 1; sendTrap(n.id, i, false); }
-          else return send(ws, { t: 'err', text: '거둘 게 없어요' });
-          dirty = true; sendViews([n.id]); return;
+        let done = 0, why = '';
+        for (const [x, y] of list) {
+          const i = tileIdx(x, y);
+          if (!nextTo(s, x, y, 3.6)) { why = '너무 멀어요'; continue; }
+          if (world.ownerOf(terrAtTile(x, y)) !== n.id) { why = '우리 나라 땅에만 놓을 수 있어요'; continue; }
+          if (m.t === 'pickup') {
+            const e = world.s.tiles[i];
+            if (e && e.n === n.id) { delete world.s.tiles[i]; n.items[e.k] = (n.items[e.k] || 0) + 1; sendTile(i); done++; }
+            else if (world.s.traps[i] === n.id) { delete world.s.traps[i]; n.items.trap = (n.items.trap || 0) + 1; sendTrap(n.id, i, false); done++; }
+            continue;
+          }
+          if (!k) return;
+          if (!(n.items[k] > 0)) { why = '저장소에 남은 게 없어요 (하늘 거래소에서 사요)'; break; }
+          if (!walkableTerrain(tileAt(x, y)) || treeKind(tileAt(x, y), x, y) && !world.s.chopped[i]) { why = '놓을 수 없는 칸이 있어요'; continue; }
+          if (reservedTile(x, y)) { why = '제단·포털·저장소 바로 옆엔 못 놓아요'; continue; }
+          const cur = world.s.tiles[i];
+          if (world.s.traps[i] || (cur && !(k === 'floor' && cur.k === 'floor' && cur.n === n.id))) { why = '이미 뭔가 놓인 칸이 있어요'; continue; }
+          if (k === 'wall' && Object.values(world.s.tiles).filter((e) => e.n === n.id && e.k === 'wall').length >= NUM.maxWalls) { why = `방벽은 나라당 ${NUM.maxWalls}개까지예요`; break; }
+          if (k === 'trap' && trapsOf(n.id).length >= NUM.maxTraps) { why = `덫은 나라당 ${NUM.maxTraps}개까지예요`; break; }
+          if (k === 'wall' && [...online.values()].some((o) => o.scene === 'ground' && o.x != null && Math.floor(o.x / 32) === x && Math.floor(o.y / 32) === y)) { why = '사람이 서 있는 칸은 빼고 놓았어요'; continue; }
+          if (cur) { cur.c = Math.max(0, Math.min(5, m.c | 0)); sendTile(i); continue; } // 우리 바닥 위에 바닥: 색만 바꿈 (무료)
+          n.items[k]--; done++;
+          if (k === 'trap') { world.s.traps[i] = n.id; sendTrap(n.id, i, true); }
+          else { world.s.tiles[i] = k === 'floor' ? { k, n: n.id, c: Math.max(0, Math.min(5, m.c | 0)) } : { k, n: n.id }; sendTile(i); }
         }
-        const k = ['floor', 'wall', 'trap'].includes(m.k) ? m.k : null; if (!k) return;
-        if (!(n.items[k] > 0)) return send(ws, { t: 'err', text: '저장소에 남은 게 없어요 (하늘 거래소에서 사요)' });
-        if (!walkableTerrain(tileAt(x, y)) || treeKind(tileAt(x, y), x, y) && !world.s.chopped[i]) return send(ws, { t: 'err', text: '여기엔 놓을 수 없어요' });
-        if (reservedTile(x, y)) return send(ws, { t: 'err', text: '제단·포털·저장소 바로 옆엔 놓을 수 없어요' });
-        if (world.s.tiles[i] || world.s.traps[i]) return send(ws, { t: 'err', text: '이미 뭔가 놓여 있어요' });
-        if (k === 'wall' && Object.values(world.s.tiles).filter((e) => e.n === n.id && e.k === 'wall').length >= NUM.maxWalls) return send(ws, { t: 'err', text: `방벽은 나라당 ${NUM.maxWalls}개까지예요` });
-        if (k === 'trap' && trapsOf(n.id).length >= NUM.maxTraps) return send(ws, { t: 'err', text: `덫은 나라당 ${NUM.maxTraps}개까지예요` });
-        if (k === 'wall') for (const o of online.values()) if (o.scene === 'ground' && o.x != null && Math.floor(o.x / 32) === x && Math.floor(o.y / 32) === y) return send(ws, { t: 'err', text: '사람이 서 있는 칸이에요' });
-        n.items[k]--; dirty = true;
-        if (k === 'trap') { world.s.traps[i] = n.id; sendTrap(n.id, i, true); } else { world.s.tiles[i] = { k, n: n.id }; sendTile(i); }
-        sendViews([n.id]);
+        if (done || m.t === 'place') { dirty = true; sendViews([n.id]); }
+        if (!done && why) send(ws, { t: 'err', text: why });
+        else if (done && why && list.length > 1) send(ws, { t: 'ok', text: `${done}칸 ${m.t === 'pickup' ? '거둠' : '놓음'} · ${why}` });
         break;
       }
       case 'breakStart': case 'breakWall': { // 남의 방벽 부수기: 5초 동안 붙어 있어야 함

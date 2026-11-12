@@ -62,6 +62,17 @@
   let MY_TRAPS = new Set();       // 우리 나라 덫 (다른 나라엔 안 보임)
   let STORE_AT = new Map();       // 칸 번호 -> 나라 (수도 저장소)
   const FACE_D = [[0, 1], [0, -1], [-1, 0], [1, 0]];
+  // 바닥 색 (돌 무늬에 색을 입힌 6가지)
+  const FLOOR_COLORS = [['돌', null], ['나무', '#c98a4a'], ['벽돌', '#d4553f'], ['모래', '#f0d48a'], ['파랑', '#5b9cf0'], ['보라', '#b07ae6']];
+  const floorCache = [];
+  function floorArt(c) {
+    if (floorCache[c]) return floorCache[c];
+    const cv = document.createElement('canvas'); cv.width = cv.height = 32; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.drawImage(ART.x_stonefloor, 0, 0, 32, 32);
+    const col = (FLOOR_COLORS[c] || FLOOR_COLORS[0])[1];
+    if (col) { g.globalCompositeOperation = 'color'; g.fillStyle = col; g.fillRect(0, 0, 32, 32); g.globalCompositeOperation = 'soft-light'; g.fillStyle = col; g.fillRect(0, 0, 32, 32); g.globalCompositeOperation = 'destination-in'; g.drawImage(ART.x_stonefloor, 0, 0, 32, 32); g.globalCompositeOperation = 'source-over'; g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(0, 0, 32, 32); }
+    return (floorCache[c] = cv);
+  }
   // 나무: 바닥에 굽지 않고 따로 그려서(깊이 정렬) 뒤로 지나갈 수 있게, 줄기 칸은 못 지나가게.
   let noTree = new Uint8Array(1);
   function treeAt(x, y) {
@@ -401,15 +412,23 @@
   const chunks = new Map();
   let chunkBudget = 0;
 
-  function dirtyTile(i) { const x = i % W, y = Math.floor(i / W); for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) chunks.delete(Math.floor((x + dx * 3) / CHUNK) + ',' + Math.floor((y + dy * 3) / CHUNK)); }
+  // 칸이 바뀌면 그 칸이 들어 있는 청크만 바로 다시 그린다 (깜빡임 없게)
+  const staleChunks = new Map();
+  function dirtyTile(i) {
+    const x = i % W, y = Math.floor(i / W), keys = new Set();
+    for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) keys.add(Math.floor((x + dx * 3) / CHUNK) + ',' + Math.floor((y + dy * 3) / CHUNK));
+    for (const k of keys) if (chunks.has(k)) { const [ci, cj] = k.split(',').map(Number); chunks.set(k, renderChunk(ci, cj)); }
+  }
+  // 땅 주인이 바뀌었을 때: 새로 그리는 동안엔 이전 그림을 그대로 보여 준다
+  function invalidateChunks() { for (const [k, c] of chunks) staleChunks.set(k, c); chunks.clear(); while (staleChunks.size > 80) staleChunks.delete(staleChunks.keys().next().value); }
   function getChunk(ci, cj) {
     const k = ci + ',' + cj;
     let c = chunks.get(k);
     if (c) { chunks.delete(k); chunks.set(k, c); return c; }
-    if (chunkBudget <= 0) return null;
+    if (chunkBudget <= 0) return staleChunks.get(k) || null;
     chunkBudget--;
     c = renderChunk(ci, cj);
-    chunks.set(k, c);
+    chunks.set(k, c); staleChunks.delete(k);
     if (chunks.size > 64) chunks.delete(chunks.keys().next().value);
     return c;
   }
@@ -481,7 +500,7 @@
             if ((x + y) % 2 === 0) { g.fillStyle = '#5a3f9e'; g.fillRect(px + 4, py + 18, TILE - 8, 3); }
             break;
         }
-        { const e = TILES[y * W + x]; if (e && e.k === 'floor') { g.drawImage(ART.x_stonefloor, px, py, TILE, TILE); g.fillStyle = natColor(e.n); g.globalAlpha = 0.18; g.fillRect(px, py, TILE, TILE); g.globalAlpha = 1; } }
+        { const e = TILES[y * W + x]; if (e && e.k === 'floor') g.drawImage(floorArt(e.c | 0), px, py, TILE, TILE); }
         // 영토 색 + 국경선: 우리 나라는 진하게, 경계는 우리 나라 색 띠 / 나머지 경계는 흰 선
         const o = terrAt(x, y);
         const own = o > 0 ? ownerOf(o) : null;
@@ -996,7 +1015,24 @@
   $('prompt').addEventListener('pointerdown', (e) => { e.preventDefault(); pressE(); });
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) $('prompt').addEventListener(ev, releaseE);
   addEventListener('blur', () => keys.clear());
-  canvas.addEventListener('wheel', (e) => { e.preventDefault(); zoom = Math.max(0.5, Math.min(1.6, zoom * (e.deltaY < 0 ? 1.1 : 0.9))); }, { passive: false });
+  // 확대·축소는 지도만 (브라우저 화면 확대 대신): 휠, Ctrl+휠(터치패드 핀치), Ctrl +/−/0, 두 손가락 핀치, ＋/－ 버튼
+  const setZoom = (z) => { zoom = Math.max(0.5, Math.min(1.8, z)); };
+  addEventListener('wheel', (e) => {
+    const onMap = e.target === canvas;
+    if (!onMap && !e.ctrlKey) return; // 창 안 스크롤은 그대로
+    e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9));
+  }, { passive: false });
+  addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (['=', '+', '-', '_', '0'].includes(e.key)) { e.preventDefault(); setZoom(e.key === '0' ? (innerWidth < 720 ? 0.8 : 1) : zoom * (e.key === '-' || e.key === '_' ? 0.9 : 1.1)); }
+  });
+  $('zoomIn').addEventListener('click', () => setZoom(zoom * 1.15));
+  $('zoomOut').addEventListener('click', () => setZoom(zoom / 1.15));
+  const touches = new Map(); let pinch0 = 0, zoom0 = 1;
+  const pinchDist = () => { const [a, b] = [...touches.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  canvas.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (touches.size === 2) { pinch0 = pinchDist(); zoom0 = zoom; stick.on = false; stickEl.hidden = true; } });
+  canvas.addEventListener('pointermove', (e) => { if (!touches.has(e.pointerId)) return; touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (touches.size === 2 && pinch0) setZoom(zoom0 * pinchDist() / pinch0); });
+  for (const ev of ['pointerup', 'pointercancel']) canvas.addEventListener(ev, (e) => { touches.delete(e.pointerId); if (touches.size < 2) pinch0 = 0; });
 
   const stickEl = $('stick'), knob = stickEl.firstElementChild;
   canvas.addEventListener('pointerdown', (e) => {
@@ -1007,7 +1043,7 @@
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!stick.on || e.pointerId !== stick.id) return;
+    if (!stick.on || e.pointerId !== stick.id || touches.size >= 2) return;
     let dx = e.clientX - stick.ox, dy = e.clientY - stick.oy;
     const d = Math.hypot(dx, dy), m = 45;
     if (d > m) { dx = dx / d * m; dy = dy / d * m; }
@@ -1119,9 +1155,10 @@
     }
     const [fx, fy] = facingTile(), i = fy * W + fx, e = TILES[i];
     if (build.on && myView) {
-      if ((e && e.n === MY_NID) || MY_TRAPS.has(i)) return { kind: 'pickup', x: fx, y: fy, text: `${ITEM_NAME[e ? e.k : 'trap']} 거두기` };
+      const tiles = shapeTiles(), shape = build.k === 'trap' ? '1' : build.shape;
+      if ((e && e.n === MY_NID && !(build.k === 'floor' && e.k === 'floor' && (e.c | 0) !== build.c)) || MY_TRAPS.has(i)) return { kind: 'pickup', tiles, text: `${SHAPE_NAME[shape]} 거두기 (E) · 바로 앞: ${ITEM_NAME[e ? e.k : 'trap']}` };
       if (ownerOf(terrAt(fx, fy)) !== MY_NID) return { kind: 'info', text: '설치 모드 · 우리 땅에만 놓을 수 있어요' };
-      return { kind: 'place', x: fx, y: fy, text: `${ITEM_NAME[build.k]} 놓기 · 남은 ${myView.me.items[build.k]}개` };
+      return { kind: 'place', tiles, text: `${build.k === 'floor' ? FLOOR_COLORS[build.c][0] + ' ' : ''}${ITEM_NAME[build.k]} ${SHAPE_NAME[shape]} 놓기 · 남은 ${myView.me.items[build.k]}개` };
     }
     if (treeAt(fx, fy) && MY_NID && ownerOf(terrAt(fx, fy)) === MY_NID) return { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '나무 베기 · E 꾹 누르기' };
     if (e && e.k === 'wall' && e.n !== MY_NID) return { kind: 'break', x: fx, y: fy, hold: MPRules.NUM.wallBreakSec * 1000, text: `${natName(e.n)} 방벽 부수기 · E 꾹 ${MPRules.NUM.wallBreakSec}초` };
@@ -1145,14 +1182,30 @@
     if (netOn) ws.send(JSON.stringify(hold.kind === 'steal' ? { t: 'steal', nid: hold.nid } : { t: hold.kind === 'chop' ? 'chop' : 'breakWall', x: hold.x, y: hold.y }));
   }
   // 설치 모드 (G): 저장소의 바닥·방벽·덫을 바로 앞 칸에 놓기
-  const build = { on: false, k: 'floor' };
+  const build = { on: false, k: 'floor', shape: '1', c: 0 };
+  const SHAPE_NAME = { 1: '1칸', h3: '가로 3칸', v3: '세로 3칸', s3: '3×3' };
+  // 설치 모양: 바라보는 방향으로는 앞으로 뻗고, 옆 방향은 가운데 맞춤
+  function shapeTiles() {
+    const d = FACE_D[player.face | 0] || [0, 1], [fx, fy] = facingTile();
+    const shape = build.k === 'trap' ? '1' : build.shape;
+    const wx = shape === 'h3' || shape === 's3' ? 3 : 1, wy = shape === 'v3' || shape === 's3' ? 3 : 1;
+    const xs = wx === 1 ? [fx] : d[0] ? [0, 1, 2].map((k) => fx + k * d[0]) : [fx - 1, fx, fx + 1];
+    const ys = wy === 1 ? [fy] : d[1] ? [0, 1, 2].map((k) => fy + k * d[1]) : [fy - 1, fy, fy + 1];
+    const out = []; for (const y of ys) for (const x of xs) out.push([x, y]); return out;
+  }
   function setBuild(on, k) {
     if (on && !myView) { toast('나라가 있어야 설치할 수 있어요'); return; }
     build.on = on; if (k) build.k = k;
     $('buildBar').hidden = !on;
     for (const b of document.querySelectorAll('#buildBar [data-k]')) { b.setAttribute('aria-pressed', String(b.dataset.k === build.k)); b.querySelector('small').textContent = myView ? myView.me.items[b.dataset.k] : 0; }
+    for (const b of document.querySelectorAll('#buildBar [data-shape]')) { b.setAttribute('aria-pressed', String(b.dataset.shape === build.shape)); b.disabled = build.k === 'trap'; }
+    for (const b of document.querySelectorAll('#buildBar [data-c]')) b.setAttribute('aria-pressed', String(+b.dataset.c === build.c));
+    $('buildColors').hidden = build.k !== 'floor';
     near = null;
   }
+  for (const b of document.querySelectorAll('#buildBar [data-shape]')) b.addEventListener('click', () => { build.shape = b.dataset.shape; setBuild(true); });
+  $('buildColors').innerHTML = FLOOR_COLORS.map(([name, col], i) => `<button type="button" data-c="${i}" title="${name}" style="background:${col || '#9a958c'}">${name}</button>`).join('');
+  for (const b of document.querySelectorAll('#buildBar [data-c]')) b.addEventListener('click', () => { build.c = +b.dataset.c; setBuild(true); });
   for (const b of document.querySelectorAll('#buildBar [data-k]')) b.addEventListener('click', () => setBuild(true, b.dataset.k));
   $('buildOff').addEventListener('click', () => setBuild(false));
   // 우리 저장소 창
@@ -1185,7 +1238,7 @@
     if (near.kind === 'store') { openStore(); return; }
     if (near.kind === 'shop') { openShop(); return; }
     if (near.kind === 'hit') { HITFX.set(near.t.id, performance.now() + 120); if (netOn) ws.send(JSON.stringify({ t: 'hit', terr: near.t.id })); return; }
-    if (near.kind === 'place' || near.kind === 'pickup') { if (netOn) ws.send(JSON.stringify({ t: near.kind, x: near.x, y: near.y, k: build.k })); return; }
+    if (near.kind === 'place' || near.kind === 'pickup') { if (netOn) ws.send(JSON.stringify({ t: near.kind, tiles: near.tiles, k: build.k, c: build.c })); return; }
     if (near.kind === 'info') { toast(near.text); return; }
     if (near.kind === 'reinforce') { if (netOn) ws.send(JSON.stringify({ t: 'reinforce', battle: near.battle, front: near.front })); return; }
     if (near.kind === 'deposit') { if (netOn) ws.send(JSON.stringify({ t: 'deposit' })); return; }
@@ -1589,7 +1642,7 @@
   // ------------------------------------------------------------ 나라 · 영토 · 블로토 전투 (화면)
   // 온라인: 서버가 결과를 정한다 / 오프라인 미리보기: 같은 규칙(rules.js)을 브라우저에서 봇 나라들과 돌린다
   let OFF = null;                  // 오프라인 World
-  let owners = {}, nationsPub = {}, myView = null, testMode = true, MY_NID = null; // MY_NID: 우리 나라 (지도에서 진하게 표시)
+  let owners = {}, nationsPub = {}, myView = null, testMode = true, MY_NID = null, mapSig = ''; // MY_NID: 우리 나라 (지도에서 진하게 표시)
   const ownerOf = (tid) => owners[tid] || null;
   const natColor = (nid) => (nationsPub[nid] && nationsPub[nid].color) || '#888888';
   const natName = (nid) => (nationsPub[nid] && nationsPub[nid].name) || '중립';
@@ -1603,7 +1656,10 @@
     STORE_AT = new Map();
     for (const n of Object.values(nationsPub)) if (!n.dead && terrs[n.capital]) { const [sx, sy] = MPRules.storageSpot(terrs[n.capital], tileAt); STORE_AT.set(sy * W + sx, n.id); clearTrees(sx, sy, 1); }
     if (myView && terrs[myView.me.capital]) { home = terrs[myView.me.capital]; player.tag = myView.me.color; }
-    chunks.clear(); buildMapImage(); lastTerr = null; renderInv();
+    // 땅 주인·나라 색·우리 나라가 바뀐 경우에만 지도를 다시 그린다 (자원만 바뀌면 그대로)
+    const sig = MY_NID + '|' + JSON.stringify(owners) + '|' + Object.values(nationsPub).map((q) => q.id + q.color + (q.dead ? 'x' : '')).join();
+    if (sig !== mapSig) { mapSig = sig; invalidateChunks(); buildMapImage(); }
+    lastTerr = null; renderInv();
     if (!$('war').hidden) renderWar();
     checkWarAlert();
   }
@@ -2202,7 +2258,7 @@
       } });
     });
     if (build.on && player.scene === 'ground') { // 설치 모드: 앞 칸 표시
-      const [fx, fy] = facingTile(); ctx.fillStyle = 'rgba(255,211,77,0.35)'; ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE); ctx.strokeStyle = '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect(fx * TILE + 1, fy * TILE + 1, TILE - 2, TILE - 2);
+      for (const [fx, fy] of shapeTiles()) { const ok = ownerOf(terrAt(fx, fy)) === MY_NID && !blocked(fx, fy); ctx.fillStyle = ok ? 'rgba(255,211,77,0.35)' : 'rgba(255,60,80,0.3)'; ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE); ctx.strokeStyle = ok ? '#ffd34d' : '#ff3c50'; ctx.lineWidth = 2; ctx.strokeRect(fx * TILE + 1, fy * TILE + 1, TILE - 2, TILE - 2); }
     }
     for (const b of others('ground', null)) if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1) list.push(b);
     list.push(player);
