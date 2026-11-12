@@ -111,6 +111,7 @@ def main():
     ap.add_argument("--territories", type=int, default=240)
     ap.add_argument("--capitals", type=int, default=48)
     ap.add_argument("--shape", default="gyeongbuk", choices=["gyeongbuk", "round"])
+    ap.add_argument("--ulleung", action="store_true", help="울릉도 섬도 그린다 (기본: 안 그림, 중립은 하늘)")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "..", "maps"))
     args = ap.parse_args()
 
@@ -129,6 +130,8 @@ def main():
     island = np.zeros((H, W), dtype=bool)
     if args.shape == "gyeongbuk":
         land, island, to_tile = gyeongbuk_mask(W, H, rng)
+        if not args.ulleung:
+            island[:] = False
     else:
         land = dist / land_r + (shape_noise - 0.5) * 0.18 < 1.0
         to_tile = None
@@ -410,8 +413,8 @@ def main():
         "terrainNames": TERRAIN_NAMES,
         "passable": [TERRAIN_NAMES[t] for t in sorted(PASSABLE)],
         "shape": args.shape,
-        "ulleung": ({"center": list(to_tile(*GB.ULLEUNG["center"])), "rx": round(GB.ULLEUNG["rx"] * to_tile.s), "ry": round(GB.ULLEUNG["ry"] * to_tile.s)} if to_tile else None),
-        "neutral": "중립 지역은 울릉도(신들의 섬). 별도 맵(방으로 구성)이며 각 수도의 포털로 오간다.",
+        "ulleung": ({"center": list(to_tile(*GB.ULLEUNG["center"])), "rx": round(GB.ULLEUNG["rx"] * to_tile.s), "ry": round(GB.ULLEUNG["ry"] * to_tile.s)} if (to_tile and args.ulleung) else None),
+        "neutral": "중립 지역은 신들의 하늘(별도 맵, 방으로 구성). 각 수도의 포털로 오르내린다.",
         "riftAnnounce": "D5 (12/18)",
         "riftSchedule": {"1": "D6 (12/19)", "2": "D8 (12/21)", "3": "D10 (12/23)", "4": "D12 (12/25)", "5": "D14 (12/27)"},
         "riftNote": "운영진 전용 데이터. 실제 서버는 rift 필드를 참가자에게 보내지 않는다.",

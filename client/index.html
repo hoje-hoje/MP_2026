@@ -62,6 +62,21 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #coupon label { font-size: 13px; font-weight: 700; display: block; margin-bottom: 6px; }
 #coupon input { width: 100%; box-sizing: border-box; font: 700 20px var(--font-display); letter-spacing: 2px; text-transform: uppercase; color: var(--ink); background: #ffffff; border: 3px solid var(--ink); border-radius: 10px; padding: 8px 10px; }
 #coupon .msg { margin: 0; font-size: 13px; font-weight: 700; color: var(--muted); min-height: 2.6em; }
+#chat { left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: min(380px, calc(100vw - 220px)); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.chathead { font-size: 11px; font-weight: 700; color: var(--muted); }
+.chatlog { max-height: 150px; overflow-y: auto; font-size: 13px; line-height: 1.45; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.chatlog b { color: var(--ink); }
+.chatrow { display: flex; gap: 6px; }
+.chatrow input { flex: 1; min-width: 0; font: 500 14px var(--font-body); color: var(--ink); background: #ffffff; border: 2px solid var(--ink); border-radius: 10px; padding: 6px 8px; }
+.chatrow button { min-height: 36px; font-size: 14px; padding: 0 10px; }
+#join, #wanderBox { position: fixed; z-index: 25; inset: 0; background: rgba(27, 20, 48, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#join .panel, #wanderBox .panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; width: min(400px, 100%); }
+#join h2, #wanderBox h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 24px; }
+#join label, #wanderBox label { font-size: 13px; font-weight: 700; display: block; margin-bottom: 6px; }
+#join input, #wanderBox input { width: 100%; box-sizing: border-box; font: 700 16px var(--font-body); color: var(--ink); background: #ffffff; border: 3px solid var(--ink); border-radius: 10px; padding: 8px 10px; }
+#wanderBox .msg { margin: 0; font-size: 13px; font-weight: 700; color: var(--muted); }
+.seg.wrap { flex-wrap: wrap; }
+.wlist { max-height: 140px; overflow-y: auto; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
 #closet { position: fixed; z-index: 20; inset: 0; background: rgba(27, 20, 48, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #closet .panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; width: min(380px, 100%); }
 #closet h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 24px; }
@@ -113,14 +128,20 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   <span><b>백신</b> <span id="invVac">0</span></span>
 </div>
 
-<div id="skyTimer" class="hud card" hidden>울릉도 체류 <b id="skyLeft">5:00</b> 남음</div>
+<div id="skyTimer" class="hud card" hidden>하늘 체류 <b id="skyLeft">5:00</b> 남음</div>
 
 <div id="mini" class="hud card">
   <canvas id="miniCanvas" width="336" height="336" aria-label="미니맵, 누르면 그 위치로 이동(테스트)"></canvas>
   <div class="cap">누르면 순간이동 (테스트용)</div>
 </div>
 
-<div id="help" class="hud card">WASD·방향키 이동 · E 포털·금광·제단 · Shift 빨리 걷기 · 휠 확대/축소 · [ ] 날짜 바꾸기 (테스트)</div>
+<div id="chat" class="hud card" hidden>
+  <div class="chathead" id="netText">오프라인</div>
+  <div id="chatLog" class="chatlog" aria-live="polite"></div>
+  <div class="chatrow"><input id="chatIn" type="text" maxlength="120" placeholder="우리 나라 채팅 (Enter)" autocomplete="off"><button id="btnChatSend" type="button">보내기</button></div>
+</div>
+
+<div id="help" class="hud card">WASD·방향키 이동 · E 포털·금광·제단 · Shift 빨리 걷기 · 휠 확대/축소 · 1~8 감정표현 · [ ] 날짜 바꾸기 (테스트)</div>
 
 <div id="prompt" class="hud card" hidden><span id="promptText">제단</span><kbd>E</kbd></div>
 <div id="toast" class="hud" hidden></div>
@@ -153,8 +174,29 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   </div>
 </div>
 
+<div id="join" hidden>
+  <div class="panel card">
+    <h2>MP 2026 입장</h2>
+    <div><label for="joinNick">닉네임</label><input id="joinNick" type="text" maxlength="10" autocomplete="off"></div>
+    <div><label for="joinTeam">팀 번호 (테스트용, 나중엔 학번 로그인)</label><input id="joinTeam" type="number" min="1" max="60" value="1"></div>
+    <button id="btnJoin" type="button">입장하기</button>
+  </div>
+</div>
+
+<div id="wanderBox" hidden>
+  <div class="panel card">
+    <h2>유랑민 등록소</h2>
+    <p id="wanderMsg" class="msg"></p>
+    <div><label for="wanderTarget">귀화할 나라 (팀 번호)</label><input id="wanderTarget" type="text" maxlength="12" autocomplete="off"></div>
+    <div class="seg wrap"><button id="btnNat" type="button">귀화 신청</button><button id="btnMerc" type="button">용병 등록</button><button id="btnFound" type="button">건국 대기 (4명)</button></div>
+    <div><label>지금 등록한 사람들</label><div id="wanderList" class="wlist"></div></div>
+    <div class="seg"><button id="btnWanderCancel" type="button">내 등록 취소</button><button id="btnWanderClose" type="button">닫기</button></div>
+  </div>
+</div>
+
 <div id="stick" hidden><div></div></div>
 
-<div id="loading">지도 불러오는 중…<small id="loadingSub">경상북도 · 영토 227개 · 울릉도 방 7개</small></div>
+<div id="loading">지도 불러오는 중…<small id="loadingSub">경상북도 · 영토 227개 · 하늘 방 7개</small></div>
 
+<script src="config.js"></script>
 <script src="game.js"></script>

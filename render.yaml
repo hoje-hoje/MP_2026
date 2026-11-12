@@ -1,0 +1,22 @@
+# Render 블루프린트: GitHub 저장소를 연결하면 이 설정으로 서버가 만들어진다.
+# 무료(free)로 먼저 테스트하고, 오픈 전에 starter + 디스크로 올린다 (docs/DEPLOY.md 참고).
+services:
+  - type: web
+    name: mp2026
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: .
+    buildCommand: cd server && npm ci
+    startCommand: node server/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATA_DIR
+        value: /var/data
+    # starter 로 올린 뒤 아래 주석을 풀면 재시작해도 데이터가 남는다
+    # disk:
+    #   name: mp2026-data
+    #   mountPath: /var/data
+    #   sizeGB: 1

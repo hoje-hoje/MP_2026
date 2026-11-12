@@ -1,0 +1,16 @@
+{
+  "name": "mp2026-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MP 2026 실시간 게임 서버 (정적 파일 + WebSocket)",
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node index.js",
+    "bots": "node test/bots.js"
+  },
+  "dependencies": {
+    "ws": "8.18.0"
+  }
+}
