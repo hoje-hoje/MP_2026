@@ -703,7 +703,7 @@
         { x: 8, y: 12, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'bishop', x, y + 2); nameTag(g, x, y - 58, '신의 사제', '#6b4fb3'); } },
         { x: 2, y: 15, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) }, { x: 27, y: 15, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) },
         { x: 22, y: 11, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
-        { x: 13, y: 6, w: 4, h: 1, draw: (g, x, y) => { if (!DOOM) return; g.fillStyle = '#5a4630'; g.fillRect(x - 140, y - 150, 8, 150); g.fillRect(x + 132, y - 150, 8, 150); drawDoomBanner(g, x, y - 176, 1.5); } }, // 멸망 게시판 (기둥 두 개에 걸린 배너)
+        { x: 13, y: 6, w: 4, h: 1, walk: true, draw: (g, x, y) => { if (!DOOM) return; g.fillStyle = '#5a4630'; g.fillRect(x - 140, y - 150, 8, 150); g.fillRect(x + 132, y - 150, 8, 150); drawDoomBanner(g, x, y - 176, 1.5); } }, // 멸망 게시판 (기둥 두 개에 걸린 배너)
       ],
     },
     market: {
@@ -935,14 +935,15 @@
   }
   function arch(g, x, y, side, label, down) {
     const vertical = side === 'W' || side === 'E';
-    const art = down ? 'door_cloud' : 'door_gold'; // 땅으로 내려가는 문은 구름 문, 나머지는 금빛 대문
+    // 위·아래 벽 가운데 문(3칸)은 구름 문, 옆벽 문은 금빛 대문 — 둘 다 문 구멍 3칸에 꽉 맞게
     if (vertical) {
-      pix(g, art, x, y - 4, 1.7);
+      pix(g, 'door_gold', x, y + 16, 0, 3 * TILE);
       sign(g, x + (side === 'W' ? 80 : -80), y - 2 * TILE - 30, (side === 'W' ? '← ' : '') + label + (side === 'E' ? ' →' : ''));
     } else {
       const by = side === 'N' ? y + 8 : y;
-      pix(g, art, x, by, 2.4);
-      sign(g, x, by - 130, (side === 'N' ? '↑ ' : '↓ ') + label);
+      const im = ART.x_door_cloud, k = 3 * TILE / im.width;
+      pix(g, 'door_cloud', x, by, k);
+      sign(g, x, by - im.height * k - 18, (side === 'N' ? '↑ ' : '↓ ') + label);
     }
   }
 
