@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MP 2026 세계 지도 생성기.
 
-타일 격자(기본 640x640) 위에 지형, 영토(약 190개), 중립 성지, 수도 후보,
+타일 격자(기본 720x720) 위에 지형, 영토(약 240개), 수도 후보와 하늘 포털,
 균열 웨이브(D6~D14, 5회), 속성을 만들고 maps/ 아래에 JSON과 미리보기 PNG를 저장한다.
 
 사용법:  python3 tools/mapgen/gen_map.py --seed 2026
@@ -127,7 +127,8 @@ def main():
     terrain = np.full((H, W), T_VOID, dtype=np.uint8)
     terrain[land] = T_GRASS
 
-    holy_zone = dist < HOLY_R + WALL_W + 8
+    # 중립 지역은 땅 위가 아니라 하늘(별도 맵)에 있다. 땅은 전부 영토.
+    holy_zone = np.zeros((H, W), dtype=bool)
     e_land = elev[land & ~holy_zone]
     w_th = np.quantile(e_land, 0.07)
     m_th = np.quantile(e_land, 0.91)
@@ -140,23 +141,15 @@ def main():
     terrain[sel & (elev < w_th)] = T_WATER
     terrain[sel & (elev > m_th)] = T_MOUNTAIN
 
-    # 성지: 원형 광장 + 성벽 + 동서남북 성문
-    terrain[land & (dist < HOLY_R)] = T_HOLY
-    ring = (dist >= HOLY_R) & (dist < HOLY_R + WALL_W)
-    gates = (np.abs(xx - cx) <= GATE_HALF) | (np.abs(yy - cy) <= GATE_HALF)
-    terrain[ring & ~gates] = T_WALL
-    terrain[ring & gates] = T_HOLY
-    # 성 밖 완충지대는 항상 풀밭
-    buffer = (dist >= HOLY_R + WALL_W) & holy_zone & land
-    terrain[buffer] = T_GRASS
-
     passable = np.isin(terrain, list(PASSABLE))
-    reach = bfs_reach(passable, (cx, cy))
+    ys_p, xs_p = np.nonzero(passable)
+    k0 = int(np.argmin((xs_p - cx) ** 2 + (ys_p - cy) ** 2))
+    reach = bfs_reach(passable, (int(xs_p[k0]), int(ys_p[k0])))
     terrain[passable & ~reach] = T_MOUNTAIN
     passable = passable & reach
 
     # ---------------------------------------------------- 영토 씨앗
-    holy_mask = dist < HOLY_R + WALL_W
+    holy_mask = np.zeros((H, W), dtype=bool)
     cand = passable & ~holy_zone
     area = int(cand.sum())
     r_min = math.sqrt(area / args.territories) * 0.92
@@ -319,9 +312,8 @@ def main():
 
     # 균열: D5 멸망 선포 후 D6·D8·D10·D12·D14 다섯 번에 걸쳐 영토가 무너진다.
     # 바깥에서만 오지 않도록 지도 곳곳의 진원지에서 퍼지게 한다 (위치 유불리 제거).
-    # 성지와 맞닿은 영토는 무너지지 않아 성지 길은 끝까지 열려 있다.
-    holy_adj_set = set(int(v) for v in np.unique(terr_full[(dist >= HOLY_R + WALL_W) & (dist < HOLY_R + WALL_W + 2)]) if v > 0)
-    pool = [tr for tr in terrs if tr["id"] not in holy_adj_set]
+    # 땅 위에 안전지대는 없다. 안전한 곳은 하늘(중립)뿐.
+    pool = list(terrs)
     epic = [pool[int(i)] for i in rng.choice(len(pool), size=7, replace=False)]
     maxd = W * 0.5
     def danger(tr):
@@ -361,7 +353,21 @@ def main():
     for tr in terrs:
         tr["capitalCandidate"] = tr in picked
 
-    holy_adj = sorted({int(v) for v in np.unique(terr_full[(dist >= HOLY_R + WALL_W) & (dist < HOLY_R + WALL_W + 2)]) if v > 0})
+    # 하늘로 가는 포털: 수도 후보마다 하나 (제단 근처). 주인 없는 포털은 누구나(유랑민 포함) 사용.
+    for tr in picked:
+        ax, ay = tr["altar"]
+        best = None
+        for r in range(3, 9):
+            for dx in range(-r, r + 1):
+                for dy in (-r, r):
+                    for (px_, py_) in ((ax + dx, ay + dy), (ax + dy, ay + dx)):
+                        if 0 <= px_ < W and 0 <= py_ < H and passable[py_, px_] and terr_full[py_, px_] == tr["id"]:
+                            d_ = abs(px_ - ax) + abs(py_ - ay - 3)
+                            if best is None or d_ < best[0]:
+                                best = (d_, px_, py_)
+            if best:
+                break
+        tr["portal"] = [best[1], best[2]] if best else [ax, ay + 1]
 
     # ---------------------------------------------------- 저장
     os.makedirs(args.out, exist_ok=True)
@@ -374,8 +380,7 @@ def main():
         "tilePx": TILE_PX,
         "terrainNames": TERRAIN_NAMES,
         "passable": [TERRAIN_NAMES[t] for t in sorted(PASSABLE)],
-        "holyCity": {"center": [cx, cy], "radius": HOLY_R, "wall": WALL_W,
-                     "gates": ["N", "E", "S", "W"], "adjacentTerritories": holy_adj},
+        "sky": "중립 지역은 하늘(별도 맵, 방으로 구성). 각 수도의 포털로 오르내린다.",
         "riftAnnounce": "D5 (12/18)",
         "riftSchedule": {"1": "D6 (12/19)", "2": "D8 (12/21)", "3": "D10 (12/23)", "4": "D12 (12/25)", "5": "D14 (12/27)"},
         "riftNote": "운영진 전용 데이터. 실제 서버는 rift 필드를 참가자에게 보내지 않는다.",
@@ -450,8 +455,8 @@ def render_overview(terrain, terr, terrs, picked, center, path, scale=2):
     for tr in picked:
         x, y = tr["altar"][0] * scale, tr["altar"][1] * scale
         d.polygon([(x, y - 9), (x + 8, y + 6), (x - 8, y + 6)], fill=(229, 72, 106), outline=(255, 255, 255))
-    cx, cy = center[0] * scale, center[1] * scale
-    d.text((cx, cy), "성지", fill=(43, 35, 64), anchor="mm", font=font(22))
+        px_, py_ = tr["portal"][0] * scale, tr["portal"][1] * scale
+        d.ellipse([px_ - 5, py_ - 5, px_ + 5, py_ + 5], fill=(255, 236, 140), outline=(43, 35, 64))
     # 한 화면 크기 표시
     sw, sh = SCREEN_TILES[0] * scale, SCREEN_TILES[1] * scale
     x0, y0 = 30, im.height - 30 - sh
@@ -478,7 +483,7 @@ def render_rift(terrain, terr, terrs, center, path, scale=1):
 
 
 def render_closeup(terrain, terr, center, path, tile=16):
-    """성지 남문 근처 80x45 타일을 확대해 실제 게임 스케일을 보여준다."""
+    """지도 가운데 근처 80x45 타일을 확대해 실제 게임 스케일을 보여준다."""
     cx, cy = center
     x0, y0 = cx - 40, cy + 20
     sub_t = terrain[y0:y0 + 45, x0:x0 + 80]

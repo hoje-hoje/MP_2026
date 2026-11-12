@@ -77,8 +77,8 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
 
 <div id="where" class="hud card" aria-live="polite">
-  <div class="name" id="whereName">중립 성지</div>
-  <div class="sub" id="whereSub">전투 불가 구역</div>
+  <div class="name" id="whereName">우리 수도</div>
+  <div class="sub" id="whereSub"></div>
   <div class="chips" id="whereChips"></div>
 </div>
 
@@ -89,7 +89,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 
 <div id="tools" class="hud">
   <button id="btnMap" type="button">지도 (M)</button>
-  <button id="btnHome" type="button">성지로 (T)</button>
+  <button id="btnHome" type="button">우리 수도 (T)</button>
   <button id="btnCloset" type="button">꾸미기</button>
 </div>
 
@@ -98,7 +98,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   <div class="cap">누르면 순간이동 (테스트용)</div>
 </div>
 
-<div id="help" class="hud card">WASD·방향키 이동 · Shift 빨리 걷기 · 휠 확대/축소 · [ ] 날짜 바꾸기 (테스트)</div>
+<div id="help" class="hud card">WASD·방향키 이동 · E 포털·제단 · Shift 빨리 걷기 · 휠 확대/축소 · [ ] 날짜 바꾸기 (테스트)</div>
 
 <div id="prompt" class="hud card" hidden><span id="promptText">제단</span><kbd>E</kbd></div>
 <div id="toast" class="hud" hidden></div>
@@ -124,6 +124,6 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 
 <div id="stick" hidden><div></div></div>
 
-<div id="loading">지도 불러오는 중…<small id="loadingSub">세계 720×720칸, 영토 239개</small></div>
+<div id="loading">지도 불러오는 중…<small id="loadingSub">세계 720×720칸, 영토 231개 · 하늘 방 7개</small></div>
 
 <script src="game.js"></script>
