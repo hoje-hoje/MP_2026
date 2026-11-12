@@ -224,12 +224,20 @@
     g.imageSmoothingEnabled = prev;
   }
 
+  // 팻말: 각진 픽셀 나무판 + 픽셀 글꼴
   function sign(g, x, y, text) {
-    g.font = '20px Jua, "Noto Sans KR", sans-serif';
-    const w = g.measureText(text).width + 24;
-    g.fillStyle = '#fffdf8'; rr(g, x - w / 2, y - 16, w, 32, 8); g.strokeStyle = '#2b2340'; g.lineWidth = 3; g.stroke();
-    g.fillStyle = '#2b2340'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, x, y + 1);
+    g.font = `700 22px ${PFONT}`;
+    const w = Math.ceil(g.measureText(text).width / 2) * 2 + 24, h = 32;
+    const L = Math.round(x - w / 2), T = Math.round(y - h / 2);
+    g.fillStyle = '#2b2340'; g.fillRect(L - 2, T - 2, w + 4, h + 4);
+    g.fillStyle = '#c9915c'; g.fillRect(L, T, w, h);
+    g.fillStyle = '#e0b07a'; g.fillRect(L, T, w, 4);
+    g.fillStyle = '#9a6a3c'; g.fillRect(L, T + h - 4, w, 4);
+    g.fillStyle = '#fff6d6'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = '#5a3a20'; g.fillText(text, x + 1, y + 2);
+    g.fillStyle = '#fff6d6'; g.fillText(text, x, y + 1);
   }
+  const PFONT = "'Galmuri11', 'Noto Sans KR', sans-serif";
 
   // 도형 도우미
   function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); g.fill(); }
@@ -249,10 +257,11 @@
     });
     for (const k of EXTRA) names['x_' + k] = 'extra/' + k + '.png';
     for (const k of TEMPLE) names['x_' + k] = 'na/' + k + '.png';
-    await Promise.all([meta, users, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
+    const fonts = document.fonts ? Promise.all([document.fonts.load(`11px ${PFONT}`), document.fonts.load(`700 22px ${PFONT}`)]).catch(() => {}) : Promise.resolve();
+    await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
   const EXTRA = ['coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
-  const TEMPLE = ['statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
+  const TEMPLE = ['emote0', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'emote6', 'emote7', 'statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
     const im = key.startsWith('u:') ? ART['u_' + key.slice(2)] : ART['x_' + key]; if (!im) return;
@@ -549,19 +558,27 @@
 
   const tagW = new Map();
   function nameTag(g, x, y, text, color) {
-    g.font = '700 12px "Noto Sans KR", sans-serif';
+    g.font = `11px ${PFONT}`;
     let w = tagW.get(text);
-    if (!w) { w = g.measureText(text).width + 14; tagW.set(text, w); }
-    g.fillStyle = color; rr(g, x - w / 2, y - 9, w, 18, 9);
-    g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, x, y + 0.5);
+    if (!w) { w = Math.ceil(g.measureText(text).width) + 10; tagW.set(text, w); }
+    const L = Math.round(x - w / 2), T = Math.round(y - 8);
+    g.fillStyle = '#1b1430'; g.fillRect(L - 1, T - 1, w + 2, 18);
+    g.fillStyle = color; g.fillRect(L, T, w, 16);
+    g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(L, T, w, 2);
+    g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, Math.round(x), T + 9);
   }
   function bubble(g, x, y, text) {
-    g.font = '700 12px "Noto Sans KR", sans-serif';
-    const w = g.measureText(text).width + 16;
-    g.fillStyle = '#ffffff'; rr(g, x - w / 2, y - 12, w, 22, 10);
-    g.strokeStyle = '#2b2340'; g.lineWidth = 2; g.stroke();
-    g.fillStyle = '#2b2340'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, x, y);
+    const ei = EMOTE_LIST.indexOf(text);
+    if (ei >= 0 && ART['x_emote' + ei]) { pix(g, 'emote' + ei, x, y + 14, 3); return; }
+    g.font = `11px ${PFONT}`;
+    const w = Math.ceil(g.measureText(text).width) + 14, h = 20;
+    const L = Math.round(x - w / 2), T = Math.round(y - 12);
+    g.fillStyle = '#2b2340'; g.fillRect(L - 2, T - 2, w + 4, h + 4); g.fillRect(x - 3, T + h, 6, 6);
+    g.fillStyle = '#fffdf8'; g.fillRect(L, T, w, h); g.fillRect(x - 1, T + h, 2, 3);
+    g.fillStyle = '#2b2340'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, Math.round(x), T + 11);
   }
+
+
 
   // ------------------------------------------------------------ 하늘 (신들의 땅, 중립 지역, 방으로 나뉨)
   // 각 나라 수도의 포털로 올라오고, 내려갈 땐 올라온 포털(=자기 나라 수도)로만 내려간다.
@@ -1058,14 +1075,14 @@
   const mini = $('miniCanvas'), mg = mini.getContext('2d');
   function drawSkyMini() {
     const s = mini.width;
-    mg.fillStyle = '#d7ecff'; mg.fillRect(0, 0, s, s);
+    mg.fillStyle = '#bfe3ff'; mg.fillRect(0, 0, s, s);
     const P = (R) => [s * (0.16 + R.pos[0] * 0.23), s * (0.38 + R.pos[1] * 0.22)];
     mg.strokeStyle = '#ffffff'; mg.lineWidth = 6;
     for (const R of Object.values(ROOMS)) for (const d of R.doors) if (d.to !== 'ground') { const [a, b] = P(R), [c, e] = P(ROOMS[d.to]); mg.beginPath(); mg.moveTo(a, b); mg.lineTo(c, e); mg.stroke(); }
-    mg.font = '700 22px "Noto Sans KR", sans-serif'; mg.textAlign = 'center'; mg.textBaseline = 'middle';
+    mg.font = `700 22px ${PFONT}`; mg.textAlign = 'center'; mg.textBaseline = 'middle';
     for (const R of Object.values(ROOMS)) {
       const [x, y] = P(R), w = R.id.startsWith('secret') ? 60 : 84, h = R.id.startsWith('secret') ? 34 : 44;
-      mg.fillStyle = R === player.room ? '#2b2340' : '#ffffff'; rr(mg, x - w / 2, y - h / 2, w, h, 10);
+      mg.fillStyle = R === player.room ? '#2b2340' : '#fffdf8'; mg.fillRect(x - w / 2, y - h / 2, w, h); mg.beginPath(); mg.rect(x - w / 2, y - h / 2, w, h);
       mg.strokeStyle = '#2b2340'; mg.lineWidth = 3; mg.stroke();
       mg.fillStyle = R === player.room ? '#ffffff' : '#2b2340';
       mg.fillText(R.name.replace('하늘 ', '').replace('유랑민 ', ''), x, y + 1);
@@ -1514,7 +1531,7 @@
     else if (DOOM) { const n = terrs.filter((t) => t && gone[t.id]).length; if (n) setTimeout(() => toast(`균열이 영토 ${n}곳을 삼켰다`), 600); }
     requestAnimationFrame((n) => { last = n; frame(n); });
   }).catch((err) => {
-    $('loading').firstChild.textContent = '지도를 불러오지 못했어요';
+    $('loadingText').textContent = '지도를 불러오지 못했어요';
     $('loadingSub').textContent = err.message;
   });
 })();

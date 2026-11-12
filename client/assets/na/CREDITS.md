@@ -7,3 +7,4 @@
 - towers.png(제단·신전), flags.png(깃발 8색), panel.png·btn*.png(UI 틀), facebox.png
 - 하늘 신전 장식 (같은 팩, TilesetHouse·TilesetWater·Interior/TilesetInteriorFloor 에서 잘라냄): statue_orb, statue_lion, pillar_na, plant, arch, banner0~6, pool, floor_palace, brick
 - water.png (TilesetWater, 물가 자동 타일)
+- emote0~7.png (Ui/Emote 6,29,27,18,22,25,15,8: 감정표현 1~8번 키)
