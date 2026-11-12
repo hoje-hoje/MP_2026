@@ -123,7 +123,7 @@ tr.editing td { background: #fff1b8; }
     <h2>🎟 쿠폰 <span class="hint">점심 이벤트에서 나눠 줄 1회용 코드. 한 번 쓰면 사라지고, 쓴 학생의 나라에 들어가요</span></h2>
     <form id="couponForm" class="row">
       <label>장수 <input id="cCount" type="number" min="1" max="300" value="20" style="width:72px"></label>
-      <label>보상 <select id="cKind"><option value="coin">코인</option><option value="army">병력</option></select></label>
+      <label>보상 <select id="cKind"><option value="coin">코인</option><option value="army">병력</option><option value="intel">첩보 (전선 하나 엿보기)</option></select></label>
       <label>양 <input id="cAmount" type="number" min="1" value="1000" style="width:90px"></label>
       <label style="flex:1">메모 <input id="cMemo" maxlength="30" placeholder="예: 12/16 점심 퍼즐" style="flex:1"></label>
       <button class="primary">만들기</button>
@@ -281,14 +281,14 @@ tr.editing td { background: #fff1b8; }
     const f = $('cFilter').value, mf = $('cMemoFilter').value;
     return S.coupons.filter((c) => (f === 'all' || (f === 'used') === !!c.used) && (!mf || c.memo === mf)).sort((a, b) => b.at - a.at);
   }
-  const rewardText = (r) => Object.entries(r).map(([k, v]) => `${k === 'coin' ? '코인' : '병력'} ${fmt(v)}`).join(', ');
+  const rewardText = (r) => Object.entries(r).map(([k, v]) => `${{ coin: '코인', army: '병력', intel: '첩보' }[k] || k} ${fmt(v)}`).join(', ');
   function renderCoupons() {
     const list = visibleCoupons();
     $('couponSummary').textContent = `보이는 코드 ${list.length}개 (안 쓴 것 ${list.filter((c) => !c.used).length}개)`;
     $('coupons').innerHTML = list.slice(0, 500).map((c) => `<tr><td><code>${c.code}</code></td><td>${rewardText(c.r)}</td><td>${esc(c.memo)}</td><td>${c.used ? `${esc(c.used.name)} · ${esc(c.used.nation)} · ${ago(c.used.ts)}` : '<span class="muted">안 씀</span>'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">코드 없음</td></tr>';
   }
   $('cFilter').onchange = renderCoupons; $('cMemoFilter').onchange = renderCoupons;
-  $('cKind').onchange = () => { $('cAmount').value = $('cKind').value === 'army' ? 20 : 1000; };
+  $('cKind').onchange = () => { $('cAmount').value = { army: 20, intel: 1 }[$('cKind').value] || 1000; };
 
   $('noticeSend').onclick = async () => {
     const text = $('noticeText').value.trim(); if (!text) return say('공지 내용을 써 주세요');
@@ -310,7 +310,7 @@ tr.editing td { background: #fff1b8; }
   $('couponForm').onsubmit = async (e) => {
     e.preventDefault();
     const count = +$('cCount').value, kind = $('cKind').value, amount = +$('cAmount').value, memo = $('cMemo').value.trim();
-    if (!confirm(`${kind === 'coin' ? '코인' : '병력'} ${fmt(amount)}짜리 쿠폰 ${count}장을 만들까요?`)) return;
+    if (!confirm(`${{ coin: '코인', army: '병력', intel: '첩보' }[kind]} ${fmt(amount)}짜리 쿠폰 ${count}장을 만들까요?`)) return;
     const r = await api('couponCreate', { count, kind, amount, memo });
     say(`쿠폰 ${r.codes.length}장을 만들었어요`); await load();
     $('cFilter').value = 'unused'; $('cMemoFilter').value = memo; renderCoupons();

@@ -58,6 +58,7 @@
   }
   // ---- 영지: 설치물(바닥·방벽), 우리 덫, 저장소 자리
   let TILES = {};                 // 칸 번호 -> { k: 'floor'|'wall', n: 나라 }
+  let BATTLES = [];               // 선포된 전투 (모두에게 보임): { id, target, att, def, f: [[x,y]×3] }
   let MY_TRAPS = new Set();       // 우리 나라 덫 (다른 나라엔 안 보임)
   let STORE_AT = new Map();       // 칸 번호 -> 나라 (수도 저장소)
   const FACE_D = [[0, 1], [0, -1], [-1, 0], [1, 0]];
@@ -1101,6 +1102,15 @@
       if (r.x == null || !r.nid || r.nid === MY_NID || Math.hypot(r.x - player.x, r.y - player.y) > 52) continue;
       if (ownerOf(terrAt(r.x / TILE | 0, r.y / TILE | 0)) === MY_NID) return { kind: 'arrest', id, text: `${r.name}${r.carry ? ' (도둑!)' : ''} 체포하기` };
     }
+    if (MY_NID && myView) for (const b of BATTLES) { // 우리 전투의 전선 근처 → 병력 충원
+      if (!b.f || (b.att !== MY_NID && b.def !== MY_NID)) continue;
+      for (let k = 0; k < 3; k++) {
+        if (Math.hypot(b.f[k][0] + 0.5 - ptx, b.f[k][1] + 0.5 - pty) > MPRules.NUM.frontRange) continue;
+        const o = myView.outgoing.find((x) => x.id === b.id), inc = myView.incoming.find((x) => x.id === b.id);
+        const cur = o ? `지금 ${o.a[k]}` : inc ? (inc.d ? `지금 ${inc.d[k] + inc.rd[k]}` : `자동 배치 + 충원 ${inc.rd[k]}`) : '';
+        return { kind: 'reinforce', battle: b.id, front: k, text: `${'ABC'[k]} 전선 ${b.att === MY_NID ? '공격' : '방어'} 병력 충원 +${MPRules.NUM.reinforce} · ${cur}` };
+      }
+    }
     for (const [i, nid] of STORE_AT) if (Math.hypot((i % W) + 0.5 - ptx, Math.floor(i / W) + 0.5 - pty) < 1.9) {
       if (nid === MY_NID) return player.carry ? { kind: 'deposit', text: '훔쳐 온 것 저장소에 넣기' } : { kind: 'store', text: '우리 저장소 열기' };
       if (!MY_NID) return { kind: 'info', text: `${natName(nid)} 저장소` };
@@ -1177,6 +1187,7 @@
     if (near.kind === 'hit') { HITFX.set(near.t.id, performance.now() + 120); if (netOn) ws.send(JSON.stringify({ t: 'hit', terr: near.t.id })); return; }
     if (near.kind === 'place' || near.kind === 'pickup') { if (netOn) ws.send(JSON.stringify({ t: near.kind, x: near.x, y: near.y, k: build.k })); return; }
     if (near.kind === 'info') { toast(near.text); return; }
+    if (near.kind === 'reinforce') { if (netOn) ws.send(JSON.stringify({ t: 'reinforce', battle: near.battle, front: near.front })); return; }
     if (near.kind === 'deposit') { if (netOn) ws.send(JSON.stringify({ t: 'deposit' })); return; }
     if (near.kind === 'arrest') { if (netOn) ws.send(JSON.stringify({ t: 'arrest', id: near.id })); return; }
     if (near.kind === 'node' && ONLINE) { if (mined.has(near.n.id)) { toast('이 금광은 오늘 이미 캤어요'); return; } if (netOn) ws.send(JSON.stringify({ t: 'mine', terr: near.n.id })); return; }
@@ -1275,6 +1286,7 @@
     for (const b of others('ground', null)) { const bx = (b.x / TILE - tx + span / 2) * k, by = (b.y / TILE - ty + span / 2) * k; if (bx > 0 && by > 0 && bx < s && by < s) mg.fillRect(bx - 2, by - 2, 4, 4); }
     const vw = canvas.clientWidth / zoom / TILE * k, vh = canvas.clientHeight / zoom / TILE * k;
     mg.strokeStyle = '#ffffff'; mg.lineWidth = 2; mg.strokeRect(s / 2 - vw / 2, s / 2 - vh / 2, vw, vh);
+    for (const b of BATTLES) if (b.f) for (const [fx, fy] of b.f) { const bx = (fx + 0.5 - tx + span / 2) * k, by = (fy + 0.5 - ty + span / 2) * k; if (bx > 0 && by > 0 && bx < s && by < s) { mg.fillStyle = '#2b2340'; mg.fillRect(bx - 5, by - 5, 10, 10); mg.fillStyle = '#ff3355'; mg.fillRect(bx - 3, by - 3, 6, 6); } } // 전선
     pix(mg, 'pin', s / 2, s / 2 + 2, 0, 34);
   }
   function teleportTo(tx, ty) {
@@ -1418,7 +1430,7 @@
         myId = m.id; netOn = true; store('mp2026.token', m.token);
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
         player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
-        TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
+        BATTLES = m.battles || []; TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         if (!m.view) openFound('who'); else $('found').hidden = true;
         chatLog = m.chat || []; renderChat();
@@ -1453,7 +1465,7 @@
       case 'chat': chatLog.push(m); if (chatLog.length > 60) chatLog.shift(); renderChat(); break;
       case 'emote': { const r = m.id === myId ? player : remotes.get(m.id); if (r) { r.emote = m.text; r.emoteT = 3; } break; }
       case 'wander': wanderList = m.list || []; renderWander(); break;
-      case 'owners': applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
+      case 'owners': if (m.battles) BATTLES = m.battles; applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
       case 'joined': chatLog = m.chat || []; renderChat(); afterFounded(m.founded); break;
       case 'view': applyWorld(null, null, m.view); break;
       case 'night': applyWorld(null, null, m.view); showNight(m.reports || []); break;
@@ -1674,6 +1686,8 @@
     else if (t === 'declare') r = OFF.declare(OFF_ME, payload.terr, payload.troops);
     else if (t === 'cancel') r = OFF.cancel(OFF_ME, payload.battle);
     else if (t === 'defend') r = OFF.defend(OFF_ME, payload.terr, payload.troops);
+    else if (t === 'defaultDef') r = OFF.setDefault(OFF_ME, payload.ratio);
+    else if (t === 'intel') r = OFF.useIntel(OFF_ME, payload.battle);
     else if (t === 'resolveNow') return offNight();
     if (!r.ok) { toast(r.err); return; }
     toast(t === 'claim' ? `${terrLabel(payload.terr)}을(를) 점령했어요` : t === 'declare' ? `선전포고 완료 · ${nextFight()}에 결과가 나와요` : t === 'cancel' ? '선전포고를 취소했어요' : '방어 배치 저장');
@@ -1801,7 +1815,7 @@
       const mineSet = new Set(Object.keys(owners).filter((k) => owners[k] === me.id).map(Number));
       const targets = [];
       for (const tid of mineSet) for (const nb of terrs[tid].neighbors) if (owners[nb] && owners[nb] !== me.id && !gone[nb] && !targets.includes(nb)) targets.push(nb);
-      if (v.outgoing.length) h += `<h3>${nextFight()} 전투 · 우리 공격</h3>` + v.outgoing.map((b) => `<div class="row"><span>⚔ ${esc(terrLabel(b.target))} <i style="color:${natColor(b.def)}">${esc(natName(b.def))}</i> · ${b.a.join(' / ')}</span>${king ? `<button data-cancel="${b.id}">취소</button>` : ''}</div>`).join('');
+      if (v.outgoing.length) h += `<h3>${nextFight()} 전투 · 우리 공격</h3><p class="msg">지도의 빨간 A·B·C 전선 근처에 가서 E를 누르면 그 전선에 병력이 ${MPRules.NUM.reinforce}씩 더해져요 (국민 누구나)</p>` + v.outgoing.map((b) => `<div class="row"><span>⚔ ${esc(terrLabel(b.target))} <i style="color:${natColor(b.def)}">${esc(natName(b.def))}</i> · ${b.a.join(' / ')}</span>${king ? `<button data-cancel="${b.id}">취소</button>` : ''}</div>`).join('');
       h += `<h3>공격할 수 있는 적 영토 (${targets.length})</h3>`;
       if (!targets.length) h += '<p class="msg">우리 땅과 붙어 있는 적 영토가 없어요. 중립 땅을 점령해서 적과 국경을 맞대세요 (제단에서 E).</p>';
       h += '<div class="targets">' + targets.map((tid) => `<button class="tgt" data-tgt="${tid}" aria-pressed="${tid === warTarget}"><b style="color:${natColor(owners[tid])}">■</b> ${esc(terrLabel(tid))}<small>${esc(natName(owners[tid]))}${nationsPub[owners[tid]] && nationsPub[owners[tid]].capital === tid ? ' · 수도!' : ''}</small></button>`).join('') + '</div>';
@@ -1813,9 +1827,17 @@
           <div class="row"><span id="atkSum">합계 0 / ${me.army}</span>${king ? '<button id="btnDeclare">선전포고</button>' : ''}</div></div>`;
       }
     } else if (warTab === 'defend') {
+      const dd = me.defaultDef || [34, 33, 33];
+      h += `<div class="plan"><h3>기본 방어 비율</h3><p class="msg">방어 배치를 못 하고 전투 시각이 되면, 그때 병력을 이 비율로 A·B·C에 나눠요.</p>
+        <div class="fronts">${['A', 'B', 'C'].map((f, i) => `<label class="front"><span>${f} %</span><input id="dd${i}" type="number" min="0" max="100" value="${dd[i]}" ${king ? '' : 'disabled'}></label>`).join('')}</div>
+        ${king ? '<div class="row"><span>' + (me.defaultDef ? '저장된 비율이 있어요' : '아직 없음 (지난 배치나 균등으로 나눠요)') + '</span><button id="btnDefault">기본 비율 저장</button></div>' : ''}</div>`;
+      h += `<p class="msg">🔍 첩보: 아무 나라용 ${me.intelAny}장${Object.keys(me.intel || {}).filter((k) => me.intel[k] > 0).map((k) => ` · ${esc(natName(k))} 전용 ${me.intel[k]}장`).join('')} — 적 수정을 10번 때리거나 점심 쿠폰으로 얻어요</p>`;
       h += `<h3>${nextFight()} 전투 · 우리 땅을 노리는 공격 (${v.incoming.length})</h3>`;
       if (!v.incoming.length) h += '<p class="msg">지금은 공격받는 곳이 없어요.</p>';
       h += v.incoming.map((b) => `<div class="plan"><div class="row"><span>🛡 ${esc(terrLabel(b.target))} ← <i style="color:${natColor(b.att)}">${esc(natName(b.att))}</i>${nationsPub[me.id] && me.capital === b.target ? ' · <b>수도!</b>' : ''}</span><span>${b.d ? '배치 완료' : '<b>미배치</b> (안 하면 자동 배치)'}</span></div>
+        ${b.rev && b.rev.length ? `<p class="msg">🔍 알아낸 적 병력: ${b.rev.map((r) => `<b>${'ABC'[r.f]} 전선 ${r.n}명</b>`).join(' · ')}</p>` : ''}
+        ${b.rd && (b.rd[0] + b.rd[1] + b.rd[2]) ? `<p class="msg">전선에서 충원한 병력: A +${b.rd[0]} · B +${b.rd[1]} · C +${b.rd[2]}</p>` : ''}
+        <div class="row"><span>전선 위치는 지도에 빨갛게 · 가까이 가서 E로 충원</span>${b.intel > 0 && (!b.rev || b.rev.length < 3) ? `<button data-intel="${b.id}">첩보 쓰기 (${b.intel}장)</button>` : ''}</div>
         ${troopInputs('def' + b.id + '_', b.d || [0, 0, 0], !king)}${king ? `<div class="row"><span id="defSum${b.id}" data-max="${me.army + (b.d ? b.d[0] + b.d[1] + b.d[2] : 0)}">합계 ${b.d ? b.d[0] + b.d[1] + b.d[2] : 0} / ${me.army + (b.d ? b.d[0] + b.d[1] + b.d[2] : 0)} · 상대 병력은 비밀</span><button data-defend="${b.target}" data-bid="${b.id}">방어 배치 저장</button></div>` : ''}</div>`).join('');
     } else {
       h += `<h3>지난 전투 결과</h3>`;
@@ -1835,6 +1857,8 @@
     // 이벤트
     for (const b of box.querySelectorAll('[data-king]')) b.onclick = () => warAction('kingTo', { idx: +b.dataset.king });
     for (const b of box.querySelectorAll('[data-tgt]')) b.onclick = () => { warTarget = +b.dataset.tgt; renderWar(); };
+    for (const b of box.querySelectorAll('[data-intel]')) b.onclick = () => warAction('intel', { battle: +b.dataset.intel });
+    if ($('btnDefault')) $('btnDefault').onclick = () => warAction('defaultDef', { ratio: [0, 1, 2].map((i) => Math.max(0, parseInt($('dd' + i).value, 10) || 0)) });
     for (const b of box.querySelectorAll('[data-cancel]')) b.onclick = () => warAction('cancel', { battle: +b.dataset.cancel });
     // 방어 배치: 쓸 수 있는 병력(지금 병력 + 이 전투에 이미 배치한 병력)을 넘으면 저장 막기
     for (const b of box.querySelectorAll('[data-defend]')) {
@@ -2158,6 +2182,25 @@
       if (MY_TRAPS.has(i)) list.push({ x: tx * TILE + 16, y: ty * TILE + 4, draw: (g, X, Y) => drawTrap(g, X, Y + 24) });
     }
     for (const [i, nid] of STORE_AT) { const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); }
+    // 전선: 공격받는 영토 국경 중 A·B·C 세 곳을 빨갛게 + 깃발
+    for (const b of BATTLES) if (b.f) b.f.forEach(([fx, fy], k) => {
+      if (fx * TILE < x0 - 200 || fx * TILE > x1 + 200 || fy * TILE < y0 - 200 || fy * TILE > y1 + 200) return;
+      const pulse = 0.6 + Math.sin(performance.now() / 250) * 0.25;
+      for (let y = fy - 4; y <= fy + 4; y++) for (let x = fx - 4; x <= fx + 4; x++) {
+        if (terrAt(x, y) !== b.target) continue;
+        const sides = [[0, -1], [0, 1], [-1, 0], [1, 0]].filter(([dx, dy]) => { const q = terrAt(x + dx, y + dy); return q > 0 && q !== b.target && ownerOf(q) === b.att; });
+        if (!sides.length) continue;
+        ctx.fillStyle = `rgba(255,30,60,${pulse * 0.35})`; ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+        ctx.fillStyle = `rgba(230,20,50,${pulse})`;
+        for (const [dx, dy] of sides) ctx.fillRect(x * TILE + (dx > 0 ? TILE - 8 : 0), y * TILE + (dy > 0 ? TILE - 8 : 0), dx ? 8 : TILE, dy ? 8 : TILE);
+      }
+      list.push({ x: fx * TILE + 16, y: fy * TILE + 30, draw: (g, X, Y) => {
+        g.fillStyle = '#5a4630'; g.fillRect(X - 2, Y - 64, 4, 64);
+        g.fillStyle = '#e8203e'; g.beginPath(); g.moveTo(X + 2, Y - 64); g.lineTo(X + 34, Y - 54); g.lineTo(X + 2, Y - 44); g.fill();
+        g.font = `700 14px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.fillText('ABC'[k], X + 13, Y - 54);
+        if (b.att === MY_NID || b.def === MY_NID) sign(g, X, Y - 84, `${'ABC'[k]} 전선 · 충원 E`);
+      } });
+    });
     if (build.on && player.scene === 'ground') { // 설치 모드: 앞 칸 표시
       const [fx, fy] = facingTile(); ctx.fillStyle = 'rgba(255,211,77,0.35)'; ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE); ctx.strokeStyle = '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect(fx * TILE + 1, fy * TILE + 1, TILE - 2, TILE - 2);
     }

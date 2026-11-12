@@ -95,6 +95,22 @@ const tileAt = (x, y) => (x < 0 || y < 0 || x >= MAP.width || y >= MAP.height) ?
 const terrAtTile = (x, y) => terrAtPx(x * 32 + 16, y * 32 + 16);
 const walkableTerrain = (k) => k === TT.GRASS || k === TT.FOREST || k === TT.SAND;
 const tileIdx = (x, y) => y * MAP.width + x;
+// 전선 자리: 공격받는 영토 안에서 공격 나라 땅과 맞닿은 국경 칸들 중, 서로 떨어진 3곳
+let TERR_TILES = null;
+function frontsFor(attNid, tid) {
+  if (!TERR_TILES) { TERR_TILES = new Map(); for (let i = 0; i < TERR.length; i++) { const v = TERR[i]; if (v === 65535) continue; let a = TERR_TILES.get(v); if (!a) TERR_TILES.set(v, a = []); a.push(i); } }
+  const W = MAP.width, border = [];
+  for (const i of TERR_TILES.get(tid) || []) {
+    const x = i % W, y = (i / W) | 0; if (!walkableTerrain(tileAt(x, y))) continue;
+    if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const q = terrAtTile(x + dx, y + dy); return q > 0 && q !== tid && world.ownerOf(q) === attNid; })) border.push([x, y]);
+  }
+  const t = world.t[tid];
+  if (!border.length) return [t.altar, t.altar, t.altar].map((p) => [p[0], p[1]]);
+  const xs = border.map((p) => p[0]), ys = border.map((p) => p[1]);
+  const horiz = Math.max(...xs) - Math.min(...xs) >= Math.max(...ys) - Math.min(...ys);
+  border.sort((a, b) => horiz ? a[0] - b[0] || a[1] - b[1] : a[1] - b[1] || a[0] - b[0]);
+  return [1 / 6, 1 / 2, 5 / 6].map((k) => border[Math.min(border.length - 1, Math.floor(border.length * k))]);
+}
 function storageOf(n) { return n && world.t[n.capital] ? storageSpot(world.t[n.capital], tileAt) : null; }
 // 플레이어가 그 칸 바로 옆(가로·세로·대각선 1칸 정도)에 있는지
 function nextTo(s, x, y, r = 1.6) { return s.scene === 'ground' && s.x != null && Math.hypot(s.x / 32 - (x + 0.5), s.y / 32 - (y + 0.5)) <= r; }
@@ -213,7 +229,7 @@ wss.on('connection', (ws) => {
         t: 'welcome', id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? JAIL_POS : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: arrestsToday(acc), jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        battles: world.publicBattles(), tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat) broadcastOwners();
       return;
@@ -341,16 +357,43 @@ wss.on('connection', (ws) => {
         const n = world.nationOfPlayer(s.token);
         if (!n) return;
         if (n.king !== s.token) return send(ws, { t: 'err', text: '전쟁 결정은 왕만 할 수 있어요' });
+        const cb = m.t === 'cancel' ? world.s.battles.find((b) => b.id === (m.battle | 0) && b.att === n.id) : null;
         const r = m.t === 'declare' ? world.declare(n.id, m.terr | 0, m.troops) : m.t === 'cancel' ? world.cancel(n.id, m.battle | 0) : world.defend(n.id, m.terr | 0, m.troops);
         if (!r.ok) return send(ws, { t: 'err', text: r.err });
         dirty = true;
-        const other = m.t === 'declare' ? r.battle.def : null;
+        if (m.t === 'declare') r.battle.f = frontsFor(n.id, r.battle.target); // 국경 위 A·B·C 전선 자리
+        const other = m.t === 'declare' ? r.battle.def : cb ? cb.def : null;
         sendViews(other ? [n.id, other] : [n.id]);
+        if (m.t !== 'defend') broadcastOwners();
         if (m.t === 'declare') notifyNation(other, `⚔ ${n.name}이(가) ${m.terr | 0}번 영토에 선전포고했어요! ${nextSlotLabel()} 전투`);
         send(ws, { t: 'ok', text: m.t === 'declare' ? `선전포고 완료 · ${nextSlotLabel()}에 결과가 나와요` : m.t === 'cancel' ? '선전포고를 취소했어요' : '방어 배치 저장' });
         break;
       }
       case 'resolveNow': { if (testMode()) resolveNight('test'); break; }
+      case 'defaultDef': { // 기본 방어 비율 (왕)
+        const n = world.nationOfPlayer(s.token); if (!n) return;
+        if (n.king !== s.token) return send(ws, { t: 'err', text: '기본 방어는 왕만 정할 수 있어요' });
+        const r = world.setDefault(n.id, m.ratio); if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        dirty = true; sendViews([n.id]); send(ws, { t: 'ok', text: `기본 방어 비율 저장: A ${n.defaultDef[0]} · B ${n.defaultDef[1]} · C ${n.defaultDef[2]}` });
+        break;
+      }
+      case 'intel': { // 첩보 쓰기: 공격해 온 나라 전선 하나 보기
+        const n = world.nationOfPlayer(s.token); if (!n) return;
+        const r = world.useIntel(n.id, m.battle | 0); if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        dirty = true; sendViews([n.id]); notifyNation(n.id, `🔍 첩보: ${'ABC'[r.front]} 전선에 적 병력 ${r.troops}명 (${s.acc.name}님이 알아냄)`);
+        break;
+      }
+      case 'reinforce': { // 전선 근처에서 병력 충원
+        const n = world.nationOfPlayer(s.token); const b = world.s.battles.find((x) => x.id === (m.battle | 0)); const f = m.front | 0;
+        if (!n || !b || !b.f || !b.f[f]) return;
+        if (!nextTo(s, b.f[f][0], b.f[f][1], NUM.frontRange + 0.5)) return send(ws, { t: 'err', text: `${'ABC'[f]} 전선 가까이 가야 충원할 수 있어요` });
+        if (now() - (s.lastReinforce || 0) < 1500) return;
+        s.lastReinforce = now();
+        const r = world.reinforce(n.id, b.id, f); if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        dirty = true; sendViews([n.id]);
+        send(ws, { t: 'ok', text: `${'ABC'[f]} 전선 ${r.side === 'att' ? '공격' : '방어'} 병력 +${r.amt} (지금 ${r.now})` });
+        break;
+      }
       case 'redeem': { // 쿠폰: 한 번 쓰면 모두에게 사라진다
         if (now() - (s.lastRedeem || 0) < 1500) return send(ws, { t: 'redeem', ok: false, text: '잠시 후 다시 입력해 주세요' });
         s.lastRedeem = now();
@@ -361,10 +404,10 @@ wss.on('connection', (ws) => {
         if (c.used) return send(ws, { t: 'redeem', ok: false, text: '이미 사용된 코드예요' });
         const n = world.nationOfPlayer(s.token);
         if (!n) return send(ws, { t: 'redeem', ok: false, text: '나라에 들어간 뒤에 쓸 수 있어요' });
-        for (const [k, v] of Object.entries(c.r)) if (k === 'coin' || k === 'army') n[k] += v;
+        for (const [k, v] of Object.entries(c.r)) { if (k === 'coin' || k === 'army') n[k] += v; else if (k === 'intel') n.intelAny = (n.intelAny || 0) + v; }
         c.used = { name: s.acc.name, nation: n.name, ts: Date.now() }; dirty = true;
         sendViews([n.id]);
-        send(ws, { t: 'redeem', ok: true, text: `받았어요: ${Object.entries(c.r).map(([k, v]) => `${k === 'coin' ? '코인' : '병력'} +${v}`).join(', ')} (우리 나라에 들어갔어요)` });
+        send(ws, { t: 'redeem', ok: true, text: `받았어요: ${Object.entries(c.r).map(([k, v]) => `${{ coin: '코인', army: '병력', intel: '첩보(아무 나라용)' }[k]} +${v}`).join(', ')} (우리 나라에 들어갔어요)` });
         break;
       }
       case 'setName': { // 이름 정하기 (처음은 무료) / 바꾸기 (3번까지)
@@ -523,7 +566,10 @@ wss.on('connection', (ws) => {
         s.hits.n++; s.hits.at = now();
         if (s.hits.n >= NUM.scoutHits) {
           s.hits = null; const D = world.nation(own);
-          send(ws, { t: 'scout', terr: t.id, text: `🔍 ${D.name}의 병력: ${D.army}명 (영토 ${world.territoriesOf(D.id).length}곳)` });
+          // 첩보 카드: 이 나라가 우리를 공격할 때 전선 하나를 볼 수 있음 (사람마다 이 나라에서 2시간에 1장)
+          s.acc.scoutAt = s.acc.scoutAt || {}; let card = '';
+          if (n && Date.now() - (s.acc.scoutAt[D.id] || 0) > 2 * 3600e3) { s.acc.scoutAt[D.id] = Date.now(); n.intel = n.intel || {}; n.intel[D.id] = (n.intel[D.id] || 0) + 1; dirty = true; sendViews([n.id]); card = ` · ${D.name} 전용 첩보 +1장`; }
+          send(ws, { t: 'scout', terr: t.id, text: `🔍 ${D.name}의 병력: ${D.army}명 (영토 ${world.territoriesOf(D.id).length}곳)${card}` });
         }
         break;
       }
@@ -576,7 +622,7 @@ setInterval(() => {
 
 // ------------------------------------------------------------ 나라·전투 방송
 function broadcastOwners() {
-  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: world.publicNations() });
+  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: world.publicNations(), battles: world.publicBattles() });
   for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
 }
 function sendViews(nids) {
@@ -725,8 +771,8 @@ async function adminOp(m) {
     }
     case 'couponCreate': {
       const count = Math.max(1, Math.min(300, m.count | 0));
-      const kind = m.kind === 'army' ? 'army' : 'coin';
-      const amount = Math.max(1, Math.min(kind === 'army' ? 1000 : 100000, m.amount | 0));
+      const kind = ['army', 'intel'].includes(m.kind) ? m.kind : 'coin';
+      const amount = Math.max(1, Math.min(kind === 'army' ? 1000 : kind === 'intel' ? 5 : 100000, m.amount | 0));
       const memo = clean(m.memo, 30);
       const codes = [];
       for (let i = 0; i < count; i++) { const c = newCouponCode(); state.coupons[c] = { r: { [kind]: amount }, memo, at: Date.now(), used: null }; codes.push(c); }

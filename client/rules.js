@@ -30,6 +30,7 @@
     scoutHits: 10,                 // 적 수정을 이만큼 때리면 그 나라 병력이 보임
     carry: { coin: 150, wood: 10 }, // 한 번에 훔쳐 들 수 있는 양
     stealSec: 3, arrestJail: 3, jailMin: 60, // 훔치기 시간, 체포 몇 번이면 감옥, 감옥 시간(분)
+    reinforce: 10, frontRange: 3.5, // 전선 근처(칸)에서 E 한 번에 충원하는 병력
   };
   const T = { VOID: 0, GRASS: 1, FOREST: 2, SAND: 3, WATER: 4, MOUNTAIN: 5, HOLY: 6, WALL: 7 };
   function hash(x, y, s = 0) { let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -232,9 +233,40 @@
       const i = this.s.battles.findIndex((b) => b.id === battleId && b.att === nid);
       if (i < 0) return { ok: false, err: '취소할 선전포고가 없어요' };
       this.nation(nid).army += sum(this.s.battles[i].a);
+      const D = this.nation(this.s.battles[i].def); if (D && this.s.battles[i].rd) D.army += sum(this.s.battles[i].rd); // 방어 충원은 돌려줌
       this.s.battles.splice(i, 1);
       return { ok: true };
     }
+    // 기본 방어 비율: 방어 배치를 못 했을 때 이 비율로 자동 배치 (A·B·C 퍼센트)
+    setDefault(nid, ratio) {
+      const n = this.nation(nid); const r = clampTroops(ratio);
+      if (!n || !r || sum(r) <= 0) return { ok: false, err: 'A·B·C 중 하나는 0보다 커야 해요' };
+      n.defaultDef = r; return { ok: true };
+    }
+    // 전선 근처에서 병력 충원 (공격·방어 둘 다)
+    reinforce(nid, battleId, front) {
+      const n = this.nation(nid), b = this.s.battles.find((x) => x.id === battleId);
+      if (!n || !b || front < 0 || front > 2) return { ok: false, err: '충원할 전투가 없어요' };
+      if (b.att !== nid && b.def !== nid) return { ok: false, err: '우리 나라 전투가 아니에요' };
+      const amt = Math.min(NUM.reinforce, n.army);
+      if (amt <= 0) return { ok: false, err: '저장소에 남은 병력이 없어요' };
+      n.army -= amt;
+      if (b.att === nid) b.a[front] += amt; else { b.rd = b.rd || [0, 0, 0]; b.rd[front] += amt; }
+      return { ok: true, amt, side: b.att === nid ? 'att' : 'def', now: b.att === nid ? b.a[front] : (b.d ? b.d[front] : 0) + b.rd[front] };
+    }
+    // 첩보: 공격해 온 나라의 전선 하나 병력 보기. 그 나라 전용 첩보 → 없으면 아무 나라용 첩보
+    useIntel(nid, battleId) {
+      const n = this.nation(nid), b = this.s.battles.find((x) => x.id === battleId && x.def === nid);
+      if (!n || !b) return { ok: false, err: '공격받는 전투에만 쓸 수 있어요' };
+      b.rev = b.rev || [];
+      const left = [0, 1, 2].filter((f) => !b.rev.includes(f));
+      if (!left.length) return { ok: false, err: '세 전선을 다 알아냈어요' };
+      n.intel = n.intel || {};
+      if ((n.intel[b.att] || 0) > 0) n.intel[b.att]--; else if ((n.intelAny || 0) > 0) n.intelAny--; else return { ok: false, err: '쓸 수 있는 첩보가 없어요' };
+      const f = left[Math.floor(Math.random() * left.length)]; b.rev.push(f);
+      return { ok: true, front: f, troops: b.a[f] };
+    }
+    publicBattles() { return this.s.battles.map((b) => ({ id: b.id, target: b.target, att: b.att, def: b.def, f: b.f || null })); }
     defend(nid, tid, troops) {
       const n = this.nation(nid);
       troops = clampTroops(troops);
@@ -254,17 +286,18 @@
       this.s.battles = [];
       for (const b of pending) {
         const A = this.nation(b.att), D = this.nation(b.def);
-        if (!A || A.dead || !D || D.dead || this.s.owner[b.target] !== b.def) { if (A && !A.dead) A.army += sum(b.a); if (D && !D.dead && b.d) D.army += sum(b.d); continue; }
+        if (!A || A.dead || !D || D.dead || this.s.owner[b.target] !== b.def) { if (A && !A.dead) A.army += sum(b.a); if (D && !D.dead) D.army += (b.d ? sum(b.d) : 0) + (b.rd ? sum(b.rd) : 0); continue; }
         let d = b.d, auto = false;
         if (!d) {
           // 방어 배치를 안 냈으면: 남은 병력을 이번 전투에 공격받는 수만큼 나눠, 지난 배치 비율(없으면 균등)로
           const left = pending.filter((x) => x.def === b.def && !x.d && !x._done).length || 1;
           const pool = Math.floor(D.army / left);
-          const r = D.lastDef && sum(D.lastDef) > 0 ? D.lastDef : [1, 1, 1];
+          const r = D.defaultDef && sum(D.defaultDef) > 0 ? D.defaultDef : D.lastDef && sum(D.lastDef) > 0 ? D.lastDef : [1, 1, 1]; // 기본 방어 비율 > 지난 배치 > 균등
           d = r.map((v) => Math.floor(pool * v / sum(r)));
           d[0] += pool - sum(d);
           D.army -= sum(d); auto = true;
         }
+        if (b.rd) d = d.map((v, k) => v + b.rd[k]); // 전선 근처에서 충원한 방어 병력
         b._done = true;
         const cA = Math.min(NUM.cmdMax, NUM.cmdPer * (cmdCount ? cmdCount(b.att, b.target) : 0));
         const cD = Math.min(NUM.cmdMax, NUM.cmdPer * (cmdCount ? cmdCount(b.def, b.target) : 0));
@@ -319,6 +352,7 @@
       return {
         me: {
           id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, army: n.army, coin: n.coin, actions: n.actions,
+          defaultDef: n.defaultDef || null, intelAny: n.intelAny || 0, intel: n.intel || {},
           wood: n.wood || 0, vaccine: n.vaccine || 0, items: Object.assign({ floor: 0, wall: 0, trap: 0 }, n.items), vaccinePrice: NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0),
           isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length,
           declaresLeft: this.declaresLeft(n.id), provinces: n.provinces, code: n.code,
@@ -326,8 +360,9 @@
           memberList: n.members.map((k, i) => ({ idx: i, name: (n.memberNames || {})[k] || '?', king: k === n.king, me: k === key })),
         },
         night: this.s.night,
-        outgoing: this.s.battles.filter((b) => b.att === n.id).map((b) => ({ id: b.id, target: b.target, def: b.def, a: b.a })),
-        incoming: this.s.battles.filter((b) => b.def === n.id).map((b) => ({ id: b.id, target: b.target, att: b.att, d: b.d })), // 공격 병력은 숨김
+        outgoing: this.s.battles.filter((b) => b.att === n.id).map((b) => ({ id: b.id, target: b.target, def: b.def, a: b.a, f: b.f || null })),
+        // 공격 병력은 숨김 (첩보로 알아낸 전선만 보임)
+        incoming: this.s.battles.filter((b) => b.def === n.id).map((b) => ({ id: b.id, target: b.target, att: b.att, d: b.d, rd: b.rd || [0, 0, 0], f: b.f || null, rev: (b.rev || []).map((f) => ({ f, n: b.a[f] })), intel: ((n.intel || {})[b.att] || 0) + (n.intelAny || 0) })),
         reports: this.s.reports.filter((r) => r.att === n.id || r.def === n.id).slice(-12),
       };
     }
