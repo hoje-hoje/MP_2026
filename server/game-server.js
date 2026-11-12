@@ -129,6 +129,9 @@ state.coupons = state.coupons || {};     // 쿠폰 코드 -> { r:{coin|army}, me
 state.puzzles = state.puzzles || [];     // 관리자 화면에서 넣은 문제 [{ id, type, question, image, answer:[], on, at }]
 const testMode = () => typeof state.settings.testMode === 'boolean' ? state.settings.testMode : ENV_TEST_MODE;
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const BATTLE_HOURS = [13, 22]; // 전투 처리 시각 (한국 시간)
+const curSlotKey = () => kstDay() + '-' + new Date(Date.now() + 9 * 3600e3).getUTCHours();
+function nextSlotLabel() { const h = new Date(Date.now() + 9 * 3600e3).getUTCHours(); const n = BATTLE_HOURS.find((x) => x > h); return n ? `오늘 ${n}시` : `내일 ${BATTLE_HOURS[0]}시`; }
 const FOUNDING_LAST_DAY = process.env.FOUNDING_LAST_DAY || '2026-12-15'; // 건국은 D2(12/15)까지
 const foundingOpen = () => state.settings.founding === 'open' ? true : state.settings.founding === 'closed' ? false : testMode() || kstDay() <= FOUNDING_LAST_DAY;
 const online = new Map(); // id -> session
@@ -151,6 +154,11 @@ function cleanLook(l) {
   l = l || {};
   return { char: Math.max(0, Math.min(127, l.char | 0)), hue: Math.max(0, Math.min(5, l.hue | 0)), hair: HEX.test(l.hair) ? l.hair : '#4a3428', outfit: HEX.test(l.outfit) ? l.outfit : '#5b7fd6', skin: HEX.test(l.skin) ? l.skin : '#ffe1cc', accent: HEX.test(l.accent) ? l.accent : '#ff5d7a', long: !!l.long };
 }
+// ---- 이름 (동명이인 금지, 바꾸기 3번)
+const NAME_CHANGES = 3;
+const normName = (n) => String(n || '').replace(/\s/g, '').toLowerCase();
+function nameTaken(name, token) { const k = normName(name); return Object.entries(state.accounts).some(([t, a]) => t !== token && a.nameSet && normName(a.name) === k); }
+function uniqueName(base, token) { base = base.slice(0, 8); if (!nameTaken(base, token)) return base; for (let i = 2; ; i++) if (!nameTaken(base + i, token)) return base + i; }
 function filterBad(text) { let t = text; for (const w of BANNED) t = t.split(w).join('♡'.repeat(w.length)); return t; }
 
 // ------------------------------------------------------------ WebSocket
@@ -187,7 +195,11 @@ wss.on('connection', (ws) => {
       let token = typeof m.token === 'string' && state.accounts[m.token] ? m.token : null;
       if (!token) { token = crypto.randomBytes(12).toString('hex'); state.accounts[token] = { x: null, y: null, scene: 'ground', room: null }; }
       const acc = state.accounts[token];
-      acc.name = clean(m.name, 10) || '이름없음';
+      // 이름: 중복 금지. 이미 정한 이름은 그대로, 새 계정은 겹치지 않는 임시 이름
+      if (!acc.nameSet) {
+        if (acc.name && !nameTaken(acc.name, token)) acc.nameSet = true; // 예전 계정
+        else acc.name = uniqueName(clean(m.name, 10) || '손님', token);
+      }
       acc.team = team;
       acc.look = cleanLook(m.look);
       dirty = true;
@@ -198,7 +210,7 @@ wss.on('connection', (ws) => {
       const nat = world.nationOfPlayer(token); // 나라는 건국 화면에서 세우거나 초대 코드로 들어간다
       if (nat) { world.refreshActions(nat, kstDay()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       send(ws, {
-        t: 'welcome', id: s.id, token, pos: jailed(acc) ? JAIL_POS : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: arrestsToday(acc), jailUntil: jailed(acc) ? acc.jailUntil : 0,
+        t: 'welcome', id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? JAIL_POS : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: arrestsToday(acc), jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
         tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
@@ -259,7 +271,7 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'look': {
-        s.acc.look = cleanLook(m.look); s.acc.name = clean(m.name, 10) || s.acc.name; dirty = true;
+        s.acc.look = cleanLook(m.look); dirty = true; // 이름은 setName 으로만 바꾼다
         const mm = { t: 'meta', p: meta(s) };
         for (const o of online.values()) if (o.known.has(s.id) || o === s) send(o.ws, mm);
         break;
@@ -334,8 +346,8 @@ wss.on('connection', (ws) => {
         dirty = true;
         const other = m.t === 'declare' ? r.battle.def : null;
         sendViews(other ? [n.id, other] : [n.id]);
-        if (m.t === 'declare') notifyNation(other, `⚔ ${n.name}이(가) ${m.terr | 0}번 영토에 선전포고했어요! 오늘 밤 10시 전투`);
-        send(ws, { t: 'ok', text: m.t === 'declare' ? '선전포고 완료 · 밤 10시에 결과가 나와요' : m.t === 'cancel' ? '선전포고를 취소했어요' : '방어 배치 저장' });
+        if (m.t === 'declare') notifyNation(other, `⚔ ${n.name}이(가) ${m.terr | 0}번 영토에 선전포고했어요! ${nextSlotLabel()} 전투`);
+        send(ws, { t: 'ok', text: m.t === 'declare' ? `선전포고 완료 · ${nextSlotLabel()}에 결과가 나와요` : m.t === 'cancel' ? '선전포고를 취소했어요' : '방어 배치 저장' });
         break;
       }
       case 'resolveNow': { if (testMode()) resolveNight('test'); break; }
@@ -355,15 +367,29 @@ wss.on('connection', (ws) => {
         send(ws, { t: 'redeem', ok: true, text: `받았어요: ${Object.entries(c.r).map(([k, v]) => `${k === 'coin' ? '코인' : '병력'} +${v}`).join(', ')} (우리 나라에 들어갔어요)` });
         break;
       }
+      case 'setName': { // 이름 정하기 (처음은 무료) / 바꾸기 (3번까지)
+        const name = clean(m.name, 10);
+        if (name.replace(/\s/g, '').length < 2) return send(ws, { t: 'name', ok: false, text: '이름은 2글자 이상이에요' });
+        if (filterBad(name) !== name) return send(ws, { t: 'name', ok: false, text: '쓸 수 없는 말이 들어 있어요' });
+        if (s.acc.nameSet && normName(name) === normName(s.acc.name)) { s.acc.name = name; dirty = true; return send(ws, { t: 'name', ok: true, name, left: NAME_CHANGES - (s.acc.renames || 0) }); }
+        if (nameTaken(name, s.token)) return send(ws, { t: 'name', ok: false, text: `'${name}'은(는) 이미 누가 쓰고 있어요` });
+        if (s.acc.nameSet) { if ((s.acc.renames || 0) >= NAME_CHANGES) return send(ws, { t: 'name', ok: false, text: `이름은 ${NAME_CHANGES}번까지만 바꿀 수 있어요` }); s.acc.renames = (s.acc.renames || 0) + 1; }
+        s.acc.name = name; s.acc.nameSet = true; dirty = true;
+        const n = world.nationOfPlayer(s.token); if (n) { if (n.memberNames) n.memberNames[s.token] = name; if (n.king === s.token) n.kingName = name; sendViews([n.id]); broadcastOwners(); }
+        sendMeta(s);
+        send(ws, { t: 'name', ok: true, name, left: NAME_CHANGES - (s.acc.renames || 0) });
+        break;
+      }
       case 'chop': { // 나무 베기 (화면에서 2초 게이지가 찬 뒤 보냄)
         const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y);
         if (now() - (s.lastChop || 0) < NUM.chopSec * 900) return;
         if (!nextTo(s, x, y) || !treeKind(tileAt(x, y), x, y) || world.s.chopped[i]) return send(ws, { t: 'err', text: '벨 수 있는 나무가 없어요' });
-        s.lastChop = now(); world.s.chopped[i] = 1; dirty = true;
         const n = world.nationOfPlayer(s.token);
-        if (n) { n.wood = (n.wood || 0) + NUM.woodPerTree; sendViews([n.id]); }
+        if (!n || world.ownerOf(terrAtTile(x, y)) !== n.id) return send(ws, { t: 'err', text: '우리 나라 땅의 나무만 벨 수 있어요' });
+        s.lastChop = now(); world.s.chopped[i] = 1; dirty = true;
+        n.wood = (n.wood || 0) + NUM.woodPerTree; sendViews([n.id]);
         const msg = JSON.stringify({ t: 'chopped', i }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
-        send(ws, { t: 'ok', text: n ? `🪵 목재 +${NUM.woodPerTree} (우리 저장소)` : '나무를 벴어요 (나라가 없어서 목재는 못 모아요)' });
+        send(ws, { t: 'ok', text: `🪵 목재 +${NUM.woodPerTree} (우리 저장소)` });
         break;
       }
       case 'mine': { // 금광: 영토마다 하루 1번, 사람마다
@@ -572,7 +598,7 @@ function cmdCount(nid, tid) {
 }
 function resolveNight(why) {
   const reports = world.resolveAll(cmdCount);
-  state.lastResolved = kstDay(); dirty = true; saveState();
+  state.lastResolved = kstDay(); state.lastSlot = curSlotKey(); dirty = true; saveState();
   console.log(`[전투] ${why}: ${reports.length}건 처리`);
   broadcastOwners();
   for (const o of online.values()) {
@@ -584,10 +610,10 @@ function resolveNight(why) {
 setInterval(() => {
   for (const o of online.values()) if (o.acc.jailUntil && !jailed(o.acc)) { o.acc.jailUntil = 0; dirty = true; placeAt(o, capitalPos(o.acc, o.token)); send(o.ws, { t: 'released', text: '감옥에서 풀려났어요. 수도로 돌아왔어요' }); sendMeta(o); }
 }, 5000);
-// 매일 밤 10시(한국 시간)에 전투 처리
+// 매일 13시(점심)·22시(밤) (한국 시간)에 전투 처리
 setInterval(() => {
-  const k = new Date(Date.now() + 9 * 3600e3);
-  if (k.getUTCHours() === 22 && state.lastResolved !== kstDay()) resolveNight('22:00');
+  const h = new Date(Date.now() + 9 * 3600e3).getUTCHours();
+  if (BATTLE_HOURS.includes(h) && state.lastSlot !== kstDay() + '-' + h) resolveNight(h + ':00');
 }, 30000);
 
 // ------------------------------------------------------------ 관리자(신) 화면 API: POST /admin/api

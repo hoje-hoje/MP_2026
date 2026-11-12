@@ -1046,7 +1046,7 @@
       const own = ownerOf(t.id);
       if (own) chip(myView && own === myView.me.id ? (home === t ? '우리 수도' : '우리 땅') : natName(own) + (nationsPub[own] && nationsPub[own].capital === t.id ? ' 수도' : ''), natColor(own));
       else chip('주인 없음 (중립)', null, true);
-      if (myView && (myView.incoming.some((b) => b.target === t.id) || myView.outgoing.some((b) => b.target === t.id))) chip('⚔ 오늘 밤 전투', '#c22f53');
+      if (myView && (myView.incoming.some((b) => b.target === t.id) || myView.outgoing.some((b) => b.target === t.id))) chip(`⚔ ${nextFight()} 전투`, '#c22f53');
       if (t.capitalCandidate) chip('수도 후보 · 하늘 포털', '#c22f53');
     } else {
       $('whereName').textContent = '알 수 없는 땅';
@@ -1113,7 +1113,7 @@
       if (ownerOf(terrAt(fx, fy)) !== MY_NID) return { kind: 'info', text: '설치 모드 · 우리 땅에만 놓을 수 있어요' };
       return { kind: 'place', x: fx, y: fy, text: `${ITEM_NAME[build.k]} 놓기 · 남은 ${myView.me.items[build.k]}개` };
     }
-    if (treeAt(fx, fy)) return { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '나무 베기 · E 꾹 누르기' };
+    if (treeAt(fx, fy) && MY_NID && ownerOf(terrAt(fx, fy)) === MY_NID) return { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '나무 베기 · E 꾹 누르기' };
     if (e && e.k === 'wall' && e.n !== MY_NID) return { kind: 'break', x: fx, y: fy, hold: MPRules.NUM.wallBreakSec * 1000, text: `${natName(e.n)} 방벽 부수기 · E 꾹 ${MPRules.NUM.wallBreakSec}초` };
     return null;
   }
@@ -1358,8 +1358,16 @@
     if (window.MP_ONLINE && ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'look', name: player.name, look: lookPayload() }));
   }
   $('lenSeg').parentElement.hidden = true;
-  $('nick').addEventListener('input', (e) => { player.name = e.target.value.trim() || '나'; tagW.delete(player.name); saveLook(); });
-  $('btnCloset').addEventListener('click', () => { $('nick').value = player.name; closetUI(); $('closet').hidden = false; });
+  // 이름: 미리보기에선 바로 바뀌고, 온라인에선 [이름 바꾸기] 버튼 (중복 금지, 3번까지)
+  let nameSet = false, renamesLeft = 3;
+  $('nick').addEventListener('input', (e) => { if (window.MP_ONLINE) { $('nickMsg').textContent = ''; return; } player.name = e.target.value.trim() || '나'; tagW.delete(player.name); saveLook(); });
+  function renderNameBox() { if (!window.MP_ONLINE) return; $('nickBtn').hidden = false; $('nickBtn').textContent = `이름 바꾸기 (남은 ${renamesLeft}번)`; $('nickBtn').disabled = renamesLeft <= 0; $('nick').value = player.name; }
+  $('nickBtn').addEventListener('click', () => {
+    const want = $('nick').value.trim(); if (want === player.name) { $('nickMsg').textContent = '지금 이름과 같아요'; return; }
+    if (!confirm(`이름을 '${want}'(으)로 바꿀까요? (남은 변경 ${renamesLeft}번)`)) return;
+    ws.send(JSON.stringify({ t: 'setName', name: want }));
+  });
+  $('btnCloset').addEventListener('click', () => { $('nick').value = player.name; $('nickMsg').textContent = ''; renderNameBox(); closetUI(); $('closet').hidden = false; });
   $('btnClosetDone').addEventListener('click', () => { $('closet').hidden = true; });
 
   // 쿠폰 (오프라인에서 받은 1회용 코드). 실제 게임에서는 서버가 확인하고, 한 번 쓰면 모두에게 사라진다.
@@ -1408,6 +1416,7 @@
     switch (m.t) {
       case 'welcome': {
         myId = m.id; netOn = true; store('mp2026.token', m.token);
+        if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
         player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
         TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
@@ -1452,6 +1461,11 @@
       case 'answer': puzzleResult(m.correct, m.text); break;
       case 'err': if (!$('puzzle').hidden) puzzleResult(false, m.text); toast(m.text); if (!$('war').hidden) renderWar(); break;
       case 'ok': toast(m.text); break;
+      case 'name': {
+        if (m.ok) { player.name = m.name; nameSet = true; renamesLeft = m.left; tagW.clear(); store('mp2026.look', Object.assign(store('mp2026.look') || {}, { name: m.name })); $('fMsg').textContent = ''; renderNameBox(); if (nameNext) { const f = nameNext; nameNext = null; f(); } else toast(`이름을 '${m.name}'(으)로 바꿨어요 · 남은 변경 ${m.left}번`); }
+        else { nameNext = null; if (!$('found').hidden) $('fMsg').textContent = m.text; else { $('nickMsg').textContent = m.text; toast(m.text); } }
+        break;
+      }
       case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
       case 'tile': { if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); break; }
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
@@ -1588,7 +1602,7 @@
     const fresh = myView.incoming.filter((b) => !seen.has(myView.night + ':' + b.id));
     if (!fresh.length) return;
     $('warAlertList').innerHTML = fresh.map((b) => `<li><b style="color:${natColor(b.att)}">${esc(natName(b.att))}</b> → ${esc(terrLabel(b.target))}${myView.me.capital === b.target ? ' <b class="cap">수도!</b>' : ''} ${b.d ? '<small>(방어 배치 완료)</small>' : '<small>(미배치)</small>'}</li>`).join('');
-    $('warAlertNote').textContent = myView.me.isKing ? '오늘 밤 10시 전에 세 전선(A·B·C)에 방어 병력을 나눠 두세요. 안 하면 자동으로 나눠져요.' : '왕에게 알려서 방어 배치를 하게 하세요. 그 땅에 서 있으면 지휘관 보너스도 생겨요.';
+    $('warAlertNote').textContent = myView.me.isKing ? `${nextFight()} 전투 전에 세 전선(A·B·C)에 방어 병력을 나눠 두세요.` + ' 안 하면 자동으로 나눠져요.' : '왕에게 알려서 방어 배치를 하게 하세요. 그 땅에 서 있으면 지휘관 보너스도 생겨요.';
     $('warAlert').hidden = false;
     $('warAlert').dataset.keys = JSON.stringify(fresh.map((b) => myView.night + ':' + b.id));
   }
@@ -1662,7 +1676,7 @@
     else if (t === 'defend') r = OFF.defend(OFF_ME, payload.terr, payload.troops);
     else if (t === 'resolveNow') return offNight();
     if (!r.ok) { toast(r.err); return; }
-    toast(t === 'claim' ? `${terrLabel(payload.terr)}을(를) 점령했어요` : t === 'declare' ? '선전포고 완료 · 밤 10시에 결과가 나와요' : t === 'cancel' ? '선전포고를 취소했어요' : '방어 배치 저장');
+    toast(t === 'claim' ? `${terrLabel(payload.terr)}을(를) 점령했어요` : t === 'declare' ? `선전포고 완료 · ${nextFight()}에 결과가 나와요` : t === 'cancel' ? '선전포고를 취소했어요' : '방어 배치 저장');
     offSync();
   }
   function offNight() {
@@ -1673,13 +1687,15 @@
     showNight(reps.filter((r) => r.att === OFF_ME || r.def === OFF_ME));
   }
   function showNight(reps) {
-    if (!reps.length) { toast('밤 10시: 우리 나라는 이번 밤 전투가 없었어요'); return; }
+    if (!reps.length) { toast('이번 전투: 우리 나라는 전투가 없었어요'); return; }
     playBattles(reps, () => {
       warTab = 'report'; $('war').hidden = false; renderWar();
-      const w = reps.filter((r) => (r.winner === 'att') === (r.att === myView.me.id)).length; toast(`밤 10시 전투 결과: ${reps.length}전 ${w}승`);
+      const w = reps.filter((r) => (r.winner === 'att') === (r.att === myView.me.id)).length; toast(`전투 결과: ${reps.length}전 ${w}승`);
     });
   }
-  // ---- 밤 전투 장면: 전투마다 약 3.5초 연출 + 왼쪽 요약. 화면을 누르면 결과로 건너뛴다
+  // 다음 전투 시각 (13시·22시, 한국 시간)
+  function nextFight() { const h = new Date(Date.now() + 9 * 3600e3).getUTCHours(); return h < 13 ? '오늘 13시' : h < 22 ? '오늘 22시' : '내일 13시'; }
+  // ---- 전투 장면: 전투마다 약 3.5초 연출 + 왼쪽 요약. 화면을 누르면 결과로 건너뛴다
   const BT = { list: [], i: 0, t0: 0, done: null, raf: 0 };
   function playBattles(reps, done) {
     const seen = new Set(store('mp2026.battleSeen') || []);
@@ -1699,7 +1715,7 @@
     const r = BT.list[BT.i]; BT.t0 = performance.now();
     const meAtt = myView && r.att === myView.me.id;
     const won = (r.winner === 'att') === meAtt;
-    $('btSide').innerHTML = `<h3>⚔ ${r.night}번째 밤</h3><div class="where">${esc(terrLabel(r.target))}${r.capital ? ' · <b>수도</b>' : ''}</div>
+    $('btSide').innerHTML = `<h3>⚔ ${r.night}번째 전투</h3><div class="where">${esc(terrLabel(r.target))}${r.capital ? ' · <b>수도</b>' : ''}</div>
       <div class="vs"><b style="color:${natColor(r.att)}">${esc(r.attName)}</b> 공격 ×${r.mA}<br><b style="color:${natColor(r.def)}">${esc(r.defName)}</b> 방어 ×${r.mD}${r.autoDef ? ' (자동 배치)' : ''}</div>
       <table>${['A', 'B', 'C'].map((f, i) => `<tr data-lane="${i}"><th>${f}</th><td>${r.effA[i]}</td><td>vs</td><td>${r.effD[i]}</td><td class="res"></td></tr>`).join('')}</table>
       <div class="sum" hidden>${won ? '🎉 승리' : '패배'} · 전선 ${r.fronts.filter((x) => x === 'att').length}:${r.fronts.filter((x) => x === 'def').length}<br>${r.winner === 'att' ? (meAtt ? '영토를 점령했어요' : '영토를 빼앗겼어요') : (meAtt ? '공격이 막혔어요' : '방어 성공!')}${r.merged ? '<br><b>수도 함락 · 나라 병합</b>' : ''}<br><small>잃은 병력 ${esc(r.attName)} −${r.lossA} · ${esc(r.defName)} −${r.lossD}</small></div>
@@ -1773,7 +1789,7 @@
     const v = myView, box = $('warBody');
     if (!v) { $('warHead').textContent = ''; box.innerHTML = '<p class="msg">아직 나라가 없어요. 하늘의 유랑민 등록소에서 귀화·용병·건국을 등록하거나, 건국 기간에는 나라를 세울 수 있어요.</p>'; return; }
     const me = v.me, king = me.isKing;
-    $('warHead').innerHTML = `<b style="color:${me.color}">■</b> ${esc(me.name)} · 왕 ${esc(me.kingName || '')}<br><span>병력 <b>${me.army}</b> · 영토 ${me.territories}곳 · 오늘 밤 선전포고 ${me.declaresLeft}/${MPRules.NUM.maxDeclare} · 행동력 ${me.actions}</span>`;
+    $('warHead').innerHTML = `<b style="color:${me.color}">■</b> ${esc(me.name)} · 왕 ${esc(me.kingName || '')}<br><span>병력 <b>${me.army}</b> · 영토 ${me.territories}곳 · 이번 전투 선전포고 ${me.declaresLeft}/${MPRules.NUM.maxDeclare} · 행동력 ${me.actions}</span>`;
     for (const b of document.querySelectorAll('#warTabs button')) b.setAttribute('aria-pressed', String(b.dataset.tab === warTab));
     let h = '';
     if (!king) h += '<p class="note">전쟁 결정(선전포고·방어 배치)은 왕만 할 수 있어요. 여기선 상황만 볼 수 있어요.</p>';
@@ -1785,7 +1801,7 @@
       const mineSet = new Set(Object.keys(owners).filter((k) => owners[k] === me.id).map(Number));
       const targets = [];
       for (const tid of mineSet) for (const nb of terrs[tid].neighbors) if (owners[nb] && owners[nb] !== me.id && !gone[nb] && !targets.includes(nb)) targets.push(nb);
-      if (v.outgoing.length) h += `<h3>오늘 밤 공격</h3>` + v.outgoing.map((b) => `<div class="row"><span>⚔ ${esc(terrLabel(b.target))} <i style="color:${natColor(b.def)}">${esc(natName(b.def))}</i> · ${b.a.join(' / ')}</span>${king ? `<button data-cancel="${b.id}">취소</button>` : ''}</div>`).join('');
+      if (v.outgoing.length) h += `<h3>${nextFight()} 전투 · 우리 공격</h3>` + v.outgoing.map((b) => `<div class="row"><span>⚔ ${esc(terrLabel(b.target))} <i style="color:${natColor(b.def)}">${esc(natName(b.def))}</i> · ${b.a.join(' / ')}</span>${king ? `<button data-cancel="${b.id}">취소</button>` : ''}</div>`).join('');
       h += `<h3>공격할 수 있는 적 영토 (${targets.length})</h3>`;
       if (!targets.length) h += '<p class="msg">우리 땅과 붙어 있는 적 영토가 없어요. 중립 땅을 점령해서 적과 국경을 맞대세요 (제단에서 E).</p>';
       h += '<div class="targets">' + targets.map((tid) => `<button class="tgt" data-tgt="${tid}" aria-pressed="${tid === warTarget}"><b style="color:${natColor(owners[tid])}">■</b> ${esc(terrLabel(tid))}<small>${esc(natName(owners[tid]))}${nationsPub[owners[tid]] && nationsPub[owners[tid]].capital === tid ? ' · 수도!' : ''}</small></button>`).join('') + '</div>';
@@ -1797,7 +1813,7 @@
           <div class="row"><span id="atkSum">합계 0 / ${me.army}</span>${king ? '<button id="btnDeclare">선전포고</button>' : ''}</div></div>`;
       }
     } else if (warTab === 'defend') {
-      h += `<h3>오늘 밤 우리 땅을 노리는 공격 (${v.incoming.length})</h3>`;
+      h += `<h3>${nextFight()} 전투 · 우리 땅을 노리는 공격 (${v.incoming.length})</h3>`;
       if (!v.incoming.length) h += '<p class="msg">지금은 공격받는 곳이 없어요.</p>';
       h += v.incoming.map((b) => `<div class="plan"><div class="row"><span>🛡 ${esc(terrLabel(b.target))} ← <i style="color:${natColor(b.att)}">${esc(natName(b.att))}</i>${nationsPub[me.id] && me.capital === b.target ? ' · <b>수도!</b>' : ''}</span><span>${b.d ? '배치 완료' : '<b>미배치</b> (안 하면 자동 배치)'}</span></div>
         ${troopInputs('def' + b.id + '_', b.d || [0, 0, 0], !king)}${king ? `<div class="row"><span id="defSum${b.id}" data-max="${me.army + (b.d ? b.d[0] + b.d[1] + b.d[2] : 0)}">합계 ${b.d ? b.d[0] + b.d[1] + b.d[2] : 0} / ${me.army + (b.d ? b.d[0] + b.d[1] + b.d[2] : 0)} · 상대 병력은 비밀</span><button data-defend="${b.target}" data-bid="${b.id}">방어 배치 저장</button></div>` : ''}</div>`).join('');
@@ -1806,7 +1822,7 @@
       if (!v.reports.length) h += '<p class="msg">아직 전투 기록이 없어요.</p>';
       h += v.reports.slice().reverse().map((r) => {
         const weAtt = r.att === me.id, won = (r.winner === 'att') === weAtt;
-        return `<div class="report ${won ? 'won' : 'lost'}"><div class="row"><b>${won ? '승리' : '패배'}</b><span>${r.night}일째 밤 · ${esc(terrLabel(r.target))}</span></div>
+        return `<div class="report ${won ? 'won' : 'lost'}"><div class="row"><b>${won ? '승리' : '패배'}</b><span>${r.night}번째 전투 · ${esc(terrLabel(r.target))}</span></div>
           <div class="msg">${esc(r.attName)}(공격) → ${esc(r.defName)}(방어)${r.autoDef ? ' · 방어 자동 배치' : ''}</div>
           <table><tr><th></th><th>A</th><th>B</th><th>C</th></tr>
           <tr><td>공격 ×${r.mA}</td>${r.effA.map((x, i) => `<td class="${r.fronts[i] === 'att' ? 'w' : ''}">${x}</td>`).join('')}</tr>
@@ -1814,7 +1830,7 @@
           <div class="msg">손실: 공격 −${r.lossA} · 방어 −${r.lossD}${r.winner === 'att' ? ' · 영토가 넘어갔어요' : ''}${r.merged ? ' · <b>수도 함락! 나라 전체가 병합됐어요</b>' : ''}</div></div>`;
       }).join('');
     }
-    if (testMode) h += `<div class="row test"><span>테스트용</span><button id="btnResolve">지금 밤 10시 전투 처리</button></div>`;
+    if (testMode) h += `<div class="row test"><span>테스트용</span><button id="btnResolve">지금 전투 처리</button></div>`;
     box.innerHTML = h;
     // 이벤트
     for (const b of box.querySelectorAll('[data-king]')) b.onclick = () => warAction('kingTo', { idx: +b.dataset.king });
@@ -1900,9 +1916,19 @@
     if (best.status !== 'free') { $('fMsg').textContent = best.status === 'taken' ? `${natName(best.nation)}의 수도예요` : best.status === 'near' ? '다른 나라 수도 바로 옆이라 고를 수 없어요' : '고를 수 없는 곳이에요'; return; }
     foundSel = best.t.id; $('fMsg').textContent = ''; drawFoundMap(); showFoundInfo();
   });
-  $('fFoundCard').addEventListener('click', () => { saveNick(); openFound('found'); });
-  $('fJoinCard').addEventListener('click', () => { saveNick(); openFound('join'); });
-  $('fWanderCard').addEventListener('click', () => { saveNick(); startWanderer(); });
+  // 온라인: 이름은 서버가 확인 (동명이인 금지). 통과하면 다음 단계로
+  let nameNext = null;
+  function withName(next) {
+    if (!ONLINE) { saveNick(); next(); return; }
+    const want = $('fNick').value.trim();
+    if (nameSet && want === player.name) { next(); return; }
+    if (!netOn) { $('fMsg').textContent = '서버에 연결하는 중이에요. 잠시 후 다시 눌러 주세요'; return; }
+    nameNext = next; $('fMsg').textContent = '이름 확인 중…';
+    ws.send(JSON.stringify({ t: 'setName', name: want }));
+  }
+  $('fFoundCard').addEventListener('click', () => withName(() => openFound('found')));
+  $('fJoinCard').addEventListener('click', () => withName(() => openFound('join')));
+  $('fWanderCard').addEventListener('click', () => withName(() => startWanderer()));
   for (const b of document.querySelectorAll('#found [data-back]')) b.addEventListener('click', () => openFound('who'));
   $('btnFound').addEventListener('click', () => {
     const name = $('fName').value.trim();

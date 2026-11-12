@@ -96,7 +96,7 @@ tr.editing td { background: #fff1b8; }
     <section class="card">
       <h2>📜 전체 공지 <span class="hint">접속한 모든 학생 화면 위에 떠요</span></h2>
       <div id="noticeNow" class="muted">지금 올라간 공지 없음</div>
-      <textarea id="noticeText" maxlength="200" placeholder="예: 오늘 밤 10시 전투는 11시로 미뤄집니다"></textarea>
+      <textarea id="noticeText" maxlength="200" placeholder="예: 오늘 13시 전투는 14시로 미뤄집니다"></textarea>
       <div class="row">
         <button id="noticeSend" class="primary">공지 올리기</button>
         <button id="noticeClear">공지 내리기</button>
@@ -104,10 +104,10 @@ tr.editing td { background: #fff1b8; }
     </section>
 
     <section class="card">
-      <h2>⚔ 전투 <span class="hint">매일 밤 10시에 자동 처리</span></h2>
+      <h2>⚔ 전투 <span class="hint">매일 13시·22시에 자동 처리</span></h2>
       <div id="battleInfo" class="muted"></div>
       <div class="row"><button id="resolve" class="danger">지금 전투 처리하기</button></div>
-      <p class="muted">선포된 전투를 바로 계산해요. 서버가 밤 10시에 잠들어 있었거나 일정을 바꿀 때만 쓰세요.</p>
+      <p class="muted">선포된 전투를 바로 계산해요. 서버가 전투 시각에 잠들어 있었거나 일정을 바꿀 때만 쓰세요.</p>
     </section>
   </div>
 
@@ -246,13 +246,13 @@ tr.editing td { background: #fff1b8; }
     const stat = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
     $('stats').innerHTML = [
       stat(fmt(S.online), '지금 접속'), stat(fmt(S.accounts), '전체 계정'), stat(fmt(alive.length), '살아 있는 나라'),
-      stat(fmt(S.battles), '오늘 밤 전투'), stat(fmt(S.wander), '유랑민 등록'), stat(`${fmt(unused)} / ${fmt(S.coupons.length)}`, '안 쓴 쿠폰 / 전체'),
+      stat(fmt(S.battles), '다음 전투 선포'), stat(fmt(S.wander), '유랑민 등록'), stat(`${fmt(unused)} / ${fmt(S.coupons.length)}`, '안 쓴 쿠폰 / 전체'),
       stat(S.testMode ? '<span class="pill on">켜짐</span>' : '<span class="pill off">꺼짐</span>', '테스트 모드'),
       stat(S.foundingOpen ? '<span class="pill on">가능</span>' : '<span class="pill off">마감</span>', '건국'),
     ].join('');
 
     $('noticeNow').innerHTML = S.notice ? `지금 공지 (${ago(S.notice.ts)}): <b>${esc(S.notice.text)}</b>` : '지금 올라간 공지 없음';
-    $('battleInfo').innerHTML = `선포된 전투 <b>${S.battles}</b>건 · ${S.night}번째 밤 · 마지막 처리 ${S.lastResolved || '아직 없음'}`;
+    $('battleInfo').innerHTML = `선포된 전투 <b>${S.battles}</b>건 · ${S.night}번째 전투 · 마지막 처리 ${S.lastResolved || '아직 없음'}`;
 
     $('nations').innerHTML = S.nations.length ? S.nations.map((n) => `
       <tr class="${n.dead ? 'dead' : ''}">

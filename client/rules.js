@@ -218,8 +218,8 @@
       if (!def) return { ok: false, err: '주인 없는 땅은 전투가 아니라 점령으로 가져와요' };
       if (def === nid) return { ok: false, err: '우리 땅이에요' };
       if (!this.touches(nid, tid)) return { ok: false, err: '우리 땅과 붙어 있는 적 영토만 공격할 수 있어요' };
-      if (this.declaresLeft(nid) <= 0) return { ok: false, err: `오늘 밤 선전포고는 ${NUM.maxDeclare}곳까지예요` };
-      if (this.s.battles.some((b) => b.target === tid)) return { ok: false, err: '그 땅은 오늘 밤 이미 다른 나라가 공격해요' };
+      if (this.declaresLeft(nid) <= 0) return { ok: false, err: `이번 전투 선전포고는 ${NUM.maxDeclare}곳까지예요` };
+      if (this.s.battles.some((b) => b.target === tid)) return { ok: false, err: '그 땅은 이번 전투에 이미 다른 나라가 공격해요' };
       const total = sum(troops);
       if (total <= 0) return { ok: false, err: '병력을 1명 이상 보내야 해요' };
       if (total > n.army) return { ok: false, err: `병력이 모자라요 (보유 ${n.army})` };
@@ -247,7 +247,7 @@
       return { ok: true };
     }
 
-    // 밤 10시: 모든 전투를 한 번에 처리. cmdCount(nid, tid) = 그 영토에 서 있는 그 나라 국민 수
+    // 13시·22시: 모든 전투를 한 번에 처리. cmdCount(nid, tid) = 그 영토에 서 있는 그 나라 국민 수
     resolveAll(cmdCount) {
       const reports = [];
       const pending = this.s.battles.slice();
@@ -257,7 +257,7 @@
         if (!A || A.dead || !D || D.dead || this.s.owner[b.target] !== b.def) { if (A && !A.dead) A.army += sum(b.a); if (D && !D.dead && b.d) D.army += sum(b.d); continue; }
         let d = b.d, auto = false;
         if (!d) {
-          // 방어 배치를 안 냈으면: 남은 병력을 오늘 밤 공격받는 수만큼 나눠, 지난 배치 비율(없으면 균등)로
+          // 방어 배치를 안 냈으면: 남은 병력을 이번 전투에 공격받는 수만큼 나눠, 지난 배치 비율(없으면 균등)로
           const left = pending.filter((x) => x.def === b.def && !x.d && !x._done).length || 1;
           const pool = Math.floor(D.army / left);
           const r = D.lastDef && sum(D.lastDef) > 0 ? D.lastDef : [1, 1, 1];

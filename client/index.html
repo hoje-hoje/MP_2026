@@ -289,7 +289,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 <div id="closet" hidden>
   <div class="panel card">
     <h2>캐릭터 꾸미기</h2>
-    <div><label for="nick">닉네임</label><input id="nick" type="text" maxlength="10" value="나"></div>
+    <div><label for="nick">닉네임 <small>(다른 사람과 같은 이름은 못 써요)</small></label><input id="nick" type="text" maxlength="10" value="나"><button id="nickBtn" type="button" hidden>이름 바꾸기</button><p id="nickMsg" class="msg" style="margin:4px 0 0;font-size:12px;color:#c22f53"></p></div>
     <div><label>캐릭터 (동아리 16종 + 88종)</label><div class="swatches" id="hairSw"></div></div>
     <div><label>색 바꾸기</label><div class="swatches" id="outfitSw"></div></div>
     <div><label>헤어스타일</label><div class="seg" id="lenSeg"><button type="button" data-long="0">짧은 머리</button><button type="button" data-long="1">긴 머리</button></div></div>
