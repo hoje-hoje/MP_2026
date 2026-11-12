@@ -106,7 +106,7 @@
       if (t.capitalCandidate) {
         let fx = ax + 2, fy = ay;
         if (blocked(fx, fy)) { fx = ax - 2; }
-        if (!blocked(fx, fy)) { block(fx, fy, 1, 1); sprites.push({ x: P(fx) + 16, y: P(fy) + 28, draw: drawFlag }); }
+        if (!blocked(fx, fy)) { block(fx, fy, 1, 1); sprites.push({ x: P(fx) + 16, y: P(fy) + 28, draw: (g, x, y) => drawFlag(g, x, y, t === home) }); }
         const [qx, qy] = t.portal;
         sprites.push({ x: P(qx) + 16, y: P(qy) + 20, portal: t, draw: (g, x, y) => drawPortal(g, x, y, t === home) });
       }
@@ -137,7 +137,10 @@
     const now = performance.now() / 1000;
     const pulse = 0.5 + Math.sin(now * 3) * 0.15;
     g.fillStyle = `rgba(255,236,140,${0.35 * pulse + 0.15})`; ell(g, x, y, 30, 11);
-    g.strokeStyle = mine ? '#e5486a' : '#c9a227'; g.lineWidth = 3; g.beginPath(); g.ellipse(x, y, 26, 9, 0, 0, Math.PI * 2); g.stroke();
+    const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+    g.drawImage(ART.towers, 192, 64, 32, 32, x - 32, y - 58, 64, 64);
+    g.imageSmoothingEnabled = prev;
+    y -= 40;
     const grd = g.createLinearGradient(0, y - 220, 0, y);
     grd.addColorStop(0, 'rgba(255,248,200,0)'); grd.addColorStop(1, `rgba(255,240,170,${0.55 * pulse + 0.2})`);
     g.fillStyle = grd; g.fillRect(x - 16, y - 220, 32, 220);
@@ -188,22 +191,18 @@
   }
 
   function drawAltar(g, x, y, t) {
-    const c = TYPE_FILL[t.type];
-    g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, 16, 5);
-    g.fillStyle = '#b9b0c8'; rr(g, x - 13, y - 14, 26, 14, 3);
-    g.fillStyle = '#d6cfe0'; rr(g, x - 10, y - 22, 20, 10, 3);
-    const bob = Math.sin(performance.now() / 500 + t.id) * 2;
-    g.fillStyle = c; g.beginPath(); g.moveTo(x, y - 46 + bob); g.lineTo(x + 8, y - 34 + bob); g.lineTo(x, y - 24 + bob); g.lineTo(x - 8, y - 34 + bob); g.closePath(); g.fill();
-    g.fillStyle = 'rgba(255,255,255,0.7)'; g.beginPath(); g.moveTo(x - 2, y - 42 + bob); g.lineTo(x + 1, y - 38 + bob); g.lineTo(x - 3, y - 34 + bob); g.closePath(); g.fill();
+    const f = Math.floor(performance.now() / 260 + t.id) % 3;
+    g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, x, y + 2, 22, 7);
+    const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+    g.drawImage(altarSheet(t.type), f * 32, 0, 32, 32, x - 32, y - 60, 64, 64);
+    g.imageSmoothingEnabled = prev;
   }
 
-  function drawFlag(g, x, y) {
-    g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, 10, 4);
-    g.fillStyle = '#6b4a2b'; g.fillRect(x - 2, y - 64, 4, 64);
-    const wv = Math.sin(performance.now() / 300) * 3;
-    g.fillStyle = '#ffffff'; g.beginPath(); g.moveTo(x + 2, y - 62); g.quadraticCurveTo(x + 18, y - 58 + wv, x + 34, y - 60); g.lineTo(x + 34, y - 38); g.quadraticCurveTo(x + 18, y - 36 + wv, x + 2, y - 40); g.closePath(); g.fill();
-    g.strokeStyle = '#2b2340'; g.lineWidth = 2; g.stroke();
-    g.fillStyle = '#e5486a'; g.beginPath(); g.moveTo(x + 10, y - 44); g.lineTo(x + 10, y - 54); g.lineTo(x + 14, y - 49); g.lineTo(x + 18, y - 56); g.lineTo(x + 22, y - 49); g.lineTo(x + 26, y - 54); g.lineTo(x + 26, y - 44); g.closePath(); g.fill();
+  function drawFlag(g, x, y, mine) {
+    const f = Math.floor(performance.now() / 160) % 4;
+    const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+    g.drawImage(ART.flags, f * 16, (mine ? 1 : 0) * 16, 16, 16, x - 20, y - 46, 48, 48);
+    g.imageSmoothingEnabled = prev;
   }
 
   function sign(g, x, y, text) {
@@ -223,8 +222,9 @@
   const ART = {};
   function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('그림 파일을 불러오지 못했어요: ' + src)); i.src = src; }); }
   async function loadArt() {
-    const names = { floor: 'floor.png', village: 'village.png', c0: 'char_ninja_blue.png', c1: 'char_samurai_blue.png', c2: 'char_samurai_green.png' };
-    await Promise.all(Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/ninja/' + f); }));
+    const names = { floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
+    const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
+    await Promise.all([meta, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
   // 바닥 타일 (floor.png 의 16px 칸 좌표)
   const TL = {
@@ -240,17 +240,20 @@
   function spr(g, name, cx, bottom, k = 2) { const [x, y, w, h] = SP[name]; g.drawImage(ART.village, x, y, w, h, Math.round(cx - w * k / 2), Math.round(bottom - h * k), w * k, h * k); }
 
   // 캐릭터: 16px 칸, 열 = 방향(아래·위·왼쪽·오른쪽), 행 = 걷기 프레임. 팀/꾸미기 색은 색상 회전으로.
-  const CHAR_NAMES = ['닌자', '파랑 무사', '초록 무사'];
+  const CHARS = { cols: 10, names: ['NinjaBlue'] };   // assets/na/chars.json
   const HUES = [0, 50, 110, 170, 230, 300];
   const sheets = new Map();
   function charSheet(c, hi) {
     const key = c + ':' + hi; let cv = sheets.get(key); if (cv) return cv;
-    const src = ART['c' + c] || ART.c0;
-    cv = document.createElement('canvas'); cv.width = src.width; cv.height = src.height;
-    const g = cv.getContext('2d'); g.drawImage(src, 0, 0);
-    const deg = HUES[hi] || 0;
+    c = Math.max(0, Math.min(CHARS.names.length - 1, c | 0));
+    cv = document.createElement('canvas'); cv.width = 64; cv.height = 112;
+    const g = cv.getContext('2d'); g.drawImage(ART.chars, (c % CHARS.cols) * 64, Math.floor(c / CHARS.cols) * 112, 64, 112, 0, 0, 64, 112);
+    hueShift(g, cv.width, cv.height, HUES[hi] || 0);
+    sheets.set(key, cv); return cv;
+  }
+  function hueShift(g, w, h, deg) {
     if (deg) {
-      const d = g.getImageData(0, 0, cv.width, cv.height), px = d.data;
+      const d = g.getImageData(0, 0, w, h), px = d.data;
       for (let i = 0; i < px.length; i += 4) {
         if (!px[i + 3]) continue;
         const r = px[i] / 255, gg = px[i + 1] / 255, b = px[i + 2] / 255;
@@ -265,7 +268,16 @@
       }
       g.putImageData(d, 0, 0);
     }
-    sheets.set(key, cv); return cv;
+  }
+  // 제단: 수정 신전(towers.png 3행 10~12열, 3프레임)을 속성 색으로
+  const TYPE_HUE = { 기하: 135, 대수: -95, 확통: 45, 미적분: 185, 수열: -60, 논리: 95 };
+  const altarCache = {};
+  function altarSheet(type) {
+    if (altarCache[type]) return altarCache[type];
+    const cv = document.createElement('canvas'); cv.width = 96; cv.height = 32;
+    const g = cv.getContext('2d'); g.drawImage(ART.towers, 288, 64, 96, 32, 0, 0, 96, 32);
+    hueShift(g, 96, 32, TYPE_HUE[type] || 0);
+    return (altarCache[type] = cv);
   }
   const CH_K = 3; // 16px → 48px
   function drawSprite(g, x, y, look, t, moving, face) {
@@ -594,9 +606,8 @@
     g.fillStyle = '#ffffff';
     for (const [x, y] of rim) circ(g, x, y, 26 + hash(x, y, 3) * 14);
     g.fillStyle = R.floor; rr(g, 18, 18, w - 36, h - 36, 18);
-    g.strokeStyle = R.line; g.lineWidth = 2;
-    for (let x = TILE; x < w - TILE; x += TILE) { g.beginPath(); g.moveTo(x, 22); g.lineTo(x, h - 22); g.stroke(); }
-    for (let y = TILE; y < h - TILE; y += TILE) { g.beginPath(); g.moveTo(22, y); g.lineTo(w - 22, y); g.stroke(); }
+    g.fillStyle = R.line;
+    for (let y = 40; y < h - 40; y += 64) for (let x = 40 + ((y / 64) % 2) * 32; x < w - 40; x += 64) { g.fillRect(x, y, 4, 4); }
     g.strokeStyle = R.trim; g.lineWidth = 4; g.beginPath(); g.roundRect ? g.roundRect(30, 30, w - 60, h - 60, 12) : g.rect(30, 30, w - 60, h - 60); g.stroke();
     for (const d of R.doors) {
       g.fillStyle = d.to === 'ground' ? 'rgba(255,236,140,0.85)' : R.floor;
@@ -1070,12 +1081,13 @@
 
   // 꾸미기
   function closetUI() {
-    const cw = $('hairSw'); cw.textContent = '';
-    CHAR_NAMES.forEach((name, i) => {
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'charbtn';
-      const cv = document.createElement('canvas'); cv.width = 48; cv.height = 48; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
-      g.drawImage(charSheet(i, player.look.hue | 0), 0, 0, 16, 16, 0, 0, 48, 48);
-      b.appendChild(cv); b.appendChild(document.createTextNode(name));
+    const cw = $('hairSw'); cw.textContent = ''; cw.classList.add('facegrid');
+    CHARS.names.forEach((name, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'facebtn';
+      b.setAttribute('aria-label', name);
+      const cv = document.createElement('canvas'); cv.width = 38; cv.height = 38; const g = cv.getContext('2d');
+      g.drawImage(ART.faces, (i % CHARS.cols) * 38, Math.floor(i / CHARS.cols) * 38, 38, 38, 0, 0, 38, 38);
+      b.appendChild(cv);
       b.setAttribute('aria-pressed', String((player.look.char | 0) === i));
       b.addEventListener('click', () => { player.look.char = i; closetUI(); saveLook(); });
       cw.appendChild(b);
