@@ -20,10 +20,13 @@
   const SKINS = ['#ffe1cc', '#f6d2b8', '#eec3a3'];
 
   // 날짜 미리보기: 주소 끝 #day1 ~ #day15 (기본 1일차). [ ] 키로도 바꿀 수 있다.
-  const DAY = (() => { const m = /^#day(\d{1,2})$/.exec(location.hash); return Math.max(1, Math.min(15, m ? +m[1] : 1)); })();
-  const WAVE_DAY = { 1: 6, 2: 8, 3: 10, 4: 12, 5: 14 };   // 균열 웨이브가 무너지는 날
-  const DOOM = DAY >= 5;                                   // D5: 신들의 멸망 선포
-  const PHASE = DAY <= 2 ? '건국기' : DAY <= 4 ? '확장기' : DAY <= 14 ? '멸망기' : '최종 결전';
+  // 날짜: 온라인이면 서버의 게임 시계(setClock), 미리보기면 주소 끝 #day1~#day15
+  let DAY = (() => { const m = /^#day(\d{1,2})$/.exec(location.hash); return Math.max(1, Math.min(15, m ? +m[1] : 1)); })();
+  const WAVE_DAY = { 1: 6, 2: 8, 3: 10, 4: 12, 5: 14 };   // 균열 웨이브가 무너지는 날 (미리보기용)
+  let SLOT = 'lunch', DOOM_DAY = 5, LAST_DAY = 15, RIFT_NEXT = null;
+  let DOOM = DAY >= 5;                                     // 멸망 선포 뒤
+  const phaseOf = (d) => d <= 2 ? '건국기' : d <= 4 ? '확장기' : d <= 14 ? '멸망기' : '최종 결전';
+  let PHASE = phaseOf(DAY);
   addEventListener('hashchange', () => location.reload());
   let gone = new Uint8Array(1);                            // 무너진 영토
 
@@ -58,6 +61,7 @@
   }
   // ---- 영지: 설치물(바닥·방벽), 우리 덫, 저장소 자리
   let TILES = {};                 // 칸 번호 -> { k: 'floor'|'wall', n: 나라 }
+  let RIFT_SET = new Set();       // 다음 균열에 무너질 영토 (예고)
   let BATTLES = [];               // 선포된 전투 (모두에게 보임): { id, target, att, def, f: [[x,y]×3] }
   function applyMines(mines) { for (const n of nodes) { const o = mines && mines[n.id]; n.tx = o ? o[0] : n.dx; n.ty = o ? o[1] : n.dy; if (o) clearTrees(o[0], o[1], 1); } }
   let MY_TRAPS = new Set();       // 우리 나라 덫 (다른 나라엔 안 보임)
@@ -115,7 +119,7 @@
     terr = new Uint16Array(b64bytes(data.territory_u16le_b64).buffer);
     terrs = [null];
     gone = new Uint8Array(data.territories.length + 2);
-    for (const t of data.territories) { terrs[t.id] = t; t.name = terrName(t); if (t.rift && WAVE_DAY[t.rift] <= DAY) gone[t.id] = 1; }
+    for (const t of data.territories) { terrs[t.id] = t; t.name = terrName(t); if (!window.MP_ONLINE && t.rift && WAVE_DAY[t.rift] <= DAY) gone[t.id] = 1; }
     solid = new Uint8Array(W * H);
     noTree = new Uint8Array(W * H);
     for (const t of data.territories) { clearTrees(t.altar[0], t.altar[1], 3); if (t.portal) clearTrees(t.portal[0], t.portal[1], 3); }
@@ -224,6 +228,7 @@
   }
 
   function drawAltar(g, x, y, t) {
+    if (gone[t.id]) return;
     const f = Math.floor(performance.now() / 260 + t.id) % 3;
     g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, x, y + 2, 22, 7);
     const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
@@ -670,6 +675,7 @@
         { x: 8, y: 12, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'bishop', x, y + 2); nameTag(g, x, y - 58, '신의 사제', '#6b4fb3'); } },
         { x: 2, y: 15, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) }, { x: 27, y: 15, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) },
         { x: 22, y: 11, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
+        { x: 13, y: 6, w: 4, h: 1, draw: (g, x, y) => { if (!DOOM) return; g.fillStyle = '#5a4630'; g.fillRect(x - 140, y - 150, 8, 150); g.fillRect(x + 132, y - 150, 8, 150); drawDoomBanner(g, x, y - 176, 1.5); } }, // 멸망 게시판 (기둥 두 개에 걸린 배너)
       ],
     },
     market: {
@@ -1007,7 +1013,7 @@
     if (k === 'g' && ONLINE) setBuild(!build.on);
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
-    if (k === '[' || k === ']') { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
+    if ((k === '[' || k === ']') && !ONLINE) { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
     if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
   });
   addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); });
@@ -1083,6 +1089,7 @@
       const own = ownerOf(t.id);
       if (own) chip(myView && own === myView.me.id ? (home === t ? '우리 수도' : '우리 땅') : natName(own) + (nationsPub[own] && nationsPub[own].capital === t.id ? ' 수도' : ''), natColor(own));
       else chip('주인 없음 (중립)', null, true);
+      if (RIFT_SET.has(t.id)) chip(`🌀 ${RIFT_NEXT.day}일차 균열`, '#8a3fd0');
       if (myView && (myView.incoming.some((b) => b.target === t.id) || myView.outgoing.some((b) => b.target === t.id))) chip(`⚔ ${nextFight()} 전투`, '#c22f53');
       if (t.capitalCandidate) chip('수도 후보 · 하늘 포털', '#c22f53');
     } else {
@@ -1272,6 +1279,7 @@
     else if (near.kind === 'desk') { $('wanderMsg').textContent = '나라가 없다면 여기서 등록하세요.'; renderWander(); $('wanderBox').hidden = false; }
     else if (near.kind === 'board') {
       if (!DOOM) toast('[공지] 신들은 아직 침묵하고 있다.');
+      else if (ONLINE) toast(RIFT_NEXT ? `[신탁] ${RIFT_NEXT.day}일차 아침, 균열이 ${RIFT_NEXT.terrs.length}곳을 삼킨다. 나라 창(B)에서 백신을 써라.` : '[신탁] 다음 균열을 기다리는 중…');
       else toast(`[신탁] 다음 균열이 다가온다… ${TYPES[DAY % 6]} 지방을 조심하라.`);
     }
   }
@@ -1307,6 +1315,7 @@
         c3 = [rgb[0] * k * mix + add, rgb[1] * k * mix + add, rgb[2] * k * mix + add];
         const r = x + 1 < W ? terr[i + 1] : o, dn = y + 1 < H ? terr[i + W] : o;
         if ((r !== o && r !== 65535 && r !== 0) || (dn !== o && dn !== 65535 && dn !== 0)) c3 = [255, 255, 255];
+        else if (RIFT_SET.has(o) && ((x + y) % 4 === 0)) c3 = [150, 60, 220]; // 다음 균열 예고 (보라 빗금)
         if (mine) { // 우리 나라 바깥 경계 2칸: 바깥은 밝은 테두리, 안쪽은 우리 색
           const notMine = (xx, yy) => { if (xx < 0 || yy < 0 || xx >= W || yy >= H) return false; const q = terr[yy * W + xx]; return q !== 65535 && q > 0 && q !== o && ownerOf(q) !== MY_NID; };
           if (notMine(x + 1, y) || notMine(x - 1, y) || notMine(x, y + 1) || notMine(x, y - 1) || notMine(x + 1, y + 1) || notMine(x - 1, y - 1) || notMine(x + 1, y - 1) || notMine(x - 1, y + 1)) c3 = [255, 211, 77];
@@ -1495,7 +1504,7 @@
         myId = m.id; netOn = true; store('mp2026.token', m.token);
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
         player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
-        BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
+        if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         if (!m.view) openFound('who'); else $('found').hidden = true;
         chatLog = m.chat || []; renderChat();
@@ -1530,7 +1539,7 @@
       case 'chat': chatLog.push(m); if (chatLog.length > 60) chatLog.shift(); renderChat(); break;
       case 'emote': { const r = m.id === myId ? player : remotes.get(m.id); if (r) { r.emote = m.text; r.emoteT = 3; } break; }
       case 'wander': wanderList = m.list || []; renderWander(); break;
-      case 'owners': if (m.battles) BATTLES = m.battles; if (m.mines) applyMines(m.mines); applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
+      case 'owners': if ('riftNext' in m) { RIFT_NEXT = m.riftNext; RIFT_SET = new Set(RIFT_NEXT ? RIFT_NEXT.terrs : []); } if (m.gone) setGone(m.gone); if (m.battles) BATTLES = m.battles; if (m.mines) applyMines(m.mines); applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
       case 'joined': chatLog = m.chat || []; renderChat(); afterFounded(m.founded); break;
       case 'view': applyWorld(null, null, m.view); break;
       case 'night': applyWorld(null, null, m.view); showNight(m.reports || []); break;
@@ -1548,6 +1557,8 @@
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
+      case 'clock': setClock(m); break;
+      case 'rift': toast(m.text); break;
       case 'hitn': HITN.set(m.terr, { n: m.n, at: performance.now() }); near = null; break;
       case 'scout': HITN.delete(m.terr); toast(m.text); break;
       case 'stun': stunUntil = performance.now() + m.ms; step.on = false; toast(m.text); break;
@@ -1670,7 +1681,7 @@
     for (const n of Object.values(nationsPub)) if (!n.dead && terrs[n.capital]) { const [sx, sy] = n.store || MPRules.storageSpot(terrs[n.capital], tileAt); STORE_AT.set(sy * W + sx, n.id); clearTrees(sx, sy, 1); }
     if (myView && terrs[myView.me.capital]) { home = terrs[myView.me.capital]; player.tag = myView.me.color; }
     // 땅 주인·나라 색·우리 나라가 바뀐 경우에만 지도를 다시 그린다 (자원만 바뀌면 그대로)
-    const sig = MY_NID + '|' + JSON.stringify(owners) + '|' + Object.values(nationsPub).map((q) => q.id + q.color + (q.dead ? 'x' : '')).join();
+    const sig = MY_NID + '|' + JSON.stringify(owners) + '|' + (RIFT_NEXT ? RIFT_NEXT.wave + ':' + RIFT_NEXT.terrs.length : '') + '|' + Object.values(nationsPub).map((q) => q.id + q.color + (q.dead ? 'x' : '')).join();
     if (sig !== mapSig) { mapSig = sig; invalidateChunks(); buildMapImage(); }
     lastTerr = null; renderInv();
     if (!$('war').hidden) renderWar();
@@ -1777,7 +1788,7 @@
     });
   }
   // 다음 전투 시각 (13시·22시, 한국 시간)
-  function nextFight() { const h = new Date(Date.now() + 9 * 3600e3).getUTCHours(); return h < 13 ? '오늘 13시' : h < 22 ? '오늘 22시' : '내일 13시'; }
+  function nextFight() { if (ONLINE) return SLOT === 'morning' ? '오늘 점심 1시' : SLOT === 'lunch' ? '오늘 밤 10시' : '내일 점심 1시'; const h = new Date(Date.now() + 9 * 3600e3).getUTCHours(); return h < 13 ? '오늘 13시' : h < 22 ? '오늘 22시' : '내일 13시'; }
   // ---- 전투 장면: 전투마다 약 3.5초 연출 + 왼쪽 요약. 화면을 누르면 결과로 건너뛴다
   const BT = { list: [], i: 0, t0: 0, done: null, raf: 0 };
   function playBattles(reps, done) {
@@ -1879,6 +1890,11 @@
     if (warTab === 'nation') {
       h += `<div class="plan"><div class="row"><span>초대 코드</span><b class="code">${esc(me.code || '')}</b></div><p class="msg">팀원에게 이 코드를 알려 주면 [초대 코드로 들어가기]로 우리 나라에 들어와요 (최대 ${MPRules.NUM.maxMembers}명).</p></div>`;
       h += `<h3>국민 (${me.members}/${MPRules.NUM.maxMembers})</h3>` + (me.memberList || []).map((m) => `<div class="row"><span>${m.king ? '👑 ' : ''}${esc(m.name)}${m.me ? ' (나)' : ''}</span>${king && !m.king ? `<button data-king="${m.idx}">왕 넘기기</button>` : ''}</div>`).join('');
+      if (RIFT_NEXT) {
+        const mineR = RIFT_NEXT.terrs.filter((tid) => owners[tid] === me.id);
+        h += `<div class="plan"><h3>🌀 다음 균열 · ${RIFT_NEXT.day}일차 아침 (${RIFT_NEXT.wave}차)</h3><p class="msg">지도에서 보라색으로 일렁이는 땅이 무너져요. 수도는 안전하고, 백신을 쓴 땅도 이번엔 버텨요. 백신 ${me.vaccine}개 (하늘 거래소)</p>` +
+          (mineR.length ? mineR.map((tid) => `<div class="row"><span>${esc(terrLabel(tid))}</span>${tid === me.capital ? '<span>수도라 안전</span>' : (me.vaxed || []).includes(tid) ? '<span>💉 백신 맞음</span>' : `<button data-vax="${tid}">백신 쓰기</button>`}</div>`).join('') : '<p class="msg">이번 균열에 무너질 우리 땅은 없어요.</p>') + '</div>';
+      }
       h += `<h3>나라 정보</h3><div class="msg">수도 ${esc(terrLabel(me.capital))} · 영토 ${me.territories}곳 · 병력 ${me.army} · 행동력 ${me.actions}</div>`;
     } else if (warTab === 'attack') {
       const mineSet = new Set(Object.keys(owners).filter((k) => owners[k] === me.id).map(Number));
@@ -1926,6 +1942,7 @@
     // 이벤트
     for (const b of box.querySelectorAll('[data-king]')) b.onclick = () => warAction('kingTo', { idx: +b.dataset.king });
     for (const b of box.querySelectorAll('[data-tgt]')) b.onclick = () => { warTarget = +b.dataset.tgt; renderWar(); };
+    for (const b of box.querySelectorAll('[data-vax]')) b.onclick = () => warAction('vaccinate', { terr: +b.dataset.vax });
     for (const b of box.querySelectorAll('[data-intel]')) b.onclick = () => warAction('intel', { battle: +b.dataset.intel });
     if ($('btnDefault')) $('btnDefault').onclick = () => warAction('defaultDef', { ratio: [0, 1, 2].map((i) => Math.max(0, parseInt($('dd' + i).value, 10) || 0)) });
     for (const b of box.querySelectorAll('[data-cancel]')) b.onclick = () => warAction('cancel', { battle: +b.dataset.cancel });
@@ -2210,6 +2227,16 @@
     for (const b of others('sky', R)) list.push(b);
     list.push(player);
     drawActors(list, t);
+    nightTint(0.5);
+  }
+  // 시간대 색: 아침은 살짝 따뜻하게, 밤은 어둡고 푸르게
+  function nightTint(k = 1) {
+    if (!ONLINE) return;
+    if (SLOT === 'lunch') return;
+    ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (SLOT === 'night') { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = k < 1 ? '#a8aee0' : '#6f78b8'; ctx.fillRect(0, 0, vw, vh); ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = `rgba(30,40,110,${0.12 * k})`; ctx.fillRect(0, 0, vw, vh); } // 밤: 어둡고 푸르게
+    else { ctx.fillStyle = `rgba(255,190,110,${0.08 * k})`; ctx.fillRect(0, 0, vw, vh); } // 아침: 살짝 따뜻하게
+    ctx.restore();
   }
 
   function drawGround(t) {
@@ -2250,8 +2277,12 @@
       if (e && e.k === 'wall') list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawWall(g, X, Y, e.n) });
       if (MY_TRAPS.has(i)) list.push({ x: tx * TILE + 16, y: ty * TILE + 4, draw: (g, X, Y) => drawTrap(g, X, Y + 24) });
     }
-    for (const n of nodes) if (n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1 && !(build.moving && build.moving.kind === 'mine' && build.moving.terr === n.id)) list.push({ x: n.x, y: n.y, draw: (g, X, Y) => drawOre(g, X, Y, mined.has(n.id)) });
+    for (const n of nodes) if (!gone[n.id] && n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1 && !(build.moving && build.moving.kind === 'mine' && build.moving.terr === n.id)) list.push({ x: n.x, y: n.y, draw: (g, X, Y) => drawOre(g, X, Y, mined.has(n.id)) });
     for (const [i, nid] of STORE_AT) { if (build.moving && build.moving.kind === 'store' && nid === MY_NID) continue; const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); }
+    if (RIFT_SET.size) { // 다음 균열 예고 땅: 보라색으로 일렁임
+      const a = 0.16 + Math.sin(performance.now() / 300) * 0.06;
+      for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) if (RIFT_SET.has(terrAt(tx, ty))) { ctx.fillStyle = `rgba(150,60,230,${a})`; ctx.fillRect(tx * TILE, ty * TILE, TILE, TILE); if ((tx * 7 + ty * 3) % 11 === 0) { ctx.fillStyle = 'rgba(40,10,80,0.55)'; ctx.fillRect(tx * TILE + 6, ty * TILE + 14, 18, 3); ctx.fillRect(tx * TILE + 14, ty * TILE + 8, 3, 14); } }
+    }
     // 전선: 공격받는 영토 국경 중 A·B·C 세 곳을 빨갛게 + 깃발
     for (const b of BATTLES) if (b.f) b.f.forEach(([fx, fy], k) => {
       if (fx * TILE < x0 - 200 || fx * TILE > x1 + 200 || fy * TILE < y0 - 200 || fy * TILE > y1 + 200) return;
@@ -2281,8 +2312,101 @@
       const k = Math.min(1, (performance.now() - hold.t0) / hold.ms);
       ctx.fillStyle = '#2b2340'; ctx.fillRect(player.x - 26, player.y - 96, 52, 10); ctx.fillStyle = '#ffd34d'; ctx.fillRect(player.x - 24, player.y - 94, 48 * k, 6);
     }
+    nightTint(); // 낮·밤
     if (performance.now() < stunUntil) { ctx.font = `700 13px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd34d'; ctx.fillText('✦ 꼼짝 못 함 ✦', player.x, player.y - 100); }
   }
+
+  // ------------------------------------------------------------ 게임 시계 (서버) · 낮밤 · 멸망 D-day
+  const SLOT_NAME = { morning: '아침 9시', lunch: '점심 1시', night: '밤 10시' };
+  function setClock(c) {
+    if (!c) return;
+    const dayChanged = c.day !== DAY;
+    DAY = c.day; SLOT = c.slot; DOOM_DAY = c.doomDay || 5; LAST_DAY = c.lastDay || 15; PHASE = phaseOf(DAY);
+    DOOM = DAY > DOOM_DAY || (DAY === DOOM_DAY && SLOT !== 'morning'); // 선포일 점심부터
+    if ('riftNext' in c) { RIFT_NEXT = c.riftNext; RIFT_SET = new Set(RIFT_NEXT ? RIFT_NEXT.terrs : []); }
+    if (c.gone) setGone(c.gone);
+    if (dayChanged) { mined.clear(); }
+    setupDoomCard(); drawSunMoon();
+    if (DOOM) maybeDoomPopup();
+  }
+  function setGone(list) {
+    const g2 = new Uint8Array(gone.length); for (const t of list) g2[t] = 1;
+    let diff = false; for (let i = 0; i < g2.length; i++) if (g2[i] !== gone[i]) { diff = true; break; }
+    if (!diff) return;
+    gone = g2; mapSig = ''; applyWorld(); // 무너진 땅 다시 그리기
+  }
+  // 해·달 픽셀 아이콘 (시간대 표시)
+  function drawSunMoon() {
+    const c = $('sunMoon'); if (!c) return; const g = c.getContext('2d'); g.clearRect(0, 0, 16, 16);
+    const px = (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
+    if (SLOT === 'night') { // 초승달
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const a = Math.hypot(x - 7.5, y - 7.5), b = Math.hypot(x - 10.5, y - 5.5); if (a < 6.5 && b > 5) px(x, y, a > 5.5 ? '#c9b860' : '#ffe98a'); }
+      px(2, 3, '#ffffff'); px(13, 12, '#ffffff');
+    } else { // 해 (아침은 주황, 점심은 노랑)
+      const core = SLOT === 'morning' ? '#ffb347' : '#ffd84d', rim = SLOT === 'morning' ? '#e07a2a' : '#e8a020';
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const a = Math.hypot(x - 7.5, y - 7.5); if (a < 4.6) px(x, y, a > 3.6 ? rim : core); }
+      for (const [x, y] of [[7, 0], [8, 0], [7, 15], [8, 15], [0, 7], [0, 8], [15, 7], [15, 8], [2, 2], [13, 2], [2, 13], [13, 13]]) px(x, y, rim);
+    }
+  }
+  // 세계 멸망 배너: 도트 글씨 + 보라·하늘색 번개 오오라 (작게 그린 뒤 크게 키워서 픽셀 느낌)
+  const doomArt = new Map();
+  function doomFrames(big) {
+    if (doomArt.has(big)) return doomArt.get(big);
+    const W2 = 200, H2 = 84, frames = [];
+    const mask = (txt, size, oy) => { const c = document.createElement('canvas'); c.width = W2; c.height = H2; const g = c.getContext('2d'); g.font = `700 ${size}px Galmuri11`; g.textAlign = 'center'; g.textBaseline = 'top'; g.fillStyle = '#fff'; g.fillText(txt, W2 / 2 + (size > 30 ? 8 : 0), oy); const d = g.getImageData(0, 0, W2, H2).data; const m = new Uint8Array(W2 * H2); for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] > 110 ? 1 : 0; return m; };
+    const T = mask('세계 멸망', 24, 4), B = mask(big, 36, 28); const M = new Uint8Array(W2 * H2); for (let i = 0; i < M.length; i++) M[i] = T[i] | B[i];
+    const dil = (m, r) => { const o = new Uint8Array(m.length); for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) { if (!m[y * W2 + x]) continue; for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { if (dx * dx + dy * dy > r * r + 1) continue; const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < W2 && Y < H2) o[Y * W2 + X] = 1; } } return o; };
+    const g5 = dil(M, 5), g4 = dil(M, 4), cy = dil(M, 3), bk = dil(M, 2);
+    let bx0 = W2, bx1 = 0, by0 = H2, by1 = 0; for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) if (B[y * W2 + x]) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y); }
+    for (let f = 0; f < 4; f++) {
+      let seed = f * 7919 + 13; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      const c = document.createElement('canvas'); c.width = W2; c.height = H2; const g = c.getContext('2d'); const img = g.createImageData(W2, H2), d = img.data;
+      const set = (x, y, r, gg, b) => { if (x < 0 || y < 0 || x >= W2 || y >= H2) return; const i = (y * W2 + x) * 4; d[i] = r; d[i + 1] = gg; d[i + 2] = b; d[i + 3] = 255; };
+      for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) { // 소용돌이 배경
+        const rr = Math.hypot((x - W2 / 2) / 1.6, y - H2 / 2), an = Math.atan2(y - H2 / 2, x - W2 / 2), sw = Math.sin(an * 3 + rr * 0.25 + f) * 0.5 + 0.5, base = Math.max(0, 1 - rr / 90);
+        const q = (v) => Math.floor(v / 24) * 24; set(x, y, q(14 + base * 70 * sw + base * 20), q(8 + base * 30 * sw), q(40 + base * 150 * sw + base * 40));
+      }
+      for (let i = 0; i < M.length; i++) { const x = i % W2, y = (i / W2) | 0, n = rnd(); if (g5[i] && n < 0.45) set(x, y, 90, 30, 200); if (g4[i] && n < 0.8) set(x, y, 140, 60, 255); if (cy[i]) set(x, y, 80, 210, 255); if (bk[i]) set(x, y, 12, 6, 24); if (M[i]) set(x, y, 255, 255, 255); }
+      for (let k = 0; k < 10; k++) { let x = bx0 + ((rnd() * (bx1 - bx0)) | 0), y = by0 + ((rnd() * (by1 - by0)) | 0); for (let s = 0; s < 4; s++) { if (B[y * W2 + x]) set(x, y, 120, 110, 170); x += ((rnd() * 3) | 0) - 1; y++; } }
+      const bolt = (x, y, an, n) => { for (let s = 0; s < n; s++) { const xi = Math.round(x), yi = Math.round(y); set(xi + 1, yi, 70, 200, 255); set(xi - 1, yi, 70, 200, 255); set(xi, yi + 1, 70, 200, 255); set(xi, yi, 235, 250, 255); an += (rnd() - 0.5) * 1.8; x += Math.cos(an) * 1.6; y += Math.sin(an) * 1.6; if (rnd() < 0.1) bolt(x, y, an + (rnd() - 0.5) * 2.4, n / 3); } };
+      for (let k = 0; k < 4; k++) { const left = rnd() < 0.5; bolt(left ? bx0 - 6 : bx1 + 6, by0 + rnd() * (by1 - by0), left ? Math.PI : 0, 14 + rnd() * 10); }
+      const ex = bx0 - 20, ey = ((by0 + by1) / 2) | 0; // 빨간 눈
+      for (let dy = -6; dy <= 6; dy++) for (let dx = -10; dx <= 10; dx++) { const e = (dx / 9) ** 2 + (dy / 5) ** 2; if (e <= 1) set(ex + dx, ey + dy, e > 0.55 ? 250 : 215, e > 0.55 ? 240 : 15, e > 0.55 ? 240 : 35); if (e > 0.85 && e <= 1.15) set(ex + dx, ey + dy, 12, 6, 24); }
+      for (let dy = -4; dy <= 4; dy++) set(ex, ey + dy, 20, 0, 0); set(ex - 1, ey, 20, 0, 0); set(ex + 1, ey, 20, 0, 0); set(ex + 3, ey - 3, 255, 200, 200);
+      for (let x = 0; x < W2; x++) { set(x, 0, 12, 6, 24); set(x, H2 - 1, 12, 6, 24); set(x, 1, 140, 60, 255); set(x, H2 - 2, 140, 60, 255); }
+      for (let y = 0; y < H2; y++) { set(0, y, 12, 6, 24); set(W2 - 1, y, 12, 6, 24); set(1, y, 140, 60, 255); set(W2 - 2, y, 140, 60, 255); }
+      g.putImageData(img, 0, 0); frames.push(c);
+    }
+    doomArt.set(big, frames); return frames;
+  }
+  const doomBig = () => DAY >= LAST_DAY ? 'D-Day' : `D-${LAST_DAY - DAY}`;
+  // 남은 시간: 마지막 날(12/28) 0시까지, 실시간으로 줄어듦
+  function doomLeft() {
+    if (DAY >= LAST_DAY) return '';
+    const k = new Date(Date.now() + 9 * 3600e3), secToday = k.getUTCHours() * 3600 + k.getUTCMinutes() * 60 + k.getUTCSeconds();
+    const left = (LAST_DAY - DAY - 1) * 86400 + (86400 - secToday);
+    const d = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60), s = left % 60;
+    return `${d}일 ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  function drawDoomBanner(g, cx, top, scale) {
+    const fr = doomFrames(doomBig()), c = fr[Math.floor(performance.now() / 120) % fr.length];
+    const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+    g.drawImage(c, Math.round(cx - c.width * scale / 2), Math.round(top), c.width * scale, c.height * scale);
+    g.imageSmoothingEnabled = prev;
+    const t = doomLeft(); if (!t) return;
+    g.font = `700 ${Math.round(9 * scale)}px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'top'; g.lineWidth = 4; g.strokeStyle = '#12061f'; g.fillStyle = '#8fe3ff';
+    g.strokeText(`멸망까지 ${t}`, cx, top + c.height * scale + 4); g.fillText(`멸망까지 ${t}`, cx, top + c.height * scale + 4);
+  }
+  // 하루에 한 번 크게 띄우기 (선포일 점심부터). 그 뒤엔 하늘 신전 게시판에 걸려 있음
+  function maybeDoomPopup() {
+    if (!DOOM || store('mp2026.doomSeen') === DAY) return;
+    store('mp2026.doomSeen', DAY);
+    $('doomPop').hidden = false;
+    const cv = $('doomPopCanvas'), g = cv.getContext('2d');
+    const loop = () => { if ($('doomPop').hidden) return; g.clearRect(0, 0, cv.width, cv.height); drawDoomBanner(g, cv.width / 2, 0, 3); requestAnimationFrame(loop); };
+    loop();
+  }
+  $('doomPop').addEventListener('click', () => { $('doomPop').hidden = true; });
 
   // ------------------------------------------------------------ 시작
   function setupDoomCard() {
@@ -2290,13 +2414,13 @@
     if (!DOOM) {
       $('doomL').textContent = '아직은 평화로운 세계';
       $('doomD').textContent = `${DAY}일차`;
-      $('doomR').textContent = `12/${date} · ${PHASE}`;
+      $('doomR').textContent = `12/${date} · ${ONLINE ? SLOT_NAME[SLOT] : PHASE}`;
       $('doomBar').hidden = true;
     } else {
       $('doomL').textContent = '세계 멸망까지';
-      $('doomD').textContent = DAY >= 15 ? '결전의 날' : `D-${15 - DAY}`;
-      $('doomR').textContent = `${DAY}일차 · ${PHASE}`;
-      $('doomFill').style.width = `${Math.round((DAY - 4) / 11 * 100)}%`;
+      $('doomD').textContent = DAY >= LAST_DAY ? 'D-Day' : `D-${LAST_DAY - DAY}`;
+      $('doomR').textContent = `${DAY}일차 · ${SLOT_NAME[SLOT]}`;
+      $('doomFill').style.width = `${Math.round((DAY - DOOM_DAY + 1) / (LAST_DAY - DOOM_DAY + 1) * 100)}%`;
       $('doomBar').hidden = false;
     }
   }

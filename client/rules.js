@@ -61,7 +61,7 @@
   const teamColor = (n) => COLORS[((n | 0) - 1 + COLORS.length * 10) % COLORS.length];
   const FRONTS = ['A', 'B', 'C'];
 
-  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1, tiles: {}, traps: {}, chopped: {}, mines: {} }; }
+  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1, tiles: {}, traps: {}, chopped: {}, mines: {}, gone: {}, vax: {}, riftNext: null }; }
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const randCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
   const clampTroops = (arr) => (Array.isArray(arr) && arr.length === 3) ? arr.map((v) => Math.max(0, Math.floor(+v || 0))) : null;
@@ -73,7 +73,7 @@
       for (const t of map.territories) this.t[t.id] = t;
       this.caps = map.territories.filter((t) => t.capitalCandidate).sort((a, b) => a.id - b.id);
       this.s = state || emptyState();
-      for (const k of ['tiles', 'traps', 'chopped', 'mines']) this.s[k] = this.s[k] || {}; // 예전 저장 상태 호환 (mines: 옮긴 금광 위치)
+      for (const k of ['tiles', 'traps', 'chopped', 'mines', 'gone', 'vax']) this.s[k] = this.s[k] || {}; // 예전 저장 상태 호환 (mines: 옮긴 금광 위치)
       this._dist = {};
     }
 
@@ -83,7 +83,8 @@
     ownerOf(tid) { return this.s.owner[tid] || null; }
     territoriesOf(nid) { return Object.keys(this.s.owner).filter((k) => this.s.owner[k] === nid).map(Number); }
     nationOfPlayer(key) { return this.alive().find((n) => n.members.includes(key)) || null; }
-    touches(nid, tid) { const t = this.t[tid]; return !!t && t.neighbors.some((nb) => this.s.owner[nb] === nid); }
+    touches(nid, tid) { const t = this.t[tid]; return !!t && !this.s.gone[tid] && t.neighbors.some((nb) => this.s.owner[nb] === nid); }
+    isGone(tid) { return !!this.s.gone[tid]; }
 
     distance(from, to) {
       if (from === to) return 0;
@@ -181,6 +182,7 @@
       const n = this.nation(nid), t = this.t[tid];
       if (!n || n.dead || !t) return { ok: false, err: '나라나 영토가 없어요' };
       this.refreshActions(n, dayKey);
+      if (this.s.gone[tid]) return { ok: false, err: '균열에 삼켜진 땅이에요' };
       if (this.s.owner[tid]) return { ok: false, err: '이미 주인이 있는 땅이에요' };
       if (!this.touches(nid, tid)) return { ok: false, err: '우리 땅과 붙어 있는 곳만 점령할 수 있어요' };
       if (!free && n.actions <= 0) return { ok: false, err: '오늘 행동력을 다 썼어요' };
@@ -268,6 +270,28 @@
       const f = left[Math.floor(Math.random() * left.length)]; b.rev.push(f);
       return { ok: true, front: f, troops: b.a[f] };
     }
+    // 균열: 백신 쓰기 (다음 웨이브 예고에 든 우리 영토 하나를 그 웨이브에서 지킴)
+    vaccinate(nid, tid) {
+      const n = this.nation(nid), rn = this.s.riftNext;
+      if (!n || !rn) return { ok: false, err: '아직 예고된 균열이 없어요' };
+      if (!rn.terrs.includes(tid)) return { ok: false, err: '다음 균열에 무너질 땅이 아니에요' };
+      if (this.s.owner[tid] !== nid) return { ok: false, err: '우리 땅에만 쓸 수 있어요' };
+      if (this.s.vax[tid] === rn.wave) return { ok: false, err: '이미 백신을 썼어요' };
+      if (!(n.vaccine > 0)) return { ok: false, err: '백신이 없어요 (하늘 거래소)' };
+      n.vaccine--; this.s.vax[tid] = rn.wave; return { ok: true };
+    }
+    // 균열 웨이브: 예고된 땅이 무너진다. 나라 수도와 백신 맞은 땅은 안전
+    riftWave(wave, terrs) {
+      const caps = new Set(this.alive().map((n) => n.capital)), fell = [], saved = [];
+      for (const tid of terrs) {
+        if (this.s.gone[tid]) continue;
+        if (caps.has(tid) || this.s.vax[tid] === wave) { saved.push(tid); continue; }
+        this.s.gone[tid] = 1; fell.push({ tid, owner: this.s.owner[tid] || null }); delete this.s.owner[tid];
+      }
+      this.s.battles = this.s.battles.filter((b) => { if (!this.s.gone[b.target]) return true; const A = this.nation(b.att), D = this.nation(b.def); if (A) A.army += sum(b.a); if (D) D.army += (b.d ? sum(b.d) : 0) + (b.rd ? sum(b.rd) : 0); return false; });
+      this.s.riftNext = null;
+      return { fell, saved };
+    }
     publicBattles() { return this.s.battles.map((b) => ({ id: b.id, target: b.target, att: b.att, def: b.def, f: b.f || null })); }
     defend(nid, tid, troops) {
       const n = this.nation(nid);
@@ -354,6 +378,7 @@
       return {
         me: {
           id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, army: n.army, coin: n.coin, actions: n.actions,
+          vaxed: this.s.riftNext ? Object.keys(this.s.vax).filter((t) => this.s.vax[t] === this.s.riftNext.wave && this.s.owner[t] === n.id).map(Number) : [],
           defaultDef: n.defaultDef || null, intelAny: n.intelAny || 0, intel: n.intel || {},
           wood: n.wood || 0, vaccine: n.vaccine || 0, items: Object.assign({ floor: 0, wall: 0, trap: 0 }, n.items), vaccinePrice: NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0),
           isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length,

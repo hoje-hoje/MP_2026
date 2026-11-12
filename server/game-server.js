@@ -154,11 +154,25 @@ state.coupons = state.coupons || {};     // 쿠폰 코드 -> { r:{coin|army}, me
 state.puzzles = state.puzzles || [];     // 관리자 화면에서 넣은 문제 [{ id, type, question, image, answer:[], on, at }]
 const testMode = () => typeof state.settings.testMode === 'boolean' ? state.settings.testMode : ENV_TEST_MODE;
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-const BATTLE_HOURS = [13, 22]; // 전투 처리 시각 (한국 시간)
-const curSlotKey = () => kstDay() + '-' + new Date(Date.now() + 9 * 3600e3).getUTCHours();
-function nextSlotLabel() { const h = new Date(Date.now() + 9 * 3600e3).getUTCHours(); const n = BATTLE_HOURS.find((x) => x > h); return n ? `오늘 ${n}시` : `내일 ${BATTLE_HOURS[0]}시`; }
+// ---- 게임 시계: 1일차(12/14) ~ 15일차(12/28), 하루 3시간대 (아침 9시 · 점심 1시 · 밤 10시)
+// 기본은 실제 한국 시간. 관리자 화면에서 '수동'으로 날짜·시간대를 바꿀 수 있다
+const EVENT_START = process.env.EVENT_START || '2026-12-14', LAST_DAY = 15;
+const SLOTS = ['morning', 'lunch', 'night'], SLOT_LABEL = { morning: '아침 9시', lunch: '점심 1시', night: '밤 10시' };
+function realClock() {
+  const k = new Date(Date.now() + 9 * 3600e3); let h = k.getUTCHours(), slot = h < 9 ? 'night' : h < 13 ? 'morning' : h < 22 ? 'lunch' : 'night';
+  if (h < 9) k.setUTCDate(k.getUTCDate() - 1); // 새벽은 전날 밤
+  const day = Math.floor((Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate()) - Date.parse(EVENT_START + 'T00:00:00Z')) / 86400e3) + 1;
+  if (day < 1) return { day: 1, slot: 'morning', before: true };
+  if (day > LAST_DAY) return { day: LAST_DAY, slot: 'night', after: true };
+  return { day, slot };
+}
+function gameClock() { const c = state.clock || {}; return c.mode === 'manual' ? { day: c.day, slot: c.slot, manual: true } : realClock(); }
+const clockKey = (c) => (c.day - 1) * 3 + SLOTS.indexOf(c.slot);
+const fromKey = (k) => ({ day: Math.floor(k / 3) + 1, slot: SLOTS[k % 3] });
+const gameDayKey = () => 'D' + gameClock().day; // 하루 단위(행동력·금광·체포)는 게임 날짜 기준
+function nextSlotLabel() { const c = gameClock(); return c.slot === 'morning' ? '오늘 점심 1시' : c.slot === 'lunch' ? '오늘 밤 10시' : '내일 점심 1시'; }
 const FOUNDING_LAST_DAY = process.env.FOUNDING_LAST_DAY || '2026-12-15'; // 건국은 D2(12/15)까지
-const foundingOpen = () => state.settings.founding === 'open' ? true : state.settings.founding === 'closed' ? false : testMode() || kstDay() <= FOUNDING_LAST_DAY;
+const foundingOpen = () => state.settings.founding === 'open' ? true : state.settings.founding === 'closed' ? false : testMode() || gameClock().day <= 2;
 const online = new Map(); // id -> session
 let nextId = 1;
 
@@ -195,7 +209,7 @@ function meta(s) {
   return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, carry: !!s.acc.carry, red: arrestsToday(s.acc), jailed: jailed(s.acc) };
 }
 // 체포 횟수 (하루 단위), 감옥
-function arrestsToday(acc) { return acc.arrests && acc.arrests.day === kstDay() ? acc.arrests.n : 0; }
+function arrestsToday(acc) { return acc.arrests && acc.arrests.day === gameDayKey() ? acc.arrests.n : 0; }
 const jailed = (acc) => (acc.jailUntil || 0) > Date.now();
 function sendMeta(s) { const mm = { t: 'meta', p: meta(s) }; for (const o of online.values()) if (o === s || o.known.has(s.id)) send(o.ws, mm); }
 function capitalPos(acc, token) { // 그 사람 나라 수도 포털 앞 (나라 없으면 null)
@@ -233,12 +247,12 @@ wss.on('connection', (ws) => {
       s = { id: nextId++, ws, token, acc, x: acc.x, y: acc.y, dir: 1, moving: 0, scene: acc.scene || 'ground', room: acc.room || null, lastMove: Date.now(), known: new Set() };
       online.set(s.id, s);
       const nat = world.nationOfPlayer(token); // 나라는 건국 화면에서 세우거나 초대 코드로 들어간다
-      if (nat) { world.refreshActions(nat, kstDay()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
+      if (nat) { world.refreshActions(nat, gameDayKey()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       send(ws, {
         t: 'welcome', id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? JAIL_POS : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: arrestsToday(acc), jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat) broadcastOwners();
       return;
@@ -305,7 +319,7 @@ wss.on('connection', (ws) => {
         if (m.t === 'found' && !foundingOpen()) return send(ws, { t: 'err', text: '건국 기간(12/14~12/15)이 끝났어요. 유랑민으로 시작해 주세요' });
         const r = m.t === 'found' ? world.foundNation(s.token, s.acc.name, m.name, m.capital | 0) : world.joinNation(s.token, s.acc.name, m.code);
         if (!r.ok) return send(ws, { t: 'err', text: r.err });
-        world.refreshActions(r.nation, kstDay());
+        world.refreshActions(r.nation, gameDayKey());
         dirty = true; broadcastOwners(); sendViews([r.nation.id]);
         send(ws, { t: 'joined', founded: m.t === 'found', chat: (state.chats['nation:' + r.nation.id] || []).slice(-30) });
         sendMeta(s);
@@ -333,10 +347,10 @@ wss.on('connection', (ws) => {
         const n = world.nationOfPlayer(s.token);
         if (!n || !s.pending || s.pending.id !== m.id) return;
         const q = findPuzzle(m.id); if (!q) return;
-        if (!world.useAction(n.id, kstDay())) return send(ws, { t: 'answer', correct: false, text: '오늘 행동력을 다 썼어요 (자정에 다시 10)' });
+        if (!world.useAction(n.id, gameDayKey())) return send(ws, { t: 'answer', correct: false, text: '오늘 행동력을 다 썼어요 (자정에 다시 10)' });
         if (!sameAnswer(m.answer, q.answer)) { dirty = true; sendViews([n.id]); return send(ws, { t: 'answer', correct: false, text: '틀렸어요. 다시 도전하려면 행동력 1이 들어요' }); }
         (s.acc.solved = s.acc.solved || []).push(q.id);
-        const r = world.puzzleReward(n.id, s.pending.terr, kstDay());
+        const r = world.puzzleReward(n.id, s.pending.terr, gameDayKey());
         s.pending = null; dirty = true;
         if (r.kind === 'claim') broadcastOwners();
         sendViews([n.id]);
@@ -356,7 +370,7 @@ wss.on('connection', (ws) => {
         if (!n || !t) return;
         // 그 영토 제단 근처에 서 있어야 한다
         if (s.scene !== 'ground' || s.x == null || Math.hypot(s.x / 32 - t.altar[0] - 0.5, s.y / 32 - t.altar[1] - 0.5) > 3) return send(ws, { t: 'err', text: '제단 가까이에서만 점령할 수 있어요' });
-        const r = world.claim(n.id, t.id, kstDay());
+        const r = world.claim(n.id, t.id, gameDayKey());
         if (!r.ok) return send(ws, { t: 'err', text: r.err });
         dirty = true; broadcastOwners(); sendViews([n.id]);
         send(ws, { t: 'ok', text: `${t.id}번 영토를 점령했어요` });
@@ -379,6 +393,12 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'resolveNow': { if (testMode()) resolveNight('test'); break; }
+      case 'vaccinate': { // 백신 쓰기
+        const n = world.nationOfPlayer(s.token); if (!n) return;
+        const r = world.vaccinate(n.id, m.terr | 0); if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        dirty = true; sendViews([n.id]); broadcastOwners(); notifyNation(n.id, `💉 ${s.acc.name}님이 ${m.terr | 0}번 영토에 백신을 썼어요 (이번 균열에서 안전)`);
+        break;
+      }
       case 'defaultDef': { // 기본 방어 비율 (왕)
         const n = world.nationOfPlayer(s.token); if (!n) return;
         if (n.king !== s.token) return send(ws, { t: 'err', text: '기본 방어는 왕만 정할 수 있어요' });
@@ -448,7 +468,7 @@ wss.on('connection', (ws) => {
         const n = world.nationOfPlayer(s.token); const tid = m.terr | 0;
         if (!n) return send(ws, { t: 'err', text: '나라가 있어야 캔 코인을 모을 수 있어요' });
         const mp = mineOf(tid); if (!mp || !nextTo(s, mp[0], mp[1], 2.2)) return send(ws, { t: 'err', text: '금광 바로 옆에서 캐요' });
-        const day = kstDay(); s.acc.mined = s.acc.mined && s.acc.mined.day === day ? s.acc.mined : { day, ids: [] };
+        const day = gameDayKey(); s.acc.mined = s.acc.mined && s.acc.mined.day === day ? s.acc.mined : { day, ids: [] };
         if (s.acc.mined.ids.includes(tid)) return send(ws, { t: 'err', text: '이 금광은 오늘 이미 캤어요' });
         const got = 300 + Math.floor(Math.random() * 31) * 10;
         s.acc.mined.ids.push(tid); n.coin += got; dirty = true; sendViews([n.id]);
@@ -579,7 +599,7 @@ wss.on('connection', (ws) => {
         s.lastArrest = now();
         const c = o.acc.carry; let back = '';
         if (c) { const V = world.nation(c.from); const to = V && !V.dead ? V : n; to.coin += c.coin; to.wood = (to.wood || 0) + c.wood; o.acc.carry = null; back = ` · 훔친 코인 ${c.coin}${c.wood ? `, 목재 ${c.wood}` : ''}을(를) ${to === n ? '되찾았어요' : to.name + '에 돌려줬어요'}`; sendViews([to.id]); }
-        const day = kstDay(); o.acc.arrests = o.acc.arrests && o.acc.arrests.day === day ? o.acc.arrests : { day, n: 0 }; o.acc.arrests.n++;
+        const day = gameDayKey(); o.acc.arrests = o.acc.arrests && o.acc.arrests.day === day ? o.acc.arrests : { day, n: 0 }; o.acc.arrests.n++;
         let jail = false;
         if (o.acc.arrests.n >= NUM.arrestJail) { jail = true; o.acc.jailUntil = Date.now() + NUM.jailMin * 60e3; o.acc.arrests.n = 0; }
         dirty = true;
@@ -657,7 +677,7 @@ setInterval(() => {
 
 // ------------------------------------------------------------ 나라·전투 방송
 function broadcastOwners() {
-  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: world.publicNations(), battles: world.publicBattles(), mines: world.s.mines });
+  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: world.publicNations(), battles: world.publicBattles(), mines: world.s.mines, gone: Object.keys(world.s.gone).map(Number), riftNext: world.s.riftNext });
   for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
 }
 function sendViews(nids) {
@@ -685,7 +705,7 @@ function resolveNight(why) {
   const reports = world.resolveAll(cmdCount);
   for (const tid of Object.keys(world.s.mines)) if (world.s.owner[tid] !== before[tid]) delete world.s.mines[tid]; // 주인이 바뀐 영토의 금광은 기본 자리로
   for (const n of world.alive()) if (n.storePos && world.ownerOf(terrAtTile(n.storePos[0], n.storePos[1])) !== n.id) delete n.storePos; // 저장소 자리를 빼앗기면 수도 옆으로
-  state.lastResolved = kstDay(); state.lastSlot = curSlotKey(); dirty = true; saveState();
+  state.lastResolved = `${gameClock().day}일차 ${SLOT_LABEL[gameClock().slot]}`; dirty = true; saveState();
   console.log(`[전투] ${why}: ${reports.length}건 처리`);
   broadcastOwners();
   for (const o of online.values()) {
@@ -697,11 +717,50 @@ function resolveNight(why) {
 setInterval(() => {
   for (const o of online.values()) if (o.acc.jailUntil && !jailed(o.acc)) { o.acc.jailUntil = 0; dirty = true; placeAt(o, capitalPos(o.acc, o.token)); send(o.ws, { t: 'released', text: '감옥에서 풀려났어요. 수도로 돌아왔어요' }); sendMeta(o); }
 }, 5000);
-// 매일 13시(점심)·22시(밤) (한국 시간)에 전투 처리
-setInterval(() => {
-  const h = new Date(Date.now() + 9 * 3600e3).getUTCHours();
-  if (BATTLE_HOURS.includes(h) && state.lastSlot !== kstDay() + '-' + h) resolveNight(h + ':00');
-}, 30000);
+// 시계가 다음 시간대로 넘어갈 때: 점심·밤 → 전투 처리, 아침 → 멸망 선포·균열 예고·균열 웨이브
+const doomDay = () => state.doomDay || 5;
+const waveDay = (k) => doomDay() + 2 * k - 1; // 선포 다음 날부터 이틀마다 (기본 6·8·10·12·14일차)
+function clockMsg() { const c = gameClock(); return { t: 'clock', day: c.day, slot: c.slot, doomDay: doomDay(), lastDay: LAST_DAY, riftNext: world.s.riftNext, gone: Object.keys(world.s.gone).map(Number) }; }
+function onEnter(c) {
+  if (c.slot === 'lunch' || c.slot === 'night') resolveNight(`${c.day}일차 ${SLOT_LABEL[c.slot]}`);
+  // 멸망 선포: 선포일 점심. 첫 균열 예고도 그때
+  if (c.slot === 'lunch' && c.day === doomDay()) { broadcastNotice(`⚡ 신들이 선포했다: ${LAST_DAY}일차(12/28), 이 세계는 멸망한다. 내일부터 균열이 땅을 삼킨다.`); forecast(1); }
+  if (c.slot !== 'morning') return;
+  for (let k = 1; k <= 5; k++) {
+    if (c.day === waveDay(k)) doWave(k);
+    if (k >= 2 && c.day === waveDay(k) - 1) forecast(k); // 하루 전 아침에 예고
+  }
+}
+function forecast(k) {
+  const terrs = MAP.territories.filter((t) => t.rift === k && !world.s.gone[t.id]).map((t) => t.id);
+  world.s.riftNext = { wave: k, day: waveDay(k), terrs }; dirty = true;
+  const regions = [...new Set(terrs.map((tid) => world.t[tid].region).filter(Boolean))].slice(0, 4).join('·');
+  for (const o of online.values()) send(o.ws, { t: 'ok', text: `🔮 신탁: 내일(${waveDay(k)}일차) 균열이 ${terrs.length}곳을 삼킨다${regions ? ` (${regions} 쪽)` : ''}. 백신으로 땅을 지켜라!` });
+}
+function doWave(k) {
+  const terrs = world.s.riftNext && world.s.riftNext.wave === k ? world.s.riftNext.terrs : MAP.territories.filter((t) => t.rift === k).map((t) => t.id);
+  const r = world.riftWave(k, terrs);
+  const fellIds = new Set(r.fell.map((f) => f.tid));
+  for (const i of Object.keys(world.s.tiles)) if (fellIds.has(terrAtTile(i % MAP.width, Math.floor(i / MAP.width)))) delete world.s.tiles[i];
+  for (const i of Object.keys(world.s.traps)) if (fellIds.has(terrAtTile(i % MAP.width, Math.floor(i / MAP.width)))) delete world.s.traps[i];
+  for (const tid of fellIds) delete world.s.mines[tid];
+  for (const n of world.alive()) if (n.storePos && fellIds.has(terrAtTile(n.storePos[0], n.storePos[1]))) delete n.storePos;
+  for (const o of online.values()) if (o.scene === 'ground' && o.x != null && fellIds.has(terrAtPx(o.x, o.y))) placeAt(o, capitalPos(o.acc, o.token) || { x: o.x, y: o.y, scene: 'sky', room: 'temple' });
+  dirty = true; broadcastOwners();
+  for (const o of online.values()) { const n = world.nationOfPlayer(o.token); const mine = n ? r.fell.filter((f) => f.owner === n.id).length : 0; send(o.ws, { t: 'rift', wave: k, fell: [...fellIds], text: `🌀 균열 ${k}차: 땅 ${fellIds.size}곳이 사라졌다${mine ? ` · 우리 땅 ${mine}곳을 잃었어요` : ''}${r.saved.length ? ` · ${r.saved.length}곳은 백신·수도라 버텼어요` : ''}` }); }
+  console.log(`[균열] ${k}차: ${fellIds.size}곳 무너짐, ${r.saved.length}곳 버팀`);
+}
+function broadcastNotice(text) { state.notice = { text, ts: Date.now() }; dirty = true; const msg = JSON.stringify({ t: 'notice', notice: state.notice }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); }
+function tickClock() {
+  const cur = clockKey(gameClock());
+  if (state.lastClockKey == null) state.lastClockKey = cur; // 처음 켤 때는 지난 일을 다시 하지 않음
+  if (cur < state.lastClockKey) state.lastClockKey = cur; // 관리자가 되돌리면 그냥 맞춤
+  let steps = 0;
+  while (state.lastClockKey < cur && steps++ < 60) { state.lastClockKey++; onEnter(fromKey(state.lastClockKey)); }
+  if (steps || clockSig !== cur) { clockSig = cur; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); }
+}
+let clockSig = null;
+setInterval(tickClock, 10000);
 
 // ------------------------------------------------------------ 관리자(신) 화면 API: POST /admin/api
 // 비밀번호는 Render 환경변수 ADMIN_KEY. 없으면 관리자 기능 전체가 꺼진다.
@@ -746,7 +805,7 @@ function adminStatus() {
   })).sort((a, b) => a.dead - b.dead || b.territories - a.territories);
   const coupons = Object.entries(state.coupons).map(([code, c]) => ({ code, r: c.r, memo: c.memo || '', at: c.at, used: c.used || null }));
   return {
-    ok: true, now: Date.now(), kstDay: kstDay(), uptimeSec: Math.round((Date.now() - BOOT_AT) / 1000), storage: store ? store.kind : '없음',
+    ok: true, now: Date.now(), kstDay: kstDay(), clock: gameClock(), clockMode: (state.clock || {}).mode || 'auto', doomDay: doomDay(), riftNext: world.s.riftNext, goneCount: Object.keys(world.s.gone).length, waveDays: [1, 2, 3, 4, 5].map(waveDay), uptimeSec: Math.round((Date.now() - BOOT_AT) / 1000), storage: store ? store.kind : '없음',
     online: online.size, accounts: Object.keys(state.accounts).length, nations, battles: world.s.battles.length, night: world.s.night,
     lastResolved: state.lastResolved || null, testMode: testMode(), envTestMode: ENV_TEST_MODE, settings: state.settings, foundingOpen: foundingOpen(),
     foundingLastDay: FOUNDING_LAST_DAY, puzzles: bank().length, puzzleFile: path.basename(PUZZLE_FILE), samplePuzzlesOnly: SAMPLE_FILE && !state.puzzles.length, notice: state.notice || null, coupons,
@@ -800,6 +859,13 @@ async function adminOp(m) {
       return { ok: true, sent: online.size };
     }
     case 'resolve': resolveNight('관리자'); return { ok: true };
+    case 'clock': { // 게임 시계: auto(실제 시간) / manual(일차·시간대). 앞으로 가면 그 사이 전투·균열이 차례로 일어남
+      if (m.mode === 'auto') state.clock = { mode: 'auto' };
+      else { const day = Math.max(1, Math.min(LAST_DAY, m.day | 0)); const slot = SLOTS.includes(m.slot) ? m.slot : 'morning'; state.clock = { mode: 'manual', day, slot }; }
+      dirty = true; tickClock(); console.log('[관리자] 시계:', JSON.stringify(state.clock));
+      return adminStatus();
+    }
+    case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
     case 'nationAdjust': { // 나라 병력·코인 더하기/빼기
       const n = world.nation(String(m.nid || '')); if (!n || n.dead) return { ok: false, err: '없는 나라예요' };
       const da = Math.trunc(+m.army || 0), dc = Math.trunc(+m.coin || 0), dw = Math.trunc(+m.wood || 0);
@@ -876,7 +942,7 @@ async function adminOp(m) {
       if (m.confirm !== '초기화') return { ok: false, err: "확인 칸에 '초기화'라고 써 주세요" };
       if (store && store.backup) await store.backup(state, 'before-reset-' + new Date().toISOString().replace(/[:.]/g, '-'));
       world.s = require('../client/rules.js').emptyState(); state.world = world.s;
-      state.chats = {}; state.wander = []; state.lastResolved = null; state.notice = null;
+      state.chats = {}; state.wander = []; state.lastResolved = null; state.notice = null; state.lastClockKey = null;
       if (m.coupons) state.coupons = {};
       for (const a of Object.values(state.accounts)) { a.solved = []; a.carry = null; a.arrests = null; a.jailUntil = 0; a.stunUntil = 0; a.mined = null; a.stoleAt = null; if (m.positions) { a.x = null; a.y = null; a.scene = 'ground'; a.room = null; } }
       if (m.accounts) { for (const k of Object.keys(state.accounts)) delete state.accounts[k]; }

@@ -92,6 +92,20 @@ tr.editing td { background: #fff1b8; }
     <div class="stats" id="stats"></div>
   </section>
 
+  <section class="card" id="clockCard">
+    <h2>🕐 게임 시계 <span class="hint">1일차(12/14) ~ 15일차(12/28) · 하루 3시간대</span></h2>
+    <div id="clockNow" class="stats"></div>
+    <div class="row">
+      <label>일차 <select id="ckDay"></select></label>
+      <label>시간대 <select id="ckSlot"><option value="morning">아침 9시</option><option value="lunch">점심 1시 (전투)</option><option value="night">밤 10시 (전투)</option></select></label>
+      <button id="ckGo" class="primary">이 시간으로 이동</button>
+      <button id="ckNext">다음 시간대 ▶</button>
+      <button id="ckAuto">실제 시간으로 (자동)</button>
+    </div>
+    <div class="row"><label>멸망 선포일 <select id="ckDoom"></select></label><span class="muted" id="ckWaves"></span></div>
+    <p class="muted">앞으로 이동하면 그 사이의 일이 차례대로 일어나요: 점심·밤 → 전투 처리, 선포일 점심 → 멸망 선포·첫 균열 예고, 균열 날 아침 → 균열 웨이브. 뒤로 이동하면 아무 일도 다시 일어나지 않아요.</p>
+  </section>
+
   <div class="grid2">
     <section class="card">
       <h2>📜 전체 공지 <span class="hint">접속한 모든 학생 화면 위에 떠요</span></h2>
@@ -270,6 +284,13 @@ tr.editing td { background: #fff1b8; }
     sel.value = memos.includes(cur) ? cur : '';
     renderCoupons();
 
+    const SL = { morning: '아침 9시', lunch: '점심 1시', night: '밤 10시' };
+    if (!$('ckDay').options.length) { $('ckDay').innerHTML = Array.from({ length: 15 }, (_, i) => `<option value="${i + 1}">${i + 1}일차 (12/${14 + i})</option>`).join(''); $('ckDoom').innerHTML = Array.from({ length: 14 }, (_, i) => `<option value="${i + 1}">${i + 1}일차</option>`).join(''); }
+    const ck = S.clock;
+    $('clockNow').innerHTML = [stat(`${ck.day}일차`, `12/${13 + ck.day}`), stat(SL[ck.slot], '시간대'), stat(S.clockMode === 'manual' ? '<span class="pill off">수동</span>' : '<span class="pill on">자동</span>', '시계'), stat(S.riftNext ? `${S.riftNext.day}일차` : '-', S.riftNext ? `${S.riftNext.wave}차 균열 예고 (${S.riftNext.terrs.length}곳)` : '균열 예고 없음'), stat(fmt(S.goneCount), '무너진 영토')].join('');
+    if (document.activeElement !== $('ckDay') && document.activeElement !== $('ckSlot')) { $('ckDay').value = ck.day; $('ckSlot').value = ck.slot; }
+    $('ckDoom').value = S.doomDay;
+    $('ckWaves').textContent = `균열: ${S.waveDays.map((d, i) => `${i + 1}차 ${d}일차`).join(' · ')}`;
     const sv = S.settings || {};
     $('sTest').value = typeof sv.testMode === 'boolean' ? (sv.testMode ? 'on' : 'off') : 'auto';
     $('sFound').value = sv.founding || 'auto';
@@ -339,6 +360,15 @@ tr.editing td { background: #fff1b8; }
       <div class="g">${list.map((c) => `<div class="c"><div class="t">MP 2026 · 신의 선물</div><div class="k">${c.code}</div><div class="r">${rewardText(c.r)}</div><div class="h">게임 상단 [쿠폰]에 입력 · 한 번만 쓸 수 있어요</div></div>`).join('')}</div>`);
     w.document.close();
   };
+  async function clockTo(day, slot) {
+    const cur = S.clock, fwd = (day - 1) * 3 + ['morning', 'lunch', 'night'].indexOf(slot) - ((cur.day - 1) * 3 + ['morning', 'lunch', 'night'].indexOf(cur.slot));
+    if (fwd > 1 && !confirm(`${fwd}칸 앞으로 갑니다. 그 사이의 전투·균열이 모두 처리돼요. 갈까요?`)) return;
+    S = await api('clock', { mode: 'manual', day, slot }); render(); say(`${day}일차 ${{ morning: '아침', lunch: '점심', night: '밤' }[slot]}로 이동했어요`);
+  }
+  $('ckGo').onclick = () => clockTo(+$('ckDay').value, $('ckSlot').value);
+  $('ckNext').onclick = () => { const k = (S.clock.day - 1) * 3 + ['morning', 'lunch', 'night'].indexOf(S.clock.slot) + 1; if (k > 44) return say('마지막 시간대예요'); clockTo(Math.floor(k / 3) + 1, ['morning', 'lunch', 'night'][k % 3]); };
+  $('ckAuto').onclick = async () => { if (!confirm('실제 한국 시간으로 돌아갈까요? 지금보다 앞이면 그 사이 일이 처리돼요.')) return; S = await api('clock', { mode: 'auto' }); render(); say('자동(실제 시간)으로 바꿨어요'); };
+  $('ckDoom').onchange = async () => { S = await api('doomDay', { day: +$('ckDoom').value }); render(); say(`멸망 선포일을 ${S.doomDay}일차로 바꿨어요`); };
   async function saveSettings(patch) { S = await api('settings', patch); render(); say('설정을 바꿨어요'); }
   $('sTest').onchange = () => { const v = $('sTest').value; saveSettings({ testMode: v === 'auto' ? null : v === 'on' }); };
   $('sFound').onchange = () => saveSettings({ founding: $('sFound').value });
