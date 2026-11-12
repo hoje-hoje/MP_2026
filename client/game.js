@@ -248,8 +248,9 @@
     g.fillStyle = 'rgba(80,60,40,0.55)'; ell(g, x, y - 6, 12, 5);
     g.fillStyle = '#c9c2b6'; for (let k = -2; k <= 2; k++) { g.beginPath(); g.moveTo(x + k * 5 - 2, y - 4); g.lineTo(x + k * 5, y - 12); g.lineTo(x + k * 5 + 2, y - 4); g.fill(); }
   }
+  const STORE_STYLE = 'cabin'; // 저장소 그림: 'cabin'(통나무집) 또는 'store1'~'store4' (ninja/village.png 에서 자른 창고)
   function drawStore(g, x, y, nid) { // 수도 저장소
-    pix(g, 'cabin', x, y + 4, 2); pix(g, 'woodpile', x + 44, y + 4, 2); pix(g, 'coin', x - 44, y - 2, 0, 18);
+    pix(g, STORE_STYLE, x, y + 4, 2); pix(g, 'woodpile', x + 44, y + 4, 2); pix(g, 'coin', x - 44, y - 2, 0, 18);
     sign(g, x, y - 92, nid === MY_NID ? '우리 저장소' : `${natName(nid)} 저장소`);
   }
 
@@ -296,7 +297,7 @@
     const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
     await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
-  const EXTRA = ['coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
+  const EXTRA = ['store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
   const TEMPLE = ['emote0', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'emote6', 'emote7', 'statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
