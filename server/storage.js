@@ -19,6 +19,10 @@ function fileStore(dir) {
       fs.renameSync(tmp, file);
     },
     async backup(state, id) { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, id + '.json'), JSON.stringify(state)); },
+    // 문제 그림 같은 파일은 상태와 따로 저장한다 (상태 JSON이 커지지 않게)
+    async putImage(id, buf, mime) { const d = path.join(dir, 'images'); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, id), buf); fs.writeFileSync(path.join(d, id + '.mime'), mime); },
+    async getImage(id) { const d = path.join(dir, 'images'); try { return { buf: fs.readFileSync(path.join(d, id)), mime: fs.readFileSync(path.join(d, id + '.mime'), 'utf8') }; } catch (e) { return null; } },
+    async delImage(id) { const d = path.join(dir, 'images'); for (const f of [id, id + '.mime']) try { fs.unlinkSync(path.join(d, f)); } catch (e) {} },
     async close() {},
   };
 }
@@ -27,7 +31,9 @@ async function mongoStore(uri, dbName) {
   const { MongoClient } = require('mongodb');
   const client = new MongoClient(uri, { serverSelectionTimeoutMS: 15000 });
   await client.connect();
-  const col = client.db(dbName || 'mp2026').collection('state');
+  const db = client.db(dbName || 'mp2026');
+  const col = db.collection('state');
+  const imgs = db.collection('images');
   let lastBackupDay = '';
   return {
     kind: `MongoDB (${dbName || 'mp2026'}.state)`,
@@ -46,6 +52,9 @@ async function mongoStore(uri, dbName) {
       }
     },
     async backup(state, id) { await col.replaceOne({ _id: id }, { _id: id, json: JSON.stringify(state), savedAt: new Date() }, { upsert: true }); },
+    async putImage(id, buf, mime) { await imgs.replaceOne({ _id: id }, { _id: id, data: buf, mime, savedAt: new Date() }, { upsert: true }); },
+    async getImage(id) { const d = await imgs.findOne({ _id: id }); return d ? { buf: Buffer.from(d.data.buffer || d.data), mime: d.mime } : null; },
+    async delImage(id) { await imgs.deleteOne({ _id: id }); },
     async close() { await client.close(); },
   };
 }

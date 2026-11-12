@@ -36,6 +36,7 @@ const STATIC = {
   '/game.js': path.join(ROOT, 'client', 'game.js'),
   '/rules.js': path.join(ROOT, 'client', 'rules.js'),
   '/admin': path.join(ROOT, 'client', 'admin.html'),
+  '/favicon.ico': path.join(ROOT, 'client', 'favicon.ico'),
   '/world.json': path.join(ROOT, 'maps', 'world.json'),
 };
 const ASSET_DIR = path.join(ROOT, 'client', 'assets');
@@ -56,6 +57,7 @@ const server = http.createServer((req, res) => {
     return res.end('window.MP_ONLINE = true;');
   }
   if (url.pathname === '/admin/api') return adminHttp(req, res);
+  if (url.pathname.startsWith('/puzzle-img/')) return puzzleImage(url.pathname.slice(12), res);
   if (url.pathname === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ ok: true, players: online.size })); }
   let file = STATIC[url.pathname];
   if (!file && url.pathname.startsWith('/assets/')) {
@@ -90,13 +92,21 @@ const { sameAnswer } = require('../client/rules.js');
 // 문제 은행: server/puzzles.local.json (저장소에 안 올림) 이 있으면 그것, 없으면 샘플
 // Render 의 Secret File 은 /etc/secrets/ 에 들어간다
 const PUZZLE_FILE = [process.env.PUZZLES_FILE, '/etc/secrets/puzzles.local.json', path.join(__dirname, 'puzzles.local.json')].find((f) => f && fs.existsSync(f)) || path.join(__dirname, 'puzzles.sample.json');
-let PUZZLES = [];
-function loadPuzzles() { try { PUZZLES = JSON.parse(fs.readFileSync(PUZZLE_FILE, 'utf8')).puzzles || []; console.log(`문제 ${PUZZLES.length}개 (${path.basename(PUZZLE_FILE)})`); } catch (e) { console.log('문제 파일 오류:', e.message); } }
+let FILE_PUZZLES = [];
+function loadPuzzles() { try { FILE_PUZZLES = JSON.parse(fs.readFileSync(PUZZLE_FILE, 'utf8')).puzzles || []; console.log(`문제 파일 ${FILE_PUZZLES.length}개 (${path.basename(PUZZLE_FILE)})`); } catch (e) { console.log('문제 파일 오류:', e.message); } }
+const SAMPLE_FILE = PUZZLE_FILE.endsWith('puzzles.sample.json');
+// 실제로 내는 문제: 관리자 화면에서 넣은 문제(켜진 것) + 문제 파일. 관리자 문제가 하나라도 있으면 샘플 파일은 뺀다
+function bank() {
+  const mine = (state.puzzles || []).filter((q) => q.on);
+  return SAMPLE_FILE && (state.puzzles || []).length ? mine : mine.concat(FILE_PUZZLES);
+}
+const findPuzzle = (id) => (state.puzzles || []).find((q) => q.id === id) || FILE_PUZZLES.find((q) => q.id === id);
 loadPuzzles();
 fs.watchFile(PUZZLE_FILE, { interval: 5000 }, loadPuzzles); // 문제 파일을 고치면 서버 재시작 없이 반영
 state.world = world.s;
 state.settings = state.settings || {};   // 관리자 설정: testMode(true/false/없음=환경변수), founding('auto'|'open'|'closed')
 state.coupons = state.coupons || {};     // 쿠폰 코드 -> { r:{coin|army}, memo, at, used:{name,nation,ts} }
+state.puzzles = state.puzzles || [];     // 관리자 화면에서 넣은 문제 [{ id, type, question, image, answer:[], on, at }]
 const testMode = () => typeof state.settings.testMode === 'boolean' ? state.settings.testMode : ENV_TEST_MODE;
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const FOUNDING_LAST_DAY = process.env.FOUNDING_LAST_DAY || '2026-12-15'; // 건국은 D2(12/15)까지
@@ -225,7 +235,7 @@ wss.on('connection', (ws) => {
         if (own && own !== n.id) return send(ws, { t: 'err', text: '다른 나라의 제단이에요' });
         if (!own && !world.touches(n.id, t.id)) return send(ws, { t: 'err', text: '우리 땅과 붙어 있어야 점령할 수 있어요' });
         const solved = new Set(s.acc.solved || []);
-        const pool = PUZZLES.filter((q) => !solved.has(q.id));
+        const pool = bank().filter((q) => !solved.has(q.id));
         if (!pool.length) return send(ws, { t: 'err', text: '지금 풀 수 있는 문제가 없어요 (문제가 곧 추가돼요)' });
         const same = pool.filter((q) => q.type === t.type);
         const q = (same.length ? same : pool)[Math.floor(Math.random() * (same.length || pool.length))];
@@ -236,7 +246,7 @@ wss.on('connection', (ws) => {
       case 'answer': {
         const n = world.nationOfPlayer(s.token);
         if (!n || !s.pending || s.pending.id !== m.id) return;
-        const q = PUZZLES.find((x) => x.id === m.id); if (!q) return;
+        const q = findPuzzle(m.id); if (!q) return;
         if (!world.useAction(n.id, kstDay())) return send(ws, { t: 'answer', correct: false, text: '오늘 행동력을 다 썼어요 (자정에 다시 10)' });
         if (!sameAnswer(m.answer, q.answer)) { dirty = true; sendViews([n.id]); return send(ws, { t: 'answer', correct: false, text: '틀렸어요. 다시 도전하려면 행동력 1이 들어요' }); }
         (s.acc.solved = s.acc.solved || []).push(q.id);
@@ -397,7 +407,7 @@ function adminHttp(req, res) {
   const f = adminFails.get(ip);
   if (f && f.until > Date.now()) return out(429, { ok: false, err: '비밀번호를 여러 번 틀렸어요. 1분 뒤에 다시 해 주세요' });
   let body = '';
-  req.on('data', (c) => { body += c; if (body.length > 64e3) req.destroy(); });
+  req.on('data', (c) => { body += c; if (body.length > 4e6) req.destroy(); }); // 문제 그림 때문에 넉넉하게
   req.on('end', async () => {
     let m; try { m = JSON.parse(body); } catch (e) { return out(400, { ok: false, err: '잘못된 요청' }); }
     if (!keyOk(m.key)) {
@@ -427,9 +437,44 @@ function adminStatus() {
     ok: true, now: Date.now(), kstDay: kstDay(), uptimeSec: Math.round((Date.now() - BOOT_AT) / 1000), storage: store ? store.kind : '없음',
     online: online.size, accounts: Object.keys(state.accounts).length, nations, battles: world.s.battles.length, night: world.s.night,
     lastResolved: state.lastResolved || null, testMode: testMode(), envTestMode: ENV_TEST_MODE, settings: state.settings, foundingOpen: foundingOpen(),
-    foundingLastDay: FOUNDING_LAST_DAY, puzzles: PUZZLES.length, puzzleFile: path.basename(PUZZLE_FILE), notice: state.notice || null, coupons,
+    foundingLastDay: FOUNDING_LAST_DAY, puzzles: bank().length, puzzleFile: path.basename(PUZZLE_FILE), samplePuzzlesOnly: SAMPLE_FILE && !state.puzzles.length, notice: state.notice || null, coupons,
     wander: state.wander.length,
   };
+}
+// ---- 문제 관리
+const PUZZLE_TYPES = ['기하', '대수', '확통', '미적분', '수열', '논리'];
+function newPuzzleId() { for (;;) { const id = 'q' + crypto.randomBytes(4).toString('hex'); if (!findPuzzle(id)) return id; } }
+function cleanPuzzle(m) {
+  const type = PUZZLE_TYPES.includes(String(m.type || '').trim()) ? String(m.type).trim() : null;
+  if (!type) return { err: `유형은 ${PUZZLE_TYPES.join(', ')} 중 하나여야 해요` };
+  const question = String(m.question || '').replace(/[\u0000-\u0008\u000b-\u001f]/g, '').trim().slice(0, 1000);
+  const raw = Array.isArray(m.answer) ? m.answer : String(m.answer || '').split(/[\n|]/);
+  const answer = [...new Set(raw.map((a) => String(a).trim().slice(0, 50)).filter(Boolean))].slice(0, 10);
+  if (!answer.length) return { err: '정답을 적어 주세요' };
+  return { type, question, answer };
+}
+const IMG_TYPES = { 'image/png': [0x89, 0x50], 'image/jpeg': [0xff, 0xd8], 'image/webp': [0x52, 0x49], 'image/gif': [0x47, 0x49] };
+function parseImage(dataUrl) {
+  const mm = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!mm) return { err: '그림은 png, jpg, webp, gif 만 돼요' };
+  const buf = Buffer.from(mm[2], 'base64');
+  if (buf.length > 2.5e6) return { err: '그림이 너무 커요 (2.5MB 이하)' };
+  const sig = IMG_TYPES[mm[1]]; if (buf[0] !== sig[0] || buf[1] !== sig[1]) return { err: '그림 파일이 깨졌어요' };
+  return { buf, mime: mm[1] };
+}
+const imgCache = new Map();
+async function savePuzzleImage(img) {
+  const id = 'img' + crypto.randomBytes(8).toString('hex');
+  if (store && store.putImage) await store.putImage(id, img.buf, img.mime);
+  imgCache.set(id, img); return '/puzzle-img/' + id;
+}
+async function delPuzzleImage(url) { const id = String(url).split('/').pop(); imgCache.delete(id); if (store && store.delImage && /^img[0-9a-f]{16}$/.test(id)) await store.delImage(id); }
+async function puzzleImage(id, res) {
+  if (!/^img[0-9a-f]{16}$/.test(id)) { res.writeHead(404); return res.end(); }
+  let img = imgCache.get(id);
+  if (!img && store && store.getImage) { img = await store.getImage(id).catch(() => null); if (img) imgCache.set(id, img); }
+  if (!img) { res.writeHead(404); return res.end(); }
+  res.writeHead(200, { 'Content-Type': img.mime, 'Cache-Control': 'public, max-age=86400, immutable' }); res.end(img.buf);
 }
 async function adminOp(m) {
   switch (m.op) {
@@ -476,6 +521,43 @@ async function adminOp(m) {
       for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
       console.log(`[관리자] 설정: 테스트 모드 ${testMode()}, 건국 ${foundingOpen() ? '가능' : '마감'}`);
       return adminStatus();
+    }
+    case 'puzzleList': {
+      const solvedBy = {};
+      for (const a of Object.values(state.accounts)) for (const id of a.solved || []) solvedBy[id] = (solvedBy[id] || 0) + 1;
+      return { ok: true, puzzles: state.puzzles.map((q) => Object.assign({}, q, { solved: solvedBy[q.id] || 0 })), types: PUZZLE_TYPES, sampleFile: SAMPLE_FILE ? FILE_PUZZLES.length : 0 };
+    }
+    case 'puzzleSave': {
+      const q = cleanPuzzle(m);
+      if (q.err) return { ok: false, err: q.err };
+      let old = m.id ? state.puzzles.find((x) => x.id === m.id) : null;
+      if (m.id && !old) return { ok: false, err: '없는 문제예요' };
+      let image = old ? old.image : null;
+      if (m.image === null && image) { await delPuzzleImage(image); image = null; }
+      else if (typeof m.image === 'string' && m.image.startsWith('data:')) {
+        const img = parseImage(m.image); if (img.err) return { ok: false, err: img.err };
+        if (image) await delPuzzleImage(image);
+        image = await savePuzzleImage(img);
+      }
+      if (!q.question && !image) return { ok: false, err: '문제 글이나 그림 중 하나는 있어야 해요' };
+      if (old) Object.assign(old, q, { image });
+      else { old = Object.assign({ id: newPuzzleId(), at: Date.now(), on: true }, q, { image }); state.puzzles.push(old); }
+      dirty = true; console.log(`[관리자] 문제 저장 ${old.id} (${old.type})`);
+      return { ok: true, id: old.id };
+    }
+    case 'puzzleBulk': { // 구글 시트에서 복사한 [유형, 문제, 정답] 줄들
+      const rows = Array.isArray(m.rows) ? m.rows.slice(0, 500) : [];
+      const added = [], errors = [];
+      rows.forEach((r, i) => { const q = cleanPuzzle(r); if (q.err || !q.question) errors.push(`${i + 1}번째 줄: ${q.err || '문제 글이 비었어요'}`); else { const x = Object.assign({ id: newPuzzleId(), at: Date.now(), on: true, image: null }, q); state.puzzles.push(x); added.push(x.id); } });
+      if (added.length) dirty = true;
+      console.log(`[관리자] 문제 한꺼번에 ${added.length}개 추가`);
+      return { ok: true, added: added.length, errors };
+    }
+    case 'puzzleToggle': { const q = state.puzzles.find((x) => x.id === m.id); if (!q) return { ok: false, err: '없는 문제예요' }; q.on = !!m.on; dirty = true; return { ok: true }; }
+    case 'puzzleDelete': {
+      const i = state.puzzles.findIndex((x) => x.id === m.id); if (i < 0) return { ok: false, err: '없는 문제예요' };
+      const [q] = state.puzzles.splice(i, 1); if (q.image) await delPuzzleImage(q.image);
+      dirty = true; console.log(`[관리자] 문제 삭제 ${q.id}`); return { ok: true };
     }
     case 'reset': { // 행사 시작 전 테스트 기록 지우기
       if (m.confirm !== '초기화') return { ok: false, err: "확인 칸에 '초기화'라고 써 주세요" };
