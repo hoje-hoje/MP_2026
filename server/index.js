@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
+const { World } = require('../client/rules.js');
 
 const PORT = +process.env.PORT || 8080;
 const ROOT = path.resolve(__dirname, '..');
@@ -23,6 +24,7 @@ const CHAT_MAX = 120, CHAT_KEEP = 60;
 const EMOTES = ['안녕!', '거래 구함!', '동맹 할래?', 'ㅋㅋㅋ', '!', '?', '도와줘!', '고마워'];
 const BANNED = ['시발', '씨발', 'ㅅㅂ', '병신', 'ㅂㅅ', '좆', '개새', '미친놈', '꺼져'];
 const TEAM_MAX = 60;
+const TEST_MODE = process.env.TEST_MODE !== '0'; // 프로토타입 기간: '지금 전투 처리' 버튼 허용
 
 // ------------------------------------------------------------ 정적 파일
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -30,6 +32,7 @@ const STATIC = {
   '/': path.join(ROOT, 'client', 'index.html'),
   '/index.html': path.join(ROOT, 'client', 'index.html'),
   '/game.js': path.join(ROOT, 'client', 'game.js'),
+  '/rules.js': path.join(ROOT, 'client', 'rules.js'),
   '/world.json': path.join(ROOT, 'maps', 'world.json'),
 };
 const ASSET_DIR = path.join(ROOT, 'client', 'assets');
@@ -66,6 +69,13 @@ const server = http.createServer((req, res) => {
 // ------------------------------------------------------------ 상태
 // accounts: 토큰별 영구 기록 / online: 지금 접속한 소켓
 const state = loadState();
+// ------------------------------------------------------------ 게임 세계 (나라·영토·전투)
+const MAP = JSON.parse(fs.readFileSync(STATIC['/world.json'], 'utf8'));
+const TERR = new Uint16Array(Buffer.from(MAP.territory_u16le_b64, 'base64').buffer.slice(0));
+const terrAtPx = (x, y) => { const tx = Math.floor(x / 32), ty = Math.floor(y / 32); if (tx < 0 || ty < 0 || tx >= MAP.width || ty >= MAP.height) return -1; const v = TERR[ty * MAP.width + tx]; return v === 65535 ? -1 : v; };
+const world = new World(MAP, state.world || null);
+state.world = world.s;
+const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const online = new Map(); // id -> session
 let nextId = 1;
 
@@ -122,10 +132,14 @@ wss.on('connection', (ws) => {
       for (const o of online.values()) if (o.token === token) o.ws.close(4000, 'replaced');
       s = { id: nextId++, ws, token, acc, x: acc.x, y: acc.y, dir: 1, moving: 0, scene: acc.scene || 'ground', room: acc.room || null, lastMove: Date.now(), known: new Set() };
       online.set(s.id, s);
+      const nat = world.ensureNation(team, token, acc.name);
+      if (nat) world.refreshActions(nat, kstDay());
       send(ws, {
         t: 'welcome', id: s.id, token, pos: acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room },
-        chat: (state.chats['team:' + team] || []).slice(-30), emotes: EMOTES, wander: state.wander,
+        chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
+        view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: TEST_MODE,
       });
+      if (nat) broadcastOwners();
       return;
     }
     switch (m.t) {
@@ -148,12 +162,14 @@ wss.on('connection', (ws) => {
         const text = filterBad(clean(m.text, CHAT_MAX));
         if (!text || now() - (s.lastChat || 0) < 800) return;
         s.lastChat = now();
-        const ch = 'team:' + s.acc.team; // 지금은 나라(팀) 채팅만. 제국 채팅은 병합 기능과 함께.
+        const myNat = world.nationOfPlayer(s.token);
+        if (!myNat) return;
+        const ch = 'nation:' + myNat.id; // 나라 채팅 (병합되면 자동으로 제국 채팅이 된다)
         const msg = { t: 'chat', ch, from: s.id, name: s.acc.name, text, ts: Date.now() };
         const list = state.chats[ch] || (state.chats[ch] = []);
         list.push(msg); if (list.length > CHAT_KEEP) list.splice(0, list.length - CHAT_KEEP);
         dirty = true;
-        for (const o of online.values()) if (o.acc.team === s.acc.team) send(o.ws, msg);
+        for (const o of online.values()) if (myNat.members.includes(o.token)) send(o.ws, msg);
         break;
       }
       case 'emote': {
@@ -170,6 +186,32 @@ wss.on('connection', (ws) => {
         for (const o of online.values()) if (o.known.has(s.id) || o === s) send(o.ws, mm);
         break;
       }
+      case 'war': { const n = world.nationOfPlayer(s.token); if (n) send(ws, { t: 'view', view: world.view(n.id, s.token) }); break; }
+      case 'claim': {
+        const n = world.nationOfPlayer(s.token); const t = world.t[m.terr | 0];
+        if (!n || !t) return;
+        // 그 영토 제단 근처에 서 있어야 한다
+        if (s.scene !== 'ground' || s.x == null || Math.hypot(s.x / 32 - t.altar[0] - 0.5, s.y / 32 - t.altar[1] - 0.5) > 3) return send(ws, { t: 'err', text: '제단 가까이에서만 점령할 수 있어요' });
+        const r = world.claim(n.id, t.id, kstDay());
+        if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        dirty = true; broadcastOwners(); sendViews([n.id]);
+        send(ws, { t: 'ok', text: `${t.id}번 영토를 점령했어요` });
+        break;
+      }
+      case 'declare': case 'cancel': case 'defend': {
+        const n = world.nationOfPlayer(s.token);
+        if (!n) return;
+        if (n.king !== s.token) return send(ws, { t: 'err', text: '전쟁 결정은 왕만 할 수 있어요' });
+        const r = m.t === 'declare' ? world.declare(n.id, m.terr | 0, m.troops) : m.t === 'cancel' ? world.cancel(n.id, m.battle | 0) : world.defend(n.id, m.terr | 0, m.troops);
+        if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        dirty = true;
+        const other = m.t === 'declare' ? r.battle.def : null;
+        sendViews(other ? [n.id, other] : [n.id]);
+        if (m.t === 'declare') notifyNation(other, `⚔ ${n.name}이(가) ${m.terr | 0}번 영토에 선전포고했어요! 오늘 밤 10시 전투`);
+        send(ws, { t: 'ok', text: m.t === 'declare' ? '선전포고 완료 · 밤 10시에 결과가 나와요' : m.t === 'cancel' ? '선전포고를 취소했어요' : '방어 배치 저장' });
+        break;
+      }
+      case 'resolveNow': { if (TEST_MODE) resolveNight('test'); break; }
       case 'wander': { // 유랑민 등록소: 귀화 신청 / 용병 등록 / 건국 대기
         if (s.scene !== 'sky' || s.room !== 'wander') return;
         const kind = ['naturalize', 'mercenary', 'found'].includes(m.kind) ? m.kind : null;
@@ -216,5 +258,43 @@ setInterval(() => {
     send(viewer.ws, { t: 'state', p, n: online.size });
   }
 }, TICK_MS);
+
+// ------------------------------------------------------------ 나라·전투 방송
+function broadcastOwners() {
+  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: world.publicNations() });
+  for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+}
+function sendViews(nids) {
+  for (const o of online.values()) {
+    const n = world.nationOfPlayer(o.token);
+    if (n && nids.includes(n.id)) send(o.ws, { t: 'view', view: world.view(n.id, o.token) });
+  }
+}
+function notifyNation(nid, text) {
+  const n = world.nation(nid); if (!n) return;
+  for (const o of online.values()) if (n.members.includes(o.token)) send(o.ws, { t: 'ok', text });
+}
+// 지휘관 수: 그 영토(땅 위)에 마지막으로 서 있던 그 나라 국민
+function cmdCount(nid, tid) {
+  const n = world.nation(nid); if (!n) return 0;
+  let c = 0;
+  for (const key of n.members) { const a = state.accounts[key]; if (a && a.scene === 'ground' && a.x != null && terrAtPx(a.x, a.y) === tid) c++; }
+  return c;
+}
+function resolveNight(why) {
+  const reports = world.resolveAll(cmdCount);
+  state.lastResolved = kstDay(); dirty = true; saveState();
+  console.log(`[전투] ${why}: ${reports.length}건 처리`);
+  broadcastOwners();
+  for (const o of online.values()) {
+    const n = world.nationOfPlayer(o.token);
+    send(o.ws, { t: 'night', reports: n ? reports.filter((r) => r.att === n.id || r.def === n.id || n.members.length && (world.nation(r.att) || {}).id === n.id) : [], view: n ? world.view(n.id, o.token) : null });
+  }
+}
+// 매일 밤 10시(한국 시간)에 전투 처리
+setInterval(() => {
+  const k = new Date(Date.now() + 9 * 3600e3);
+  if (k.getUTCHours() === 22 && state.lastResolved !== kstDay()) resolveNight('22:00');
+}, 30000);
 
 server.listen(PORT, () => console.log(`MP 2026 서버: http://localhost:${PORT}  (데이터: ${DATA_DIR})`));

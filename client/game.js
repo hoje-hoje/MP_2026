@@ -453,15 +453,17 @@
         }
         // 영토 색 은은하게 + 국경선
         const o = terrAt(x, y);
-        if (o > 0 && t !== T.WATER && t !== T.MOUNTAIN) {
+        const own = o > 0 ? ownerOf(o) : null;
+        if (own && t !== T.WATER && t !== T.MOUNTAIN) { g.fillStyle = natColor(own); g.globalAlpha = 0.22; g.fillRect(px, py, TILE, TILE); g.globalAlpha = 1; }
+        else if (o > 0 && t !== T.WATER && t !== T.MOUNTAIN) {
           const [r, gg, b] = TYPE_RGB[terrs[o].type];
           g.fillStyle = `rgba(${r},${gg},${b},0.07)`; g.fillRect(px, py, TILE, TILE);
         }
         if (o > 0) {
           const right = terrAt(x + 1, y), down = terrAt(x, y + 1);
           g.fillStyle = 'rgba(43,35,64,0.45)';
-          if (right > 0 && right !== o) { for (let k = 0; k < TILE; k += 8) g.fillRect(px + TILE - 2, py + k, 3, 5); }
-          if (down > 0 && down !== o) { for (let k = 0; k < TILE; k += 8) g.fillRect(px + k, py + TILE - 2, 5, 3); }
+          if (right > 0 && right !== o) { const solidB = ownerOf(right) !== own; g.fillStyle = solidB ? '#2b2340' : 'rgba(43,35,64,0.45)'; if (solidB) g.fillRect(px + TILE - 2, py, 4, TILE); else for (let k = 0; k < TILE; k += 8) g.fillRect(px + TILE - 2, py + k, 3, 5); }
+          if (down > 0 && down !== o) { const solidB = ownerOf(down) !== own; g.fillStyle = solidB ? '#2b2340' : 'rgba(43,35,64,0.45)'; if (solidB) g.fillRect(px, py + TILE - 2, TILE, 4); else for (let k = 0; k < TILE; k += 8) g.fillRect(px + k, py + TILE - 2, 5, 3); }
         }
       }
     }
@@ -585,12 +587,10 @@
   const ROOMS = {
     temple: {
       name: '하늘 신전', desc: '신들의 공지 · 신탁 제단 · 멸망의 탑', w: 30, h: 18, pos: [1, 1], crowd: 10,
-      floor: 'floor_palace', wall: true, carpets: [[13, 2, 4, 16], [2, 7, 26, 3]], trim: '#e2b93b',
+      floor: 'floor_palace', wall: true, trim: '#e2b93b',
       emotes: ['신탁 봤어?', '오늘 공지 뭐임', '!', '?', '내일 어디 무너짐?', '탑이 빛난다'],
       doors: [{ side: 'W', at: 8, to: 'market' }, { side: 'E', at: 8, to: 'council' }, { side: 'N', at: 15, to: 'plaza' }, { side: 'S', at: 15, to: 'ground' }],
       props: [
-        { x: 13, y: 3, w: 4, h: 3, draw: (g, x, y) => { pix(g, 'tower', x, y + 8, 0, 230); if (DOOM) pix(g, 'burst', x, y - 150, 0, 60 + Math.sin(performance.now() / 180) * 10, 0.7); sign(g, x, y - 250, DOOM ? (DAY >= 15 ? '결전의 날' : `멸망까지 D-${15 - DAY}`) : '고요한 탑'); } },
-        { x: 6, y: 3, w: 3, h: 3, draw: (g, x, y) => pix(g, 'pool', x, y, 2) }, { x: 21, y: 3, w: 3, h: 3, draw: (g, x, y) => pix(g, 'pool', x, y, 2) },
         { x: 3, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner1', x, y + 4, 2) }, { x: 9, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner5', x, y + 4, 2) },
         { x: 20, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner5', x, y + 4, 2) }, { x: 26, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner1', x, y + 4, 2) },
         { x: 11, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 18, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
@@ -839,7 +839,7 @@
   const VACCINE_BASE = 3000, VACCINE_STEP = 500, SKY_LIMIT = 5 * 60;
   const vaccinePrice = () => VACCINE_BASE + VACCINE_STEP * inv.bought;
   function saveInv() { store('mp2026.inv', inv); renderInv(); }
-  function renderInv() { $('invCoin').textContent = inv.coin.toLocaleString(); $('invArmy').textContent = inv.army.toLocaleString(); $('invVac').textContent = inv.vaccine; }
+  function renderInv() { $('invCoin').textContent = inv.coin.toLocaleString(); $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = inv.vaccine; }
   const player = {
     x: 0, y: 0, dir: 1, moving: false, scene: 'ground', room: null, entry: null,
     name: saved.name || '나', tag: '#277a58', team: store('mp2026.team') || 3,
@@ -923,12 +923,13 @@
     keys.add(k);
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
     if (k === 'm') toggleMap();
+    if (k === 'b') toggleWar();
     if (k === 't') goHome();
     if (k === 'e') interact();
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
     if (k === '[' || k === ']') { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; }
+    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; }
   });
   addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
   addEventListener('blur', () => keys.clear());
@@ -955,7 +956,7 @@
   canvas.addEventListener('pointercancel', endStick);
 
   // ------------------------------------------------------------ HUD
-  let lastTerr = null;
+  let lastTerr = null, whereDirty = false;
   const chip = (text, color, line) => { const s = document.createElement('span'); s.className = 'chip' + (line ? ' line' : ''); s.textContent = text; if (color) s.style.background = color; $('whereChips').appendChild(s); };
   function updateWhere() {
     if (player.scene === 'sky') {
@@ -971,7 +972,8 @@
     }
     const tx = player.x / TILE | 0, ty = player.y / TILE | 0;
     const o = terrAt(tx, ty);
-    if (o === lastTerr) return;
+    if (o === lastTerr && !whereDirty) return;
+    whereDirty = false;
     lastTerr = o;
     $('whereChips').textContent = '';
     if (o > 0) {
@@ -979,7 +981,10 @@
       $('whereName').textContent = t.name;
       $('whereSub').textContent = `영토 #${t.id} · ${t.type} 지방 · ${RING[t.ring]} · 넓이 ${t.area.toLocaleString()}칸`;
       chip(`${t.type} 문제`, TYPE_TAG[t.type]);
-      if (t === home) chip('우리 수도 (테스트)', '#277a58'); else chip('주인 없음 (중립)', null, true);
+      const own = ownerOf(t.id);
+      if (own) chip(myView && own === myView.me.id ? (home === t ? '우리 수도' : '우리 땅') : natName(own) + (nationsPub[own] && nationsPub[own].capital === t.id ? ' 수도' : ''), natColor(own));
+      else chip('주인 없음 (중립)', null, true);
+      if (myView && (myView.incoming.some((b) => b.target === t.id) || myView.outgoing.some((b) => b.target === t.id))) chip('⚔ 오늘 밤 전투', '#c22f53');
       if (t.capitalCandidate) chip('수도 후보 · 하늘 포털', '#c22f53');
     } else {
       $('whereName').textContent = '알 수 없는 땅';
@@ -1003,7 +1008,11 @@
         const n = nodes.find((q) => q.id === t.id);
         if (t.portal && Math.hypot(t.portal[0] + 0.5 - tx, t.portal[1] + 0.5 - ty) < 1.8) best = { kind: 'portal', t, text: '하늘로 올라가기' };
         else if (n && Math.hypot(n.x - player.x, n.y - player.y) < 52) best = { kind: 'node', n, text: mined.has(n.id) ? '오늘은 다 캤어요 (내일 다시)' : '금광 캐기 · 코인' };
-        else if (Math.hypot(t.altar[0] + 0.5 - tx, t.altar[1] + 0.5 - ty) < 2.4) best = { kind: 'altar', t, text: `${t.name} 제단 · ${t.type} 문제 풀기` };
+        else if (Math.hypot(t.altar[0] + 0.5 - tx, t.altar[1] + 0.5 - ty) < 2.4) {
+          const own = ownerOf(t.id), mine = myView && own === myView.me.id;
+          const canClaim = myView && !own && Object.keys(owners).some((k) => owners[k] === myView.me.id && terrs[k] && terrs[k].neighbors.includes(t.id));
+          best = { kind: 'altar', t, claim: canClaim, text: canClaim ? `${t.name} 점령하기 (행동력 1)` : mine ? `우리 제단 · ${t.type} 문제 풀기` : own ? `${natName(own)}의 제단` : `${t.name} 제단 · 우리 땅과 붙어야 점령 가능` };
+        }
       }
     }
     const key = best ? best.kind + best.text : '';
@@ -1029,7 +1038,7 @@
       inv.coin -= price; inv.vaccine += 1; inv.bought += 1; saveInv(); near = null;
       toast(`백신을 샀어요 · 보유 ${inv.vaccine}개 (다음 가격 ${vaccinePrice().toLocaleString()})`);
     }
-    else if (near.kind === 'altar') toast(`'${near.t.type}' 퍼즐은 다음 단계에서 붙일 예정이에요`);
+    else if (near.kind === 'altar') { if (near.claim) warAction('claim', { terr: near.t.id }); else toast(`'${near.t.type}' 퍼즐은 다음 단계에서 붙일 예정이에요`); }
     else if (near.kind === 'desk') { $('wanderMsg').textContent = '나라가 없다면 여기서 등록하세요.'; renderWander(); $('wanderBox').hidden = false; }
     else if (near.kind === 'board') {
       if (!DOOM) toast('[공지] 신들은 아직 침묵하고 있다.');
@@ -1059,7 +1068,8 @@
       if (o !== 65535 && o > 0 && gone[o]) c3 = [52, 30, 88];
       else if (!c3) {
         const tt = terrs[o];
-        const rgb = tt ? TYPE_RGB[tt.type] : [159, 216, 138];
+        const own = tt ? ownerOf(o) : null;
+        const rgb = own ? hexRgb(natColor(own)).map((v) => v * 1.25 - 40) : tt ? TYPE_RGB[tt.type] : [159, 216, 138];
         const k = t === T.FOREST ? 0.78 : t === T.SAND ? 1.05 : 0.95;
         c3 = [rgb[0] * k * 0.55 + 100, rgb[1] * k * 0.55 + 100, rgb[2] * k * 0.55 + 100];
         const r = x + 1 < W ? terr[i + 1] : o, dn = y + 1 < H ? terr[i + W] : o;
@@ -1231,6 +1241,7 @@
     switch (m.t) {
       case 'welcome': {
         myId = m.id; netOn = true; store('mp2026.token', m.token);
+        testMode = !!m.testMode; applyWorld(m.owners, m.nations, m.view || null);
         chatLog = m.chat || []; renderChat();
         wanderList = m.wander || [];
         const p = m.pos;
@@ -1260,6 +1271,11 @@
       case 'chat': chatLog.push(m); if (chatLog.length > 60) chatLog.shift(); renderChat(); break;
       case 'emote': { const r = m.id === myId ? player : remotes.get(m.id); if (r) { r.emote = m.text; r.emoteT = 3; } break; }
       case 'wander': wanderList = m.list || []; renderWander(); break;
+      case 'owners': applyWorld(m.owners, m.nations); break;
+      case 'view': applyWorld(null, null, m.view); break;
+      case 'night': applyWorld(null, null, m.view); showNight(m.reports || []); break;
+      case 'err': toast(m.text); break;
+      case 'ok': toast(m.text); break;
     }
   }
   function netTick(dt) {
@@ -1357,6 +1373,159 @@
   $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { sendChat(); } if (e.key === 'Escape') e.target.blur(); });
   $('chatIn').addEventListener('focus', () => keys.clear());
   $('btnChatSend').addEventListener('click', sendChat);
+
+  // ------------------------------------------------------------ 나라 · 영토 · 블로토 전투 (화면)
+  // 온라인: 서버가 결과를 정한다 / 오프라인 미리보기: 같은 규칙(rules.js)을 브라우저에서 봇 나라들과 돌린다
+  let OFF = null;                  // 오프라인 World
+  let owners = {}, nationsPub = {}, myView = null, testMode = true;
+  const ownerOf = (tid) => owners[tid] || null;
+  const natColor = (nid) => (nationsPub[nid] && nationsPub[nid].color) || '#888888';
+  const natName = (nid) => (nationsPub[nid] && nationsPub[nid].name) || '중립';
+  const terrLabel = (tid) => (terrs[tid] ? `${terrs[tid].name}` : `#${tid}`);
+
+  function applyWorld(o, n, v) {
+    if (o) owners = o;
+    if (n) nationsPub = n;
+    if (v !== undefined) myView = v;
+    if (myView && terrs[myView.me.capital]) home = terrs[myView.me.capital];
+    chunks.clear(); buildMapImage(); lastTerr = null; renderInv();
+    if (!$('war').hidden) renderWar();
+  }
+  function offSync() { applyWorld(OFF.s.owner, OFF.publicNations(), OFF.view(OFF_ME, 'me')); }
+  const OFF_ME = 'n3';
+
+  function setupOffline() {
+    OFF = new MPRules.World({ territories: terrs.filter(Boolean) }, null);
+    const me = OFF.ensureNation(3, 'me', player.name, home.id);
+    me.name = '우리 나라'; me.army = 120; me.actions = 99;
+    for (const nb of terrs[home.id].neighbors.slice(0, 2)) OFF.claim(me.id, nb);
+    me.actions = 10;
+    // 가까운 수도 후보 5곳에 봇 나라를 세우고 우리 쪽으로 땅을 넓혀 둔다
+    const caps = terrs.filter((t) => t && t.capitalCandidate && t.id !== home.id && !gone[t.id] && !OFF.ownerOf(t.id))
+      .sort((a, b) => OFF.distance(home.id, a.id) - OFF.distance(home.id, b.id)).slice(0, 5);
+    const BOT_NAMES = ['라온 왕국', '미르 제국', '솔빛 연합', '가람 공국', '누리 왕조'];
+    caps.forEach((c, i) => {
+      const b = OFF.ensureNation([1, 2, 4, 5, 6][i], 'bot' + i, '봇' + (i + 1), c.id);
+      if (!b) return;
+      b.name = BOT_NAMES[i]; b.army = 60 + ((hash(i, 3) * 80) | 0); b.actions = 99;
+      for (let k = 0; k < 9; k++) {
+        const cand = [];
+        for (const tid of OFF.territoriesOf(b.id)) for (const nb of terrs[tid].neighbors) if (!OFF.ownerOf(nb) && !gone[nb]) cand.push(nb);
+        if (!cand.length) break;
+        cand.sort((x, y) => OFF.distance(x, home.id) - OFF.distance(y, home.id));
+        OFF.claim(b.id, cand[0]);
+      }
+    });
+    botsDeclare();
+    offSync();
+  }
+  // 봇들이 우리 땅을 노린다 (미리보기에서 방어 화면을 볼 수 있게)
+  function botsDeclare() {
+    const mine = OFF.territoriesOf(OFF_ME);
+    for (const b of OFF.alive().filter((n) => n.id !== OFF_ME)) {
+      if (hash(b.team, OFF.s.night, 9) > 0.55 && !(OFF.s.night === 1 && !OFF.s.battles.length)) continue;
+      const tgt = mine.find((tid) => OFF.touches(b.id, tid) && !OFF.s.battles.some((x) => x.target === tid));
+      if (!tgt) continue;
+      const total = Math.min(b.army, 30 + ((hash(b.team, OFF.s.night) * 50) | 0));
+      const r = [hash(b.team, 1, OFF.s.night), hash(b.team, 2, OFF.s.night), hash(b.team, 3, OFF.s.night)];
+      const tr = r.map((v) => Math.floor(total * v / (r[0] + r[1] + r[2])));
+      OFF.declare(b.id, tgt, tr);
+    }
+  }
+  function offCmd(nid, tid) { return nid === OFF_ME && player.scene === 'ground' && terrAt(player.x / TILE | 0, player.y / TILE | 0) === tid ? 1 : 0; }
+
+  // 행동 보내기 (온라인: 서버로 / 오프라인: 바로 적용)
+  function warAction(t, payload) {
+    if (ONLINE) { if (netOn) ws.send(JSON.stringify(Object.assign({ t }, payload))); return; }
+    let r;
+    if (t === 'claim') r = OFF.claim(OFF_ME, payload.terr);
+    else if (t === 'declare') r = OFF.declare(OFF_ME, payload.terr, payload.troops);
+    else if (t === 'cancel') r = OFF.cancel(OFF_ME, payload.battle);
+    else if (t === 'defend') r = OFF.defend(OFF_ME, payload.terr, payload.troops);
+    else if (t === 'resolveNow') return offNight();
+    if (!r.ok) { toast(r.err); return; }
+    toast(t === 'claim' ? `${terrLabel(payload.terr)}을(를) 점령했어요` : t === 'declare' ? '선전포고 완료 · 밤 10시에 결과가 나와요' : t === 'cancel' ? '선전포고를 취소했어요' : '방어 배치 저장');
+    offSync();
+  }
+  function offNight() {
+    const reps = OFF.resolveAll(offCmd);
+    for (const n of OFF.alive()) { n.army += n.id === OFF_ME ? 0 : 30; n.actions = n.id === OFF_ME ? 10 : 99; }
+    botsDeclare();
+    offSync();
+    showNight(reps.filter((r) => r.att === OFF_ME || r.def === OFF_ME));
+  }
+  function showNight(reps) {
+    warTab = 'report'; $('war').hidden = false; renderWar();
+    if (!reps.length) toast('밤 10시: 우리 나라는 이번 밤 전투가 없었어요');
+    else { const w = reps.filter((r) => (r.winner === 'att') === (r.att === myView.me.id)).length; toast(`밤 10시 전투 결과: ${reps.length}전 ${w}승`); }
+  }
+
+  // ---- 전쟁 창
+  let warTab = 'attack', warTarget = null;
+  const troopsOf = (id) => [0, 1, 2].map((i) => Math.max(0, parseInt($(id + i).value, 10) || 0));
+  function troopInputs(prefix, vals, disabled) {
+    return `<div class="fronts">${['A', 'B', 'C'].map((f, i) => `<label class="front"><span>${f} 전선</span><input id="${prefix}${i}" type="number" min="0" step="1" value="${vals[i] | 0}" ${disabled ? 'disabled' : ''}></label>`).join('')}</div>`;
+  }
+  function renderWar() {
+    const v = myView, box = $('warBody');
+    if (!v) { box.innerHTML = '<p class="msg">나라 정보를 불러오는 중이에요.</p>'; return; }
+    const me = v.me, king = me.isKing;
+    $('warHead').innerHTML = `<b style="color:${me.color}">■</b> ${esc(me.name)} · 왕 ${esc(me.kingName || '')}<br><span>병력 <b>${me.army}</b> · 영토 ${me.territories}곳 · 오늘 밤 선전포고 ${me.declaresLeft}/${MPRules.NUM.maxDeclare} · 행동력 ${me.actions}</span>`;
+    for (const b of document.querySelectorAll('#warTabs button')) b.setAttribute('aria-pressed', String(b.dataset.tab === warTab));
+    let h = '';
+    if (!king) h += '<p class="note">전쟁 결정(선전포고·방어 배치)은 왕만 할 수 있어요. 여기선 상황만 볼 수 있어요.</p>';
+    if (warTab === 'attack') {
+      const mineSet = new Set(Object.keys(owners).filter((k) => owners[k] === me.id).map(Number));
+      const targets = [];
+      for (const tid of mineSet) for (const nb of terrs[tid].neighbors) if (owners[nb] && owners[nb] !== me.id && !gone[nb] && !targets.includes(nb)) targets.push(nb);
+      if (v.outgoing.length) h += `<h3>오늘 밤 공격</h3>` + v.outgoing.map((b) => `<div class="row"><span>⚔ ${esc(terrLabel(b.target))} <i style="color:${natColor(b.def)}">${esc(natName(b.def))}</i> · ${b.a.join(' / ')}</span>${king ? `<button data-cancel="${b.id}">취소</button>` : ''}</div>`).join('');
+      h += `<h3>공격할 수 있는 적 영토 (${targets.length})</h3>`;
+      if (!targets.length) h += '<p class="msg">우리 땅과 붙어 있는 적 영토가 없어요. 중립 땅을 점령해서 적과 국경을 맞대세요 (제단에서 E).</p>';
+      h += '<div class="targets">' + targets.map((tid) => `<button class="tgt" data-tgt="${tid}" aria-pressed="${tid === warTarget}"><b style="color:${natColor(owners[tid])}">■</b> ${esc(terrLabel(tid))}<small>${esc(natName(owners[tid]))}${nationsPub[owners[tid]] && nationsPub[owners[tid]].capital === tid ? ' · 수도!' : ''}</small></button>`).join('') + '</div>';
+      if (warTarget && targets.includes(warTarget)) {
+        const dist = OFF ? OFF.distance(me.capital, warTarget) : null;
+        h += `<div class="plan"><h3>${esc(terrLabel(warTarget))} 공격 계획</h3>
+          <p class="msg">병력을 세 전선에 몰래 나눠요. 세 곳 중 <b>두 곳 이상</b> 이기면 승리. 상대도 몰래 나눠요.${dist != null ? ` 보급선 ${Math.min(40, Math.max(0, dist - 1) * 5)}% 감소.` : ''}</p>
+          ${troopInputs('atk', [0, 0, 0], !king)}
+          <div class="row"><span id="atkSum">합계 0 / ${me.army}</span>${king ? '<button id="btnDeclare">선전포고</button>' : ''}</div></div>`;
+      }
+    } else if (warTab === 'defend') {
+      h += `<h3>오늘 밤 우리 땅을 노리는 공격 (${v.incoming.length})</h3>`;
+      if (!v.incoming.length) h += '<p class="msg">지금은 공격받는 곳이 없어요.</p>';
+      h += v.incoming.map((b) => `<div class="plan"><div class="row"><span>🛡 ${esc(terrLabel(b.target))} ← <i style="color:${natColor(b.att)}">${esc(natName(b.att))}</i>${nationsPub[me.id] && me.capital === b.target ? ' · <b>수도!</b>' : ''}</span><span>${b.d ? '배치 완료' : '<b>미배치</b> (안 하면 자동 배치)'}</span></div>
+        ${troopInputs('def' + b.id + '_', b.d || [0, 0, 0], !king)}${king ? `<div class="row"><span>상대 병력은 비밀이에요</span><button data-defend="${b.target}" data-bid="${b.id}">방어 배치 저장</button></div>` : ''}</div>`).join('');
+    } else {
+      h += `<h3>지난 전투 결과</h3>`;
+      if (!v.reports.length) h += '<p class="msg">아직 전투 기록이 없어요.</p>';
+      h += v.reports.slice().reverse().map((r) => {
+        const weAtt = r.att === me.id, won = (r.winner === 'att') === weAtt;
+        return `<div class="report ${won ? 'won' : 'lost'}"><div class="row"><b>${won ? '승리' : '패배'}</b><span>${r.night}일째 밤 · ${esc(terrLabel(r.target))}</span></div>
+          <div class="msg">${esc(r.attName)}(공격) → ${esc(r.defName)}(방어)${r.autoDef ? ' · 방어 자동 배치' : ''}</div>
+          <table><tr><th></th><th>A</th><th>B</th><th>C</th></tr>
+          <tr><td>공격 ×${r.mA}</td>${r.effA.map((x, i) => `<td class="${r.fronts[i] === 'att' ? 'w' : ''}">${x}</td>`).join('')}</tr>
+          <tr><td>방어 ×${r.mD}</td>${r.effD.map((x, i) => `<td class="${r.fronts[i] === 'def' ? 'w' : ''}">${x}</td>`).join('')}</tr></table>
+          <div class="msg">손실: 공격 −${r.lossA} · 방어 −${r.lossD}${r.winner === 'att' ? ' · 영토가 넘어갔어요' : ''}${r.merged ? ' · <b>수도 함락! 나라 전체가 병합됐어요</b>' : ''}</div></div>`;
+      }).join('');
+    }
+    if (testMode) h += `<div class="row test"><span>테스트용</span><button id="btnResolve">지금 밤 10시 전투 처리</button></div>`;
+    box.innerHTML = h;
+    // 이벤트
+    for (const b of box.querySelectorAll('[data-tgt]')) b.onclick = () => { warTarget = +b.dataset.tgt; renderWar(); };
+    for (const b of box.querySelectorAll('[data-cancel]')) b.onclick = () => warAction('cancel', { battle: +b.dataset.cancel });
+    for (const b of box.querySelectorAll('[data-defend]')) b.onclick = () => warAction('defend', { terr: +b.dataset.defend, troops: troopsOf('def' + b.dataset.bid + '_') });
+    const upd = () => { const t = troopsOf('atk'); const el = $('atkSum'); if (el) { const s = t[0] + t[1] + t[2]; el.textContent = `합계 ${s} / ${me.army}`; el.style.color = s > me.army ? '#c22f53' : ''; } };
+    for (let i = 0; i < 3; i++) { const el = document.getElementById('atk' + i); if (el) el.oninput = upd; }
+    if ($('btnDeclare')) $('btnDeclare').onclick = () => warAction('declare', { terr: warTarget, troops: troopsOf('atk') });
+    if ($('btnResolve')) $('btnResolve').onclick = () => warAction('resolveNow', {});
+  }
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function toggleWar(force) {
+    const el = $('war'); el.hidden = force !== undefined ? !force : !el.hidden;
+    if (!el.hidden) { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'war' })); renderWar(); }
+  }
+  $('btnWar').addEventListener('click', () => toggleWar());
+  $('btnWarClose').addEventListener('click', () => toggleWar(false));
+  for (const b of document.querySelectorAll('#warTabs button')) b.addEventListener('click', () => { warTab = b.dataset.tab; renderWar(); });
 
   // ------------------------------------------------------------ 루프
   let dpr = 1, vw = 0, vh = 0;
@@ -1526,7 +1695,7 @@
     setupDoomCard();
     renderInv();
     $('loading').hidden = true;
-    if (ONLINE) startOnline();
+    if (ONLINE) startOnline(); else setupOffline();
     if (DAY === 5) setTimeout(() => toast('신들이 선포했다: 12월 28일, 이 세계는 끝난다.'), 600);
     else if (DOOM) { const n = terrs.filter((t) => t && gone[t.id]).length; if (n) setTimeout(() => toast(`균열이 영토 ${n}곳을 삼켰다`), 600); }
     requestAnimationFrame((n) => { last = n; frame(n); });
