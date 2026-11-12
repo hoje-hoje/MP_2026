@@ -661,6 +661,9 @@ function broadcastOwners() {
   for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
 }
 function sendViews(nids) {
+  // 목재가 늘어 저장소 모습 단계가 바뀌면 모두에게 알림
+  let lv = false; for (const id of nids) { const n = world.nation(id); if (!n) continue; const v = (n.wood || 0) >= 1000 ? 2 : (n.wood || 0) >= 500 ? 1 : 0; if (n._lv !== v) { n._lv = v; lv = true; } }
+  if (lv) broadcastOwners();
   for (const o of online.values()) {
     const n = world.nationOfPlayer(o.token);
     if (n && nids.includes(n.id)) send(o.ws, { t: 'view', view: world.view(n.id, o.token) });
@@ -738,7 +741,7 @@ function newCouponCode() {
 function adminStatus() {
   const nations = Object.values(world.s.nations).map((n) => ({
     id: n.id, name: n.name, color: n.color, king: n.kingName, dead: !!n.dead, mergedInto: n.mergedInto || null,
-    members: n.members.map((k) => (n.memberNames || {})[k] || '?'), online: n.members.filter((k) => [...online.values()].some((o) => o.token === k)).length,
+    wood: n.wood || 0, members: n.members.map((k) => (n.memberNames || {})[k] || '?'), online: n.members.filter((k) => [...online.values()].some((o) => o.token === k)).length,
     territories: world.territoriesOf(n.id).length, army: n.army, coin: n.coin, code: n.code,
   })).sort((a, b) => a.dead - b.dead || b.territories - a.territories);
   const coupons = Object.entries(state.coupons).map(([code, c]) => ({ code, r: c.r, memo: c.memo || '', at: c.at, used: c.used || null }));
@@ -799,13 +802,14 @@ async function adminOp(m) {
     case 'resolve': resolveNight('관리자'); return { ok: true };
     case 'nationAdjust': { // 나라 병력·코인 더하기/빼기
       const n = world.nation(String(m.nid || '')); if (!n || n.dead) return { ok: false, err: '없는 나라예요' };
-      const da = Math.trunc(+m.army || 0), dc = Math.trunc(+m.coin || 0);
-      if (Math.abs(da) > 100000 || Math.abs(dc) > 10000000) return { ok: false, err: '숫자가 너무 커요' };
-      n.army = Math.max(0, n.army + da); n.coin = Math.max(0, n.coin + dc); dirty = true;
+      const da = Math.trunc(+m.army || 0), dc = Math.trunc(+m.coin || 0), dw = Math.trunc(+m.wood || 0);
+      if (Math.abs(da) > 100000 || Math.abs(dc) > 10000000 || Math.abs(dw) > 100000) return { ok: false, err: '숫자가 너무 커요' };
+      n.army = Math.max(0, n.army + da); n.coin = Math.max(0, n.coin + dc); n.wood = Math.max(0, (n.wood || 0) + dw); dirty = true;
       sendViews([n.id]);
-      if (m.say !== false && (da || dc)) notifyNation(n.id, `✨ 신의 선물: ${[da && `병력 ${da > 0 ? '+' : ''}${da}`, dc && `코인 ${dc > 0 ? '+' : ''}${dc}`].filter(Boolean).join(', ')}`);
-      console.log(`[관리자] ${n.name}: 병력 ${da}, 코인 ${dc}`);
-      return { ok: true, army: n.army, coin: n.coin };
+      const sg = (v) => (v > 0 ? '+' : '') + v;
+      if (m.say !== false && (da || dc || dw)) notifyNation(n.id, `✨ 신의 선물: ${[da && `병력 ${sg(da)}`, dc && `코인 ${sg(dc)}`, dw && `목재 ${sg(dw)}`].filter(Boolean).join(', ')}`);
+      console.log(`[관리자] ${n.name}: 병력 ${da}, 코인 ${dc}, 목재 ${dw}`);
+      return { ok: true, army: n.army, coin: n.coin, wood: n.wood };
     }
     case 'couponCreate': {
       const count = Math.max(1, Math.min(300, m.count | 0));

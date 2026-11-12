@@ -32,6 +32,8 @@
     stealSec: 3, arrestJail: 3, jailMin: 60, // 훔치기 시간, 체포 몇 번이면 감옥, 감옥 시간(분)
     reinforce: 10, frontRange: 3.5, // 전선 근처(칸)에서 E 한 번에 충원하는 병력
   };
+  // 저장소 모습 단계: 목재 500개 이상 → 2단계, 1000개 이상 → 3단계
+  const storeLevel = (n) => ((n.wood || 0) >= 1000 ? 2 : (n.wood || 0) >= 500 ? 1 : 0);
   const T = { VOID: 0, GRASS: 1, FOREST: 2, SAND: 3, WATER: 4, MOUNTAIN: 5, HOLY: 6, WALL: 7 };
   function hash(x, y, s = 0) { let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
   // 나무가 있는 칸인지 (지형 값만 보고 정해짐 → 서버와 화면이 같은 결과)
@@ -343,7 +345,7 @@
     // ---------------------------------------------------------- 참가자에게 보낼 화면 정보
     publicNations() {
       const out = {};
-      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null };
+      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null, storeLv: storeLevel(n) };
       return out;
     }
     view(nid, key) {

@@ -248,10 +248,11 @@
     g.fillStyle = 'rgba(80,60,40,0.55)'; ell(g, x, y - 6, 12, 5);
     g.fillStyle = '#c9c2b6'; for (let k = -2; k <= 2; k++) { g.beginPath(); g.moveTo(x + k * 5 - 2, y - 4); g.lineTo(x + k * 5, y - 12); g.lineTo(x + k * 5 + 2, y - 4); g.fill(); }
   }
-  const STORE_STYLE = 'cabin'; // 저장소 그림: 'cabin'(통나무집) 또는 'store1'~'store4' (ninja/village.png 에서 자른 창고)
-  function drawStore(g, x, y, nid) { // 수도 저장소
-    pix(g, STORE_STYLE, x, y + 4, 2); pix(g, 'woodpile', x + 44, y + 4, 2); pix(g, 'coin', x - 44, y - 2, 0, 18);
-    sign(g, x, y - 92, nid === MY_NID ? '우리 저장소' : `${natName(nid)} 저장소`);
+  const STORE_ART = ['store2', 'store3', 'store4']; // 저장소 모습: 기본 → 목재 500 이상 → 1000 이상 (ninja/village.png 에서 자른 창고)
+  function drawStore(g, x, y, nid) { // 수도 저장소 (크기에 맞춰 장작·코인·팻말 위치)
+    const key = STORE_ART[(nationsPub[nid] && nationsPub[nid].storeLv) | 0], im = ART['x_' + key], w = im ? im.width * 2 : 96, h = im ? im.height * 2 : 80;
+    pix(g, key, x, y + 4, 2); pix(g, 'woodpile', x + w / 2 + 12, y + 4, 2); pix(g, 'coin', x - w / 2 - 8, y - 2, 0, 18);
+    sign(g, x, y - h - 16, nid === MY_NID ? '우리 저장소' : `${natName(nid)} 저장소`);
   }
 
   function drawFlag(g, x, y, mine) {
@@ -842,6 +843,7 @@
     const d = R.doors.find((q) => q.to === fromId) || R.doors[0];
     if (d) [player.x, player.y] = doorInside(R, d); else [player.x, player.y] = [(R.w >> 1) * TILE + 16, (R.h >> 1) * TILE + 16];
     player.scene = 'sky'; player.room = R; fadeT = 0.35; lastTerr = null; netTp = true; step.on = false;
+    if (build.on) setBuild(false); // 하늘에 가면 설치 모드 자동으로 끄기
   }
   function ascend(portalTerr) {
     player.entry = portalTerr;
@@ -1118,7 +1120,7 @@
       const ptx = player.x / TILE, pty = player.y / TILE, dA = Math.hypot(best.t.altar[0] + 0.5 - ptx, best.t.altar[1] + 0.5 - pty);
       for (const [i] of STORE_AT) if (Math.hypot((i % W) + 0.5 - ptx, Math.floor(i / W) + 0.5 - pty) <= Math.min(1.9, dA)) { best = null; break; }
     }
-    if (player.scene === 'ground' && ONLINE && build.on) { const b = groundAction(); if (b) best = b; } // 설치 모드에선 설치가 먼저
+    if (player.scene === 'ground' && ONLINE && build.on && !(best && best.kind === 'portal')) { const b = groundAction(); if (b) best = b; } // 설치 모드에선 설치가 먼저 (포털만 예외)
     if (!best && player.scene === 'ground' && ONLINE) best = groundAction();
     const key = best ? best.kind + best.text : '';
     if (key !== (near ? near.kind + near.text : '')) {
@@ -1202,6 +1204,7 @@
   }
   function setBuild(on, k) {
     if (on && !myView) { toast('나라가 있어야 설치할 수 있어요'); return; }
+    if (on && player.scene === 'sky') { toast('설치 모드는 땅에서만 쓸 수 있어요'); return; }
     build.on = on; if (k) build.k = k; if (!on) build.moving = null;
     $('buildBar').hidden = !on;
     for (const b of document.querySelectorAll('#buildBar [data-k]')) { b.setAttribute('aria-pressed', String(b.dataset.k === build.k)); b.querySelector('small').textContent = myView ? myView.me.items[b.dataset.k] : 0; }
@@ -1550,7 +1553,7 @@
       case 'stun': stunUntil = performance.now() + m.ms; step.on = false; toast(m.text); break;
       case 'pos': player.x = m.x; player.y = m.y; step.on = false; netTp = true; break;
       case 'mined': mined.add(m.terr); toast(m.text); break;
-      case 'warp': { const p = m.pos; if (p.scene === 'sky' && ROOMS[p.room]) { player.scene = 'sky'; player.room = ROOMS[p.room]; } else { player.scene = 'ground'; player.room = null; } player.x = p.x; player.y = p.y; step.on = false; hold.on = false; fadeT = 0.35; lastTerr = null; break; }
+      case 'warp': { const p = m.pos; if (p.scene === 'sky' && ROOMS[p.room]) { player.scene = 'sky'; player.room = ROOMS[p.room]; if (build.on) setBuild(false); } else { player.scene = 'ground'; player.room = null; } player.x = p.x; player.y = p.y; step.on = false; hold.on = false; fadeT = 0.35; lastTerr = null; break; }
       case 'carry': player.carry = m.carry; toast(m.text); break;
       case 'arrested': player.carry = null; jailUntil = m.jailUntil || 0; toast(m.text); break;
       case 'released': jailUntil = 0; if (player.scene === 'sky' && player.room.id === 'jail') goHome(); toast(m.text); break;

@@ -114,7 +114,7 @@ tr.editing td { background: #fff1b8; }
   <section class="card">
     <h2>🏰 나라 <span class="hint">병력·코인 더하기(+)/빼기(−). 바꾸면 그 나라 학생들에게 알림이 가요</span></h2>
     <div class="tablewrap"><table>
-      <thead><tr><th>나라</th><th>왕</th><th>국민 (접속)</th><th class="num">영토</th><th class="num">병력</th><th class="num">코인</th><th>초대 코드</th><th>조정</th></tr></thead>
+      <thead><tr><th>나라</th><th>왕</th><th>국민 (접속)</th><th class="num">영토</th><th class="num">병력</th><th class="num">코인</th><th class="num">목재</th><th>초대 코드</th><th>조정</th></tr></thead>
       <tbody id="nations"></tbody>
     </table></div>
   </section>
@@ -259,10 +259,10 @@ tr.editing td { background: #fff1b8; }
         <td><span class="dot" style="background:${esc(n.color)}"></span>${esc(n.name)}${n.dead ? ' (흡수됨)' : ''}</td>
         <td>${esc(n.king)}</td>
         <td title="${esc(n.members.join(', '))}">${n.members.length}명 (${n.online})</td>
-        <td class="num">${fmt(n.territories)}</td><td class="num">${fmt(n.army)}</td><td class="num">${fmt(n.coin)}</td>
+        <td class="num">${fmt(n.territories)}</td><td class="num">${fmt(n.army)}</td><td class="num">${fmt(n.coin)}</td><td class="num">${fmt(n.wood)}</td>
         <td><code>${esc(n.code || '')}</code></td>
-        <td>${n.dead ? '' : `<div class="adj"><input type="number" placeholder="병력 ±" data-a="${esc(n.id)}"><input type="number" placeholder="코인 ±" data-c="${esc(n.id)}"><button class="small" data-adj="${esc(n.id)}">적용</button></div>`}</td>
-      </tr>`).join('') : '<tr><td colspan="8" class="muted">아직 나라가 없어요</td></tr>';
+        <td>${n.dead ? '' : `<div class="adj"><input type="number" placeholder="병력 ±" data-a="${esc(n.id)}"><input type="number" placeholder="코인 ±" data-c="${esc(n.id)}"><input type="number" placeholder="목재 ±" data-w="${esc(n.id)}"><button class="small" data-adj="${esc(n.id)}">적용</button></div>`}</td>
+      </tr>`).join('') : '<tr><td colspan="9" class="muted">아직 나라가 없어요</td></tr>';
 
     const memos = [...new Set(S.coupons.map((c) => c.memo).filter(Boolean))];
     const sel = $('cMemoFilter'), cur = sel.value;
@@ -301,11 +301,11 @@ tr.editing td { background: #fff1b8; }
   };
   $('nations').onclick = async (e) => {
     const id = e.target.dataset.adj; if (!id) return;
-    const army = +document.querySelector(`[data-a="${id}"]`).value || 0, coin = +document.querySelector(`[data-c="${id}"]`).value || 0;
-    if (!army && !coin) return say('병력이나 코인에 숫자를 넣어 주세요 (빼려면 -10 처럼)');
+    const army = +document.querySelector(`[data-a="${id}"]`).value || 0, coin = +document.querySelector(`[data-c="${id}"]`).value || 0, wood = +document.querySelector(`[data-w="${id}"]`).value || 0;
+    if (!army && !coin && !wood) return say('병력·코인·목재 중 하나에 숫자를 넣어 주세요 (빼려면 -10 처럼)');
     const n = S.nations.find((x) => x.id === id);
-    if (!confirm(`${n.name}: 병력 ${army >= 0 ? '+' : ''}${army}, 코인 ${coin >= 0 ? '+' : ''}${coin}\n적용할까요?`)) return;
-    await api('nationAdjust', { nid: id, army, coin }); say('적용했어요'); load();
+    if (!confirm(`${n.name}: 병력 ${army >= 0 ? '+' : ''}${army}, 코인 ${coin >= 0 ? '+' : ''}${coin}, 목재 ${wood >= 0 ? '+' : ''}${wood}\n적용할까요?`)) return;
+    await api('nationAdjust', { nid: id, army, coin, wood }); say('적용했어요'); load();
   };
   $('couponForm').onsubmit = async (e) => {
     e.preventDefault();
