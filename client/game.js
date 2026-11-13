@@ -1722,7 +1722,7 @@
         break;
       case 'chat': {
         chatLog.push(m); if (chatLog.length > 80) chatLog.shift(); renderChat();
-        if (m.ch !== 'team') { const r = m.from === myId ? player : remotes.get(m.from); if (r) { r.emote = m.text.length > 26 ? m.text.slice(0, 25) + '…' : m.text; r.emoteT = 4.5; } } // 말풍선 (팀 채팅은 말풍선 없음)
+        { const r = m.from === myId ? player : remotes.get(m.from); if (r) { r.emote = (m.ch === 'team' ? '[팀] ' : '') + (m.text.length > 26 ? m.text.slice(0, 25) + '…' : m.text); r.emoteT = 4.5; } } // 말풍선 (팀 채팅은 서버가 팀원에게만 보내므로 팀원에게만 보임)
         break;
       }
       case 'chatErr': toast(m.text); break;
