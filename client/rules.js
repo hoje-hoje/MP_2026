@@ -33,7 +33,8 @@
     // 영지 (나라 공용 저장소)
     woodPerTree: 2,                // 나무 1그루 목재
     price: { floor: 20, wall: 60, trap: 150 }, // 하늘 거래소 가격 (코인, 1개)
-    vaccineBase: 3000, vaccineStep: 500,       // 백신: 나라가 살 때마다 비싸짐
+    vaccineBase: 3000, vaccineStep: 500,       // 백신: 나라가 살 때마다 비싸짐 (쓰면 영역 하나 침식 0%)
+    erodeStep: 10, erodeFall: 50,  // 균열: 멸망 선포 다음 날부터 매일 아침 영역마다 침식 +10%, 나라 전체 침식 50% 이상이면 멸망 (수도는 침식 안 됨)
     maxWalls: 60, maxTraps: 12,    // 나라당 설치 한도
     floorSpeed: 1.5,               // 우리 나라 바닥 위에서 빨라지는 배수
     wallBreakSec: 5, chopSec: 2,   // 방벽 부수기·나무 베기 시간
@@ -77,7 +78,7 @@
   const FRONTS = ['A', 'B', 'C']; // 예전 3전선 (지금은 전선 수가 2k+1로 바뀜)
   const frontName = (i) => (i < 26 ? String.fromCharCode(65 + i) : 'Z' + (i - 25));
 
-  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1, tiles: {}, traps: {}, chopped: {}, mines: {}, gone: {}, vax: {}, riftNext: null }; }
+  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1, tiles: {}, traps: {}, chopped: {}, mines: {}, gone: {}, vax: {}, erosion: {}, riftNext: null }; }
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const randCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
   const clampTroops = (arr, n = 3) => (Array.isArray(arr) && arr.length === n && n > 0 && n <= 99) ? arr.map((v) => Math.max(0, Math.min(1e7, Math.floor(+v || 0)))) : null;
@@ -92,7 +93,7 @@
       for (const t of map.territories) this.t[t.id] = t;
       this.caps = map.territories.filter((t) => t.capitalCandidate).sort((a, b) => a.id - b.id);
       this.s = state || emptyState();
-      for (const k of ['tiles', 'traps', 'chopped', 'mines', 'gone', 'vax']) this.s[k] = this.s[k] || {}; // 예전 저장 상태 호환 (mines: 옮긴 금광 위치)
+      for (const k of ['tiles', 'traps', 'chopped', 'mines', 'gone', 'vax', 'erosion']) this.s[k] = this.s[k] || {}; // 예전 저장 상태 호환 (mines: 옮긴 금광 위치)
       this._dist = {};
       for (const b of this.s.battles || []) { if (!b.F) b.F = b.a.length; if (!b.ar) b.ar = b.a.map(() => 0); if (b.rd) { const D = this.s.nations[b.def]; if (D) D.army += sum(b.rd); delete b.rd; } } // 예전 3전선 전투 호환
     }
@@ -326,15 +327,32 @@
       const f = left[Math.floor(Math.random() * left.length)]; b.rev.push(f);
       return { ok: true, front: f, troops: b.a[f] + ((b.ar || [])[f] || 0) };
     }
-    // 균열: 백신 쓰기 (다음 웨이브 예고에 든 우리 영토 하나를 그 웨이브에서 지킴)
+    // 균열: 백신 쓰기 → 우리 영역 하나의 침식을 0%로
     vaccinate(nid, tid) {
-      const n = this.nation(nid), rn = this.s.riftNext;
-      if (!n || !rn) return { ok: false, err: '아직 예고된 균열이 없어요' };
-      if (!rn.terrs.includes(tid)) return { ok: false, err: '다음 균열에 무너질 땅이 아니에요' };
+      const n = this.nation(nid);
+      if (!n) return { ok: false, err: '나라가 없어요' };
       if (this.s.owner[tid] !== nid) return { ok: false, err: '우리 땅에만 쓸 수 있어요' };
-      if (this.s.vax[tid] === rn.wave) return { ok: false, err: '이미 백신을 썼어요' };
+      if (!(this.s.erosion[tid] > 0)) return { ok: false, err: '침식되지 않은 땅이에요' };
       if (!(n.vaccine > 0)) return { ok: false, err: '백신이 없어요 (하늘 거래소)' };
-      n.vaccine--; this.s.vax[tid] = rn.wave; return { ok: true };
+      n.vaccine--; this.s.erosion[tid] = 0; return { ok: true };
+    }
+    // 나라 전체 침식률 (영역 넓이로 가중 평균, 수도 포함 → 수도만 있는 나라는 0%)
+    nationErosion(nid) {
+      let a = 0, e = 0;
+      const cap = (this.nation(nid) || {}).capital;
+      for (const t of this.territoriesOf(nid)) { const ar = this.t[t].area || 1; a += ar; e += ar * (t === cap ? 0 : (this.s.erosion[t] || 0)); } // 수도는 침식 안 됨 (0%로 셈)
+      return a ? Math.round(e / a * 10) / 10 : 0;
+    }
+    // 매일 아침 균열: 수도가 아닌 모든 영역 침식 +step%. 나라 전체 침식이 50% 이상이면 멸망 (영역은 주인 없는 땅)
+    erode(step = NUM.erodeStep) {
+      const caps = new Set(this.alive().map((n) => n.capital));
+      for (const t of Object.values(this.t)) { if (this.s.gone[t.id] || caps.has(t.id)) continue; this.s.erosion[t.id] = Math.min(100, (this.s.erosion[t.id] || 0) + step); }
+      const fallen = [];
+      for (const n of this.alive()) {
+        const pct = this.nationErosion(n.id);
+        if (pct >= NUM.erodeFall) { const members = n.members.slice(); for (const t of this.territoriesOf(n.id)) delete this.s.owner[t]; this.destroy(n); fallen.push({ id: n.id, name: n.name, pct, members }); }
+      }
+      return { fallen };
     }
     refund(b) { const A = this.nation(b.att), D = this.nation(b.def); if (A && !A.dead) A.army += sum(b.a) + sum(b.ar); if (D && !D.dead && b.d) D.army += sum(b.d); }
     // 균열 웨이브: 예고된 땅이 무너진다. 나라 수도와 백신 맞은 땅은 안전
@@ -477,6 +495,7 @@
         me: {
           id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, army: n.army, coin: n.coin, actions: n.actions,
           vaxed: this.s.riftNext ? Object.keys(this.s.vax).filter((t) => this.s.vax[t] === this.s.riftNext.wave && this.s.owner[t] === n.id).map(Number) : [],
+          erosion: this.nationErosion(n.id),
           defaultDef: n.defaultDef || null, intelAny: n.intelAny || 0, intel: n.intel || {},
           wood: n.wood || 0, vaccine: n.vaccine || 0, items: Object.assign({ floor: 0, wall: 0, trap: 0 }, n.items), vaccinePrice: NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0),
           isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length,

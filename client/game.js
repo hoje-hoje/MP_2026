@@ -65,7 +65,11 @@
   }
   // ---- 영지: 설치물(바닥·방벽), 우리 덫, 저장소 자리
   let TILES = {};                 // 칸 번호 -> { k: 'floor'|'wall', n: 나라 }
-  let RIFT_SET = new Set();       // 다음 균열에 무너질 영토 (예고)
+  let RIFT_SET = new Set();       // (예전) 다음 균열에 무너질 영토
+  let EROSION = {}, erosionSig = ''; // 영역별 균열 침식 % (매일 아침 +10%, 수도 제외)
+  function setErosion(e) { if (!e) return; const sig = JSON.stringify(e); if (sig === erosionSig) return; erosionSig = sig; EROSION = e; invalidateChunks(); mapSig = ''; }
+  // 침식된 칸: 영역 침식 %만큼 칸이 보라색으로 오염 (칸마다 정해진 순서로 번짐)
+  const corruptAt = (x, y, o) => { const e = EROSION[o] | 0; return e > 0 && hash(x, y, 77) * 100 < e; };
   let BATTLES = [];               // 선포된 전투 (모두에게 보임): { id, target, att, def, f: [[x,y]×3] }
   function applyMines(mines) { for (const n of nodes) { const o = mines && mines[n.id]; n.tx = o ? o[0] : n.dx; n.ty = o ? o[1] : n.dy; if (o) clearTrees(o[0], o[1], 1); } }
   let MY_TRAPS = new Set();       // 우리 나라 덫 (다른 나라엔 안 보임)
@@ -450,7 +454,7 @@
         const x = x0 + tx, y = y0 + ty, px = tx * TILE, py = ty * TILE;
         const t = tileAt(x, y), h = hash(x, y);
         const og = terrAt(x, y);
-        if (og > 0 && gone[og]) { // 균열에 삼켜진 땅: 보라색으로 오염된 바닥 + 빛나는 금 + 독웅덩이
+        if (og > 0 && (gone[og] || corruptAt(x, y, og))) { // 균열에 삼켜진(침식된) 칸: 보라색으로 오염된 바닥 + 빛나는 금 + 독웅덩이
           g.fillStyle = ['#2a1040', '#321450', '#26103c', '#2e1248'][(h * 4) | 0]; g.fillRect(px, py, TILE, TILE);
           for (let k = 0; k < 6; k++) { const hh = hash(x * 7 + k, y * 3, 51); g.fillStyle = hh > 0.5 ? '#3d1860' : '#1e0b30'; g.fillRect(px + ((hh * 16) | 0) * 2, py + ((hash(x, y * 5 + k, 52) * 16) | 0) * 2, 4, 2); }
           if (h < 0.22) { // 갈라진 금 (자홍색으로 빛남)
@@ -458,7 +462,7 @@
             for (let k = 0; k < 7; k++) { g.fillRect(cx, cy, 2, 4); cx += ((hash(x, y, 60 + k) * 3) | 0) * 2 - 2; cy += 4; }
             g.fillStyle = 'rgba(255,140,255,0.6)'; g.fillRect(px + 4 + ((h * 97) % 1) * 24 | 0, py + 2, 1, 4);
           } else if (h < 0.32) { g.fillStyle = '#16061f'; g.fillRect(px + 6, py + 12, 20, 10); g.fillRect(px + 9, py + 10, 14, 14); g.fillStyle = '#7a2bb8'; g.fillRect(px + 10, py + 13, 6, 2); } // 독웅덩이
-          const alive = (a, b) => { const q = terrAt(a, b); return q >= 0 && !gone[q] && tileAt(a, b) !== T.VOID; };
+          const alive = (a, b) => { const q = terrAt(a, b); return q >= 0 && !gone[q] && !corruptAt(a, b, q) && tileAt(a, b) !== T.VOID; };
           for (const [ax, ay, rx, ry, rw, rh] of [[x, y - 1, 0, 0, TILE, 6], [x, y + 1, 0, TILE - 6, TILE, 6], [x - 1, y, 0, 0, 6, TILE], [x + 1, y, TILE - 6, 0, 6, TILE]]) if (alive(ax, ay)) { g.fillStyle = '#9b3fd8'; g.fillRect(px + rx, py + ry, rw, rh); g.fillStyle = '#e48cff'; g.fillRect(px + rx + (rw === 6 && rx ? 4 : 0), py + ry + (rh === 6 && ry ? 4 : 0), rw === 6 ? 2 : rw, rh === 6 ? 2 : rh); }
           continue;
         }
@@ -1249,6 +1253,7 @@
       if (own) chip(myView && own === myView.me.id ? (home === t ? '우리 수도' : '우리 땅') : natName(own) + (nationsPub[own] && nationsPub[own].capital === t.id ? ' 수도' : ''), natColor(own));
       else chip('주인 없음 (중립)', null, true);
       if (RIFT_SET.has(t.id)) chip(`🌀 ${RIFT_NEXT.day}일차 균열`, '#8a3fd0');
+      if (EROSION[t.id] > 0) chip(`🌀 침식 ${EROSION[t.id]}%`, '#8a3fd0');
       if (myView && (myView.incoming.some((b) => b.target === t.id) || myView.outgoing.some((b) => b.target === t.id))) chip(`⚔ ${nextFight()} 전투`, '#c22f53');
       if (t.capitalCandidate) chip('수도 후보 · 하늘 포털', '#c22f53');
     } else {
@@ -1723,7 +1728,7 @@
       case 'chatErr': toast(m.text); break;
       case 'emote': { const r = m.id === myId ? player : remotes.get(m.id); if (r) { r.emote = m.text; r.emoteT = 3; } break; }
       case 'wander': wanderList = m.list || []; renderWander(); break;
-      case 'owners': if ('riftNext' in m) { RIFT_NEXT = m.riftNext; RIFT_SET = new Set(RIFT_NEXT ? RIFT_NEXT.terrs : []); } if (m.gone) setGone(m.gone); if (m.battles) BATTLES = m.battles; if (m.mines) applyMines(m.mines); applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
+      case 'owners': setErosion(m.erosion); if ('riftNext' in m) { RIFT_NEXT = m.riftNext; RIFT_SET = new Set(RIFT_NEXT ? RIFT_NEXT.terrs : []); } if (m.gone) setGone(m.gone); if (m.battles) BATTLES = m.battles; if (m.mines) applyMines(m.mines); applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
       case 'joined': chatLog = m.chat || []; renderChat(); afterFounded(m.founded); break;
       case 'view': applyWorld(null, null, m.view); break;
       case 'night': applyWorld(null, null, m.view); showNight(m.reports || []); break;
@@ -2112,10 +2117,11 @@
       h += `<div class="plan"><div class="row"><span>초대 코드</span><b class="code">${esc(me.code || '')}</b></div><p class="msg">팀원에게 이 코드를 알려 주면 [초대 코드로 들어가기]로 우리 나라에 들어와요.</p></div>`;
       h += `<h3>국민 (${me.members}${DAY < 3 ? ` / ${MPRules.NUM.maxMembersEarly}` : ''})</h3>` + (me.memberList || []).map((m) => `<div class="row"><span>${m.king ? '👑 ' : ''}${esc(m.name)}${m.me ? ' (나)' : ''}</span><span>${king && !m.king ? `<button data-king="${m.idx}">왕 넘기기</button> <button data-kick="${m.idx}">내보내기</button>` : ''}</span></div>`).join('');
       h += `<div class="row"><span class="msg">나라를 나가면 유랑민이 되고 24시간 동안 다른 나라에 가입할 수 없어요${king && me.members > 1 ? ' · 왕은 먼저 왕을 넘겨야 해요' : ''}</span><button id="btnLeave">나라 나가기</button></div>`;
-      if (RIFT_NEXT) {
-        const mineR = RIFT_NEXT.terrs.filter((tid) => owners[tid] === me.id);
-        h += `<div class="plan"><h3>🌀 다음 균열 · ${RIFT_NEXT.day}일차 아침 (${RIFT_NEXT.wave}차)</h3><p class="msg">지도에서 보라색으로 일렁이는 땅이 무너져요. 수도는 안전하고, 백신을 쓴 땅도 이번엔 버텨요. 백신 ${me.vaccine}개</p>` +
-          (mineR.length ? mineR.map((tid) => `<div class="row"><span>${esc(terrLabel(tid))}</span>${tid === me.capital ? '<span>수도라 안전</span>' : (me.vaxed || []).includes(tid) ? '<span>💉 백신 맞음</span>' : `<button data-vax="${tid}">백신 쓰기</button>`}</div>`).join('') : '<p class="msg">우리 땅은 이번 균열과 상관없어요.</p>') + '</div>';
+      if (DOOM) { // 균열: 영역마다 매일 아침 +10%, 나라 전체 50%면 멸망, 백신은 영역 하나를 0%로
+        const mineE = Object.keys(owners).filter((k) => owners[k] === me.id).map(Number).sort((a, b) => (EROSION[b] | 0) - (EROSION[a] | 0));
+        const pct = me.erosion || 0;
+        h += `<div class="plan"><h3>🌀 균열 침식 · 우리 나라 ${pct}%</h3><div class="ebar"><i style="width:${Math.min(100, pct * 2)}%"></i></div><p class="msg">매일 아침 영역마다 ${MPRules.NUM.erodeStep}%씩 침식돼요 (수도는 안전). 나라 전체가 <b>${MPRules.NUM.erodeFall}%</b>가 되면 나라가 무너져요. 백신 ${me.vaccine}개 · 백신은 영역 하나를 0%로 되돌려요. 다른 나라 땅을 빼앗으면 침식률이 내려가요.</p>` +
+          mineE.map((tid) => `<div class="row"><span>${esc(terrLabel(tid))} · ${tid === me.capital ? '수도 (안전)' : `침식 ${EROSION[tid] | 0}%`}</span>${tid !== me.capital && (EROSION[tid] | 0) > 0 ? `<button data-vax="${tid}" ${me.vaccine > 0 ? '' : 'disabled'}>백신 쓰기</button>` : ''}</div>`).join('') + '</div>';
       }
       h += `<h3>나라 정보</h3><div class="msg">수도 ${esc(terrLabel(me.capital))} · 영토 ${me.territories}곳 · 병력 ${me.army} · 코인 ${me.coin} · 행동력 ${me.actions}</div>`;
       // 천도: 왕이 코인을 내고 우리 영역 중 아무 곳으로 (전투 대기 중 불가, 하루에 한 번)
@@ -2631,6 +2637,7 @@
     DOOM = DAY > DOOM_DAY || (DAY === DOOM_DAY && SLOT !== 'morning'); // 선포일 점심부터
     if ('riftNext' in c) { RIFT_NEXT = c.riftNext; RIFT_SET = new Set(RIFT_NEXT ? RIFT_NEXT.terrs : []); }
     if (c.gone) setGone(c.gone);
+    setErosion(c.erosion);
     if (dayChanged) { mined.clear(); }
     setupDoomCard(); drawSunMoon();
     if (DOOM) maybeDoomPopup();

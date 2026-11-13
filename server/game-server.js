@@ -505,7 +505,7 @@ wss.on('connection', (ws) => {
       case 'vaccinate': { // 백신 쓰기
         const n = world.nationOfPlayer(s.token); if (!n) return;
         const r = world.vaccinate(n.id, m.terr | 0); if (!r.ok) return send(ws, { t: 'err', text: r.err });
-        dirty = true; sendViews([n.id]); broadcastOwners(); notifyNation(n.id, `💉 ${s.acc.name}님이 ${(world.t[m.terr | 0] || {}).name}에 백신을 썼어요 (이번 균열에서 안전)`);
+        dirty = true; sendViews([n.id]); broadcastOwners(); notifyNation(n.id, `💉 ${s.acc.name}님이 ${(world.t[m.terr | 0] || {}).name}에 백신을 썼어요 (침식 0%) · 나라 침식 ${world.nationErosion(n.id)}%`);
         break;
       }
       case 'defaultDef': { // 기본 방어 비율 (왕)
@@ -834,7 +834,7 @@ setInterval(() => {
 
 // ------------------------------------------------------------ 나라·전투 방송
 function broadcastOwners() {
-  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: pubNations(), battles: world.publicBattles(), mines: world.s.mines, gone: Object.keys(world.s.gone).map(Number), riftNext: world.s.riftNext });
+  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: pubNations(), battles: world.publicBattles(), mines: world.s.mines, gone: Object.keys(world.s.gone).map(Number), riftNext: null, erosion: world.s.erosion });
   for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
 }
 function sendViews(nids) {
@@ -884,35 +884,22 @@ setInterval(() => {
 // 시계가 다음 시간대로 넘어갈 때: 점심·밤 → 전투 처리, 아침 → 멸망 선포·균열 예고·균열 웨이브
 const doomDay = () => state.doomDay || 5;
 const waveDay = (k) => doomDay() + 2 * k - 1; // 선포 다음 날부터 이틀마다 (기본 6·8·10·12·14일차)
-function clockMsg() { const c = gameClock(); return { t: 'clock', day: c.day, slot: c.slot, doomDay: doomDay(), lastDay: LAST_DAY, riftNext: world.s.riftNext, gone: Object.keys(world.s.gone).map(Number) }; }
+function clockMsg() { const c = gameClock(); return { t: 'clock', day: c.day, slot: c.slot, doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
 function onEnter(c) {
   if (c.slot === 'lunch' || c.slot === 'night') resolveNight(`${c.day}일차 ${SLOT_LABEL[c.slot]}`, slotIdx(c.day, c.slot));
-  // 멸망 선포: 선포일 점심. 첫 균열 예고도 그때
-  if (c.slot === 'lunch' && c.day === doomDay()) { broadcastNotice(`⚡ 신들이 선포했다: ${LAST_DAY}일차(12/28), 이 세계는 멸망한다. 내일부터 균열이 땅을 삼킨다.`); forecast(1); }
-  if (c.slot !== 'morning') return;
-  for (let k = 1; k <= 5; k++) {
-    if (c.day === waveDay(k)) doWave(k);
-    if (k >= 2 && c.day === waveDay(k) - 1) forecast(k); // 하루 전 아침에 예고
-  }
+  // 멸망 선포: 선포일 점심. 다음 날 아침부터 균열이 매일 영역마다 10%씩 침식
+  if (c.slot === 'lunch' && c.day === doomDay()) broadcastNotice(`⚡ 신들이 선포했다: ${LAST_DAY}일차(12/28), 이 세계는 멸망한다. 내일 아침부터 균열이 땅을 갉아먹는다. 나라의 절반이 침식되면 나라가 무너진다.`);
+  if (c.slot === 'morning' && c.day > doomDay()) doErode();
 }
-function forecast(k) {
-  const terrs = MAP.territories.filter((t) => t.rift === k && !world.s.gone[t.id]).map((t) => t.id);
-  world.s.riftNext = { wave: k, day: waveDay(k), terrs }; dirty = true;
-  const regions = [...new Set(terrs.map((tid) => world.t[tid].region).filter(Boolean))].slice(0, 4).join('·');
-  for (const o of online.values()) send(o.ws, { t: 'ok', text: `🔮 신탁: 내일(${waveDay(k)}일차) 균열이 ${terrs.length}곳을 삼킨다${regions ? ` (${regions} 쪽)` : ''}. 백신으로 땅을 지켜라!` });
-}
-function doWave(k) {
-  const terrs = world.s.riftNext && world.s.riftNext.wave === k ? world.s.riftNext.terrs : MAP.territories.filter((t) => t.rift === k).map((t) => t.id);
-  const r = world.riftWave(k, terrs);
-  const fellIds = new Set(r.fell.map((f) => f.tid));
-  for (const i of Object.keys(world.s.tiles)) if (fellIds.has(terrAtTile(i % MAP.width, Math.floor(i / MAP.width)))) delete world.s.tiles[i];
-  for (const i of Object.keys(world.s.traps)) if (fellIds.has(terrAtTile(i % MAP.width, Math.floor(i / MAP.width)))) delete world.s.traps[i];
-  for (const tid of fellIds) delete world.s.mines[tid];
-  for (const n of world.alive()) if (n.storePos && fellIds.has(terrAtTile(n.storePos[0], n.storePos[1]))) delete n.storePos;
-  for (const o of online.values()) if (o.scene === 'ground' && o.x != null && fellIds.has(terrAtPx(o.x, o.y))) placeAt(o, capitalPos(o.acc, o.token) || { x: o.x, y: o.y, scene: 'sky', room: 'temple' });
+function doErode() {
+  const r = world.erode();
   dirty = true; broadcastOwners();
-  for (const o of online.values()) { const n = world.nationOfPlayer(o.token); const mine = n ? r.fell.filter((f) => f.owner === n.id).length : 0; send(o.ws, { t: 'rift', wave: k, fell: [...fellIds], text: `🌀 균열 ${k}차: 땅 ${fellIds.size}곳이 사라졌다${mine ? ` · 우리 땅 ${mine}곳을 잃었어요` : ''}${r.saved.length ? ` · ${r.saved.length}곳은 백신·수도라 버텼어요` : ''}` }); }
-  console.log(`[균열] ${k}차: ${fellIds.size}곳 무너짐, ${r.saved.length}곳 버팀`);
+  for (const f of r.fallen) {
+    broadcastNotice(`🌀 균열이 ${f.name}을(를) 삼켰다 (침식 ${f.pct}%)`);
+    for (const key of f.members) { const o = [...online.values()].find((x) => x.token === key); if (o) { send(o.ws, { t: 'left', text: `🌀 ${f.name}이(가) 균열에 무너졌어요. 이제 유랑민이에요` }); sendMeta(o); } }
+  }
+  for (const o of online.values()) { const n = world.nationOfPlayer(o.token); if (n) send(o.ws, { t: 'ok', text: `🌀 균열이 번졌어요 · 우리 나라 침식 ${world.nationErosion(n.id)}% (${NUM.erodeFall}%면 멸망 · 백신으로 영역 하나를 0%로)` }); }
+  console.log(`[균열] 침식 +${NUM.erodeStep}%, 무너진 나라 ${r.fallen.length}`);
 }
 function broadcastNotice(text) { state.notice = { text, ts: Date.now() }; dirty = true; const msg = JSON.stringify({ t: 'notice', notice: state.notice }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); }
 function tickClock() {
