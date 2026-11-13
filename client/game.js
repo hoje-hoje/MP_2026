@@ -294,7 +294,7 @@
   const ART = {};
   function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('그림 파일을 불러오지 못했어요: ' + src)); i.src = src; }); }
   async function loadArt() {
-    const names = { k_winter: 'winter/winter.png', k_town: 'kenney/town.png', k_dungeon: 'kenney/dungeon.png', k_onebit: 'kenney/onebit.png', water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
+    const names = { aether: 'aether/aether.png', k_winter: 'winter/winter.png', k_town: 'kenney/town.png', k_dungeon: 'kenney/dungeon.png', k_onebit: 'kenney/onebit.png', water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
     const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
     const users = fetch('assets/user/users.json').then((r) => r.json()).then((j) => {
       USER.chars = j.chars; USER.animals = j.animals; USER.monsters = j.monsters;
@@ -1689,7 +1689,7 @@
         if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); GPROPS.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls, clear: m.groundEdits.clear, props: m.groundEdits.props }); invalidateChunks(); mapSig = ''; }
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
-        if (!m.view) openFound('who'); else $('found').hidden = true;
+        needFound = !m.view; if (!m.view) { if (titleDone) openFound('who'); } else $('found').hidden = true;
         chatLog = m.chat || []; renderChat();
         wanderList = m.wander || [];
         const p = m.pos;
@@ -1861,7 +1861,7 @@
   $('btnWanderClose').addEventListener('click', () => { $('wanderBox').hidden = true; });
 
   // 접속 화면
-  function hideLoading() { const L = $('loading'); if (L.hidden) return; L.classList.add('out'); setTimeout(() => { L.hidden = true; L.classList.remove('out'); }, 250); }
+  function hideLoading() { const L = $('loading'); if (L.hidden) return; L.classList.add('out'); setTimeout(() => { L.hidden = true; L.classList.remove('out'); }, 250); if (!EDIT_MODE) startTitle(); else { titleDone = true; if (needFound) openFound('who'); } }
   function startOnline() {
     $('help').hidden = true; $('chat').hidden = false;
     setNet('서버에 연결하는 중…');
@@ -2425,6 +2425,7 @@
 
   let last = performance.now(), hudT = 0;
   function frame(now) {
+    lastDt = Math.min(0.1, Math.max(0.001, (now - (frame.prev || now)) / 1000)); frame.prev = now;
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const t = now / 1000;
 
@@ -2436,7 +2437,7 @@
     }
     for (const b of bots) updateBot(b, dt);
     netTick(dt);
-    if (player.scene === 'sky') drawSky(t); else drawGround(t);
+    if (TITLE.on) { TITLE.x += TITLE.vx * dt0(); TITLE.y += TITLE.vy * dt0(); drawGround(t); } else if (player.scene === 'sky') drawSky(t); else drawGround(t);
     if (fadeT > 0) { fadeT -= dt; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = `rgba(255,255,255,${Math.max(0, fadeT / 0.35)})`; ctx.fillRect(0, 0, vw, vh); }
 
     hudT -= dt;
@@ -2459,7 +2460,7 @@
   addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; const k = e.key.toLowerCase(); if (DIRS[k]) { lastDirKey = k; if (!e.repeat) queuedDir = DIRS[k]; } });
   const DIRS = { arrowleft: [-1, 0], a: [-1, 0], arrowright: [1, 0], d: [1, 0], arrowup: [0, -1], w: [0, -1], arrowdown: [0, 1], s: [0, 1] };
   // 시작 화면·로딩·건국 창·퍼즐·옷장 같은 창이 열려 있으면 캐릭터가 움직이지 않음
-  const BLOCK_MOVE = ['loading', 'found', 'puzzle', 'closet', 'coupon', 'doomPop', 'battle', 'reinBox', 'bailBox'];
+  const BLOCK_MOVE = ['title', 'opening', 'loading', 'found', 'puzzle', 'closet', 'coupon', 'doomPop', 'battle', 'reinBox', 'bailBox'];
   const moveLocked = () => BLOCK_MOVE.some((id) => { const el = $(id); return el && !el.hidden; });
   function wantDir() {
     if (moveLocked()) { queuedDir = null; return null; }
@@ -2546,7 +2547,7 @@
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#1b1430'; ctx.fillRect(0, 0, vw, vh);
-    const camX = player.x - vw / 2 / zoom, camY = player.y - 40 - vh / 2 / zoom;
+    const camX = (TITLE.on ? TITLE.x : player.x) - vw / 2 / zoom, camY = (TITLE.on ? TITLE.y : player.y) - 40 - vh / 2 / zoom;
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -camX * dpr * zoom, -camY * dpr * zoom);
     ctx.imageSmoothingEnabled = false;
     groundCam.x = camX; groundCam.y = camY;
@@ -2719,7 +2720,7 @@
   }
   // 하루에 한 번 크게 띄우기 (선포일 점심부터). 그 뒤엔 하늘 신전 게시판에 걸려 있음
   function maybeDoomPopup() {
-    if (!DOOM || store('mp2026.doomSeen') === DAY) return;
+    if (!DOOM || store('mp2026.doomSeen') === DAY || TITLE.on || OP.on || !titleDone) return; // 타이틀·오프닝이 끝난 뒤에
     store('mp2026.doomSeen', DAY);
     $('doomPop').hidden = false;
     const cv = $('doomPopCanvas'), g = cv.getContext('2d');
@@ -2946,6 +2947,133 @@
   });
   canvas.addEventListener('mouseleave', () => { EDIT.hover = null; });
 
+  // ------------------------------------------------------------ 타이틀 화면 + 여신 오프닝
+  // 들어올 때마다: 로고 + 뒤에 지도 아무 곳이 천천히 흘러감 → Enter 로 시작
+  // 처음 온 사람(이름 없음): 여신이 부르고 → 이름 → 세계 설명 → 로고 → 건국 창
+  const EDIT_MODE = /[?&]edit=1/.test(location.search);
+  let needFound = false, titleDone = false;
+  const TITLE = { on: false, x: 0, y: 0, vx: 0, vy: 0 };
+  let lastDt = 0.016; const dt0 = () => lastDt;
+  // 로고: 작게 그린 글자에 도트 테두리·그림자를 붙인 뒤 크게 키움 (MP + 이세계)
+  function makeLogo(cv) {
+    const font = getComputedStyle(document.documentElement).getPropertyValue('--font-display').trim() || 'monospace';
+    const W2 = 112, H2 = 74; cv.width = W2; cv.height = H2; const g = cv.getContext('2d');
+    const layer = (text, px, y, fill, edge, drop) => {
+      const m = document.createElement('canvas'); m.width = W2; m.height = H2; const mg = m.getContext('2d');
+      mg.font = `${px}px ${font}`; mg.textAlign = 'center'; mg.textBaseline = 'top'; mg.fillStyle = '#fff'; mg.fillText(text, W2 / 2, y);
+      const a = mg.getImageData(0, 0, W2, H2).data, on = (x, yy) => x >= 0 && yy >= 0 && x < W2 && yy < H2 && a[(yy * W2 + x) * 4 + 3] > 110;
+      const out = g.getImageData(0, 0, W2, H2), d = out.data, put = (x, yy, c) => { if (x < 0 || yy < 0 || x >= W2 || yy >= H2) return; const i = (yy * W2 + x) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; };
+      const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+      const E = hex(edge), D = hex(drop), F = hex(fill), F2 = hex('#ffffff');
+      for (let yy = 0; yy < H2; yy++) for (let x = 0; x < W2; x++) if (on(x, yy)) { for (let k = 1; k <= 3; k++) put(x, yy + k + 1, D); } // 아래 그림자
+      for (let yy = 0; yy < H2; yy++) for (let x = 0; x < W2; x++) if (on(x, yy)) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) put(x + dx, yy + dy, E); // 테두리
+      for (let yy = 0; yy < H2; yy++) for (let x = 0; x < W2; x++) if (on(x, yy)) put(x, yy, on(x, yy - 1) ? F : F2); // 글자 (윗줄은 밝게)
+      g.putImageData(out, 0, 0);
+    };
+    layer('MP', 38, 2, '#f1ecff', '#2b2340', '#6b4fb3');
+    layer('이세계', 17, 50, '#ffd34d', '#2b2340', '#c22f53');
+  }
+  function startTitle() {
+    for (const cv of document.querySelectorAll('canvas.logoCv')) if (!cv.dataset.done) { makeLogo(cv); cv.dataset.done = 1; }
+    const cand = terrs.filter((t) => t && !gone[t.id]);
+    const t = cand[Math.floor(Math.random() * cand.length)] || home;
+    TITLE.x = t.center[0] * TILE; TITLE.y = t.center[1] * TILE; const a = Math.random() * Math.PI * 2; TITLE.vx = Math.cos(a) * 22; TITLE.vy = Math.sin(a) * 14;
+    TITLE.on = true; document.body.classList.add('titling'); $('title').hidden = false; $('tSet').hidden = true;
+    try { $('tBgm').value = store('mp2026.bgm') ?? 60; } catch (e) { /* 없음 */ }
+  }
+  function endTitle() {
+    if (!TITLE.on) return;
+    TITLE.on = false; document.body.classList.remove('titling'); $('title').hidden = true; titleDone = true;
+    invalidateChunks(); mapSig = '';
+    const firstTime = ONLINE ? !nameSet : !store('mp2026.opened');
+    if (firstTime) startOpening(); else { if (needFound) openFound('who'); maybeDoomPopup(); }
+  }
+  $('tStart').addEventListener('click', endTitle);
+  $('title').addEventListener('click', (e) => { if (e.target === $('title') || e.target.classList.contains('tstart')) endTitle(); });
+  $('tSettings').addEventListener('click', () => { $('tSet').hidden = !$('tSet').hidden; });
+  $('tBgm').addEventListener('input', () => { store('mp2026.bgm', +$('tBgm').value); $('tBgmV').textContent = $('tBgm').value + '%'; });
+  $('tCoupon').addEventListener('click', () => { $('coupon').hidden = false; $('coupon').style.zIndex = 60; setTimeout(() => $('couponIn').focus(), 50); });
+
+  // 여신 대사: dim = 화면 밝기(처음엔 어둡다가 밝아짐), input = 이름 적기
+  const OP = { on: false, i: 0, shown: 0, t0: 0, typing: false, raf: 0, flash: 0 };
+  const OP_LINES = [
+    { who: '???', text: '……어님', dim: 0.12 },
+    { who: '???', text: '……레이어님', dim: 0.35 },
+    { who: '???', text: '플레이어님……!', dim: 1, shake: true },
+    { who: '여신', text: '아, 드디어 눈을 뜨셨군요. 다행이에요.' },
+    { who: '여신', text: '저는 이 세계를 지켜보는 여신이에요.' },
+    { who: '여신', text: '당신은 이 세계에 초대되었습니다. 부디 이곳을 함께 꾸려 나가 주세요.' },
+    { who: '여신', text: '먼저…… 당신의 이름은 무엇인가요?', input: true },
+    { who: '여신', text: () => `${player.name}님…… 좋은 이름이에요.` },
+    { who: '여신', text: '이 땅은 227개의 영토로 나뉘어 있어요. 동료들과 나라를 세우고, 제단의 퍼즐을 풀어 땅을 넓혀 주세요.' },
+    { who: '여신', text: '3일차부터는 영역전이 시작돼요. 매일 점심 1시와 밤 10시, 전선에 병력을 나눠 싸우게 될 거예요.' },
+    { who: '여신', text: '그리고…… 아니에요. 그 이야기는 조금 나중에 할게요.' },
+    { who: '여신', text: '자, 이제 당신의 나라를 세우러 가 볼까요?' },
+  ];
+  const opText = (L) => (typeof L.text === 'function' ? L.text() : L.text);
+  function startOpening() { OP.on = true; OP.i = 0; $('opening').hidden = false; showLine(); cancelAnimationFrame(OP.raf); const loop = (n) => { drawOpening(n / 1000); if (OP.on) OP.raf = requestAnimationFrame(loop); }; OP.raf = requestAnimationFrame(loop); }
+  function showLine() {
+    const L = OP_LINES[OP.i]; OP.t0 = performance.now(); OP.shown = 0; OP.typing = true;
+    $('opWho').textContent = L.who; $('opInput').hidden = true; $('opNext').hidden = true;
+    if (L.shake) { $('opening').classList.remove('shake'); void $('opening').offsetWidth; $('opening').classList.add('shake'); }
+  }
+  function tickType() {
+    if (!OP.on) return;
+    const L = OP_LINES[OP.i]; if (!L) return; const full = opText(L);
+    if (OP.typing) { OP.shown = Math.min(full.length, Math.floor((performance.now() - OP.t0) / 45)); if (OP.shown >= full.length) { OP.typing = false; if (L.input) { $('opInput').hidden = false; $('opNick').value = player.name && player.name !== '나' ? player.name : ''; setTimeout(() => $('opNick').focus(), 30); } else $('opNext').hidden = false; } }
+    $('opText').textContent = full.slice(0, OP.shown);
+  }
+  function opAdvance() {
+    if (!OP.on || OP.flash) return;
+    const L = OP_LINES[OP.i];
+    if (OP.typing) { OP.typing = false; OP.shown = opText(L).length; tickType(); if (L.input) { $('opInput').hidden = false; setTimeout(() => $('opNick').focus(), 30); } else $('opNext').hidden = false; return; }
+    if (L.input) return; // 이름을 정해야 넘어감
+    if (++OP.i < OP_LINES.length) showLine(); else finishOpening();
+  }
+  function opName() {
+    const v = $('opNick').value.trim();
+    if (v.length < 1) { toast('이름을 적어 주세요'); return; }
+    $('fNick').value = v;
+    withName(() => { $('opInput').hidden = true; OP.i++; showLine(); });
+  }
+  function finishOpening() { // 로고가 딱 나오고 → 건국 창
+    OP.flash = performance.now(); $('opBox').hidden = true; $('opLogo').hidden = false;
+    setTimeout(() => { OP.on = false; OP.flash = 0; $('opening').hidden = true; $('opLogo').hidden = true; $('opBox').hidden = false; store('mp2026.opened', 1); if (needFound || !ONLINE) openFound('who'); else maybeDoomPopup(); }, 2600);
+  }
+  $('opening').addEventListener('click', (e) => { if (!e.target.closest('#opInput')) opAdvance(); });
+  $('opOk').addEventListener('click', opName);
+  $('opNick').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.stopPropagation(); opName(); } });
+  addEventListener('keydown', (e) => {
+    if (!(TITLE.on || OP.on) || (e.target && e.target.tagName === 'INPUT')) return;
+    e.stopImmediatePropagation(); // 타이틀·오프닝 중에는 게임 키(E, 채팅 등)가 안 먹게
+    if (TITLE.on && (e.key === 'Enter' || e.key === ' ') && $('coupon').hidden) { e.preventDefault(); endTitle(); return; }
+    if (OP.on && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); opAdvance(); }
+  }, true);
+  // 오프닝 화면: 별이 흐르는 밤하늘 + 빛나는 여신 (후광·날개)
+  const opCv = $('opCanvas');
+  function drawOpening(t) {
+    tickType();
+    const W2 = opCv.clientWidth, H2 = opCv.clientHeight; if (opCv.width !== W2 || opCv.height !== H2) { opCv.width = W2; opCv.height = H2; }
+    const g = opCv.getContext('2d'); g.imageSmoothingEnabled = false;
+    const L = OP_LINES[Math.min(OP.i, OP_LINES.length - 1)], dim = OP.flash ? Math.max(0, 1 - (performance.now() - OP.flash) / 300) : L.dim == null ? 1 : L.dim; // 로고가 나오면 여신은 사라짐
+    const grd = g.createLinearGradient(0, 0, 0, H2); grd.addColorStop(0, '#0b0820'); grd.addColorStop(1, '#2a1a4a'); g.fillStyle = grd; g.fillRect(0, 0, W2, H2);
+    for (let i = 0; i < 140; i++) { const x = (hash(i, 1, 5) * W2 + t * (6 + hash(i, 2, 5) * 14)) % W2, y = hash(i, 3, 5) * H2 * 0.85, tw = 0.5 + 0.5 * Math.sin(t * 2 + i); g.fillStyle = `rgba(255,${230 + (i % 25)},255,${(0.25 + 0.6 * tw) * Math.max(0.3, dim)})`; g.fillRect(x | 0, y | 0, i % 7 ? 2 : 3, i % 7 ? 2 : 3); }
+    const sc = Math.max(4, Math.min(9, Math.floor(H2 / 110))), cx = W2 / 2, cy = H2 * 0.42 + Math.sin(t * 1.6) * 6;
+    g.save(); g.globalAlpha = dim;
+    // 빛무리
+    const glow = g.createRadialGradient(cx, cy, 10, cx, cy, sc * 34); glow.addColorStop(0, 'rgba(255,240,200,0.55)'); glow.addColorStop(1, 'rgba(255,240,200,0)'); g.fillStyle = glow; g.fillRect(cx - sc * 40, cy - sc * 40, sc * 80, sc * 80);
+    // 날개 (도트 타원 여러 겹)
+    for (const sgn of [-1, 1]) for (let k = 0; k < 5; k++) { g.fillStyle = k % 2 ? '#e9ecff' : '#ffffff'; const wx = cx + sgn * sc * (8 + k * 3), wy = cy - sc * (4 - k * 1.5); g.fillRect(Math.round(wx - sc * 3), Math.round(wy - sc * 6 + Math.sin(t * 3 + k) * sc * 0.6), sc * 6, sc * (10 - k)); }
+    // 후광
+    g.strokeStyle = '#ffd34d'; g.lineWidth = sc; g.beginPath(); g.ellipse(cx, cy - sc * 17, sc * 7, sc * 2, 0, 0, Math.PI * 2); g.stroke();
+    // 여신 (AetherAI 캐릭터 #20)
+    if (ART.aether) { const k = 20, sx = (k % 8) * 32, sy = Math.floor(k / 8) * 32; g.drawImage(ART.aether, sx, sy, 32, 32, Math.round(cx - 16 * sc), Math.round(cy - 18 * sc), 32 * sc, 32 * sc); }
+    // 반짝이
+    for (let i = 0; i < 10; i++) { const a = t * 0.8 + i * 0.63, r = sc * (22 + 4 * Math.sin(t + i)); g.fillStyle = '#fff6c8'; g.fillRect(Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r * 0.7), sc, sc); }
+    g.restore();
+    if (OP.flash) { const k = Math.min(1, (performance.now() - OP.flash) / 400); g.fillStyle = `rgba(255,255,255,${1 - k})`; g.fillRect(0, 0, W2, H2); }
+  }
+
   // ------------------------------------------------------------ 시작
   function setupDoomCard() {
     const date = 13 + DAY;
@@ -2976,7 +3104,7 @@
     renderInv();
     // 온라인: 서버가 내 자리를 알려줄 때까지 로딩 화면을 유지 → 자리로 옮긴 뒤 끔 (수도에 잠깐 보였다가 순간이동하는 것 방지)
     if (ONLINE) { $('loadingText').textContent = '내 자리로 가는 중…'; $('loadingSub').textContent = '서버에 접속하고 있어요'; setTimeout(hideLoading, 12000); startOnline(); }
-    else { hideLoading(); openFound('who'); }
+    else { needFound = true; hideLoading(); }
     if (ONLINE && /[?&]edit=1/.test(location.search)) setTimeout(startEditor, 1200);
     if (DAY === 5) setTimeout(() => toast('신들이 선포했다: 12월 28일, 이 세계는 끝난다.'), 600);
     else if (DOOM) { const n = terrs.filter((t) => t && gone[t.id]).length; if (n) setTimeout(() => toast(`균열이 영토 ${n}곳을 삼켰다`), 600); }

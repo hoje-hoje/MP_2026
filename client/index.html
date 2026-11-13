@@ -279,6 +279,36 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 .chatlog i { font-style: normal; font-size: 11px; font-weight: 700; }
 .chatlog .ch-team i { color: #277a58; } .chatlog .ch-near i { color: #6b6280; } .chatlog .ch-sky i { color: #3d5fb8; } .chatlog .ch-jail i { color: #c22f53; }
 .ebar { height: 10px; border: 2px solid #2b2340; background: #fffdf8; } .ebar i { display: block; height: 100%; background: repeating-linear-gradient(90deg, #8a3fd0 0 6px, #b06ef0 6px 9px); }
+
+body.titling .hud, body.titling #chat, body.titling #prompt, body.titling #stick, body.titling #zoomBox, body.titling #help { visibility: hidden; }
+#title { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(ellipse at center, rgba(27,20,48,0.25), rgba(27,20,48,0.75)); color: #fff; text-align: center; padding: 16px; }
+#title[hidden], #opening[hidden] { display: none; }
+.tlogo { font-family: var(--font-display); line-height: 0.95; display: flex; flex-direction: column; align-items: center; animation: tfloat 3s ease-in-out infinite; }
+.tlogo .mp { font-size: clamp(64px, 14vw, 132px); color: #fff; letter-spacing: 6px; text-shadow: 5px 0 0 #2b2340, -5px 0 0 #2b2340, 0 5px 0 #2b2340, 0 -5px 0 #2b2340, 5px 5px 0 #2b2340, -5px 5px 0 #2b2340, 5px -5px 0 #2b2340, -5px -5px 0 #2b2340, 0 12px 0 #6b4fb3, 0 0 34px rgba(190,140,255,0.9); }
+.tlogo .isekai { font-size: clamp(34px, 7vw, 64px); color: #ffd34d; letter-spacing: 10px; text-shadow: 4px 0 0 #2b2340, -4px 0 0 #2b2340, 0 4px 0 #2b2340, 0 -4px 0 #2b2340, 4px 4px 0 #2b2340, -4px 4px 0 #2b2340, 0 9px 0 #c22f53, 0 0 24px rgba(255,211,77,0.8); margin-top: 6px; }
+@keyframes tfloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.tsub { font-size: 18px; font-family: var(--font-display); color: #e9ddff; text-shadow: 0 2px 0 #2b2340; }
+.tstart { font-family: var(--font-display); font-size: 22px; color: #fff; text-shadow: 0 3px 0 #2b2340; animation: tblink 1.2s steps(2) infinite; cursor: pointer; margin-top: 18px; }
+@keyframes tblink { 50% { opacity: 0.15; } }
+.tmenu { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.tmenu button { min-height: 40px; font-size: 15px; }
+#tSet { color: var(--ink); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+#opening { position: fixed; inset: 0; z-index: 45; background: #0b0820; }
+#opCanvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+#opening.shake { animation: opshake 0.45s steps(6); } @keyframes opshake { 20% { transform: translate(6px, -3px); } 40% { transform: translate(-6px, 3px); } 60% { transform: translate(4px, 2px); } 80% { transform: translate(-3px, -2px); } }
+.opbox { position: absolute; left: 50%; bottom: max(28px, 5vh); transform: translateX(-50%); width: min(760px, calc(100vw - 32px)); min-height: 120px; background: #fffdf8; color: #2b2340; border: 4px solid #2b2340; box-shadow: 0 0 0 4px #fff6d6, 0 0 0 8px #2b2340, 0 12px 30px rgba(0,0,0,0.5); padding: 14px 18px 18px; }
+.opbox[hidden] { display: none; }
+.opbox b { font-family: var(--font-display); font-size: 20px; color: #6b4fb3; }
+.opbox p { margin: 6px 0 0; font-size: clamp(16px, 2.2vw, 20px); line-height: 1.6; min-height: 2.2em; }
+.opnext { position: absolute; right: 16px; bottom: 8px; font-size: 18px; animation: tblink 0.9s steps(2) infinite; }
+#opInput { display: flex; gap: 8px; margin-top: 8px; } #opInput[hidden] { display: none; } #opInput input { flex: 1; font: 600 18px var(--font-body); padding: 6px 10px; border: 3px solid #2b2340; }
+#opLogo { position: absolute; inset: 0; justify-content: center; animation: oplogo 2.6s ease-out; } #opLogo[hidden] { display: none; }
+.tlogo.big .mp { font-size: clamp(80px, 18vw, 170px); }
+@keyframes oplogo { 0% { transform: scale(2.2); opacity: 0; filter: brightness(3); } 25% { transform: scale(1); opacity: 1; filter: brightness(1.6); } 100% { transform: scale(1); opacity: 1; filter: brightness(1); } }
+.ophint { position: absolute; right: 14px; top: 10px; color: rgba(255,255,255,0.55); font-size: 12px; }
+body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 안내 등) */
+.logoCv { width: clamp(280px, 42vw, 560px); image-rendering: pixelated; filter: drop-shadow(0 0 18px rgba(190,140,255,0.85)); }
+.tlogo.big .logoCv { width: clamp(320px, 56vw, 720px); }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -452,6 +482,21 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 
 <div id="stick" hidden><div></div></div>
 
+<div id="title" hidden>
+  <div class="tlogo"><canvas class="logoCv" aria-label="MP 이세계"></canvas></div>
+  <div class="tsub">신들의 땅따먹기 · 2026</div>
+  <div class="tstart">Enter를 눌러 시작</div>
+  <div class="tmenu"><button id="tStart" type="button">▶ 시작하기</button><button id="tSettings" type="button">⚙ 설정</button><button id="tCoupon" type="button">🎟 쿠폰</button></div>
+  <div id="tSet" class="card" hidden><b>설정</b><label>배경음악 <input id="tBgm" type="range" min="0" max="100" value="60"> <span id="tBgmV">60%</span></label><small>배경음악은 준비 중이에요</small></div>
+</div>
+<div id="opening" hidden>
+  <canvas id="opCanvas"></canvas>
+  <div id="opLogo" class="tlogo big" hidden><canvas class="logoCv" aria-label="MP 이세계"></canvas></div>
+  <div id="opBox" class="opbox"><b id="opWho">???</b><p id="opText"></p>
+    <div id="opInput" hidden><input id="opNick" type="text" maxlength="10" autocomplete="off" placeholder="이름 (10자까지)"><button id="opOk" type="button">이걸로 할게요</button></div>
+    <span id="opNext" class="opnext" hidden>▼</span></div>
+  <small class="ophint">Enter · 클릭으로 넘기기</small>
+</div>
 <div id="loading"><div class="logo">MP 2026</div><div class="tag">신들의 땅따먹기</div><div class="dots" aria-hidden="true"></div><span id="loadingText">세계를 불러오는 중…</span><small id="loadingSub">경상북도 · 영토 227개 · 하늘 방 7개</small></div>
 
 <script src="config.js"></script>
