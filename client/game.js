@@ -834,7 +834,7 @@
       while (dx < TILE) { const wid = Math.min(TILE - dx, cw - sx); g.drawImage(c, sx, sy, wid, hgt, x + dx * k, y + dy * k, wid * k, hgt * k); dx += wid; sx = 0; }
       dy += hgt; sy = 0; }
   }
-  // 물 타일: 시트 그림에서 물빛(파랑) 픽셀이 30% 넘는 칸 → 깔면 못 지나감 (선착장·배·얼음 무늬 없는 칸은 통과)
+  // 물·독물 타일: 시트 그림에서 물빛(파랑)·독물(보라) 픽셀이 30% 넘는 칸 → 깔면 못 지나감 (선착장·배·얼음 무늬 없는 칸은 통과)
   const WATERY = new Set();
   const isWater = (ref) => !!ref && WATERY.has(ref);
   function findWaterTiles() {
@@ -847,9 +847,9 @@
         let op = 0, wet = 0;
         for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
           const o = ((ty * 16 + y) * im.width + tx * 16 + x) * 4, r = d[o] / 255, gg = d[o + 1] / 255, b = d[o + 2] / 255; if (d[o + 3] < 128) continue; op++;
-          const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), sat = mx ? (mx - mn) / mx : 0; if (mx < 0.45 || sat < 0.25 || mx === mn) continue;
+          const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), sat = mx ? (mx - mn) / mx : 0; if (mx === mn) continue;
           let h = mx === r ? ((gg - b) / (mx - mn)) % 6 : mx === gg ? (b - r) / (mx - mn) + 2 : (r - gg) / (mx - mn) + 4; h = ((h * 60) + 360) % 360 / 360;
-          if (h >= 0.47 && h <= 0.6) wet++;
+          if ((h >= 0.47 && h <= 0.6 && sat >= 0.25 && mx >= 0.45) || (h >= 0.75 && h <= 0.95 && sat >= 0.15 && mx >= 0.35)) wet++; // 물(파랑) 또는 독물(보라)
         }
         if (op >= 200 && wet / 256 >= 0.3) WATERY.add(id + ':' + (ty * S.cols + tx));
       }
