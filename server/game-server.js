@@ -874,7 +874,7 @@ async function adminOp(m) {
       for (const [k, v] of Object.entries(m.props || {}).slice(0, 3000)) { if (!okKey(k)) continue; const pv = cleanProp(v); if (pv) G.props[k] = pv; else delete G.props[k]; props[k] = pv; }
       for (const [k, v] of Object.entries(m.clear || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v) { G.clear[k] = 1; clear[k] = 1; } else { delete G.clear[k]; clear[k] = 0; } }
       if (Object.keys(clear).length) rebuildClear();
-      for (const [k, v] of Object.entries(m.set || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v === null) { delete G.floor[k]; set[k] = null; } else if (/^(town|dungeon|onebit|ninja|winter):\d{1,4}$/.test(String(v))) { G.floor[k] = String(v); set[k] = String(v); } }
+      for (const [k, v] of Object.entries(m.set || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v === null) { delete G.floor[k]; set[k] = null; } else if (/^(town|dungeon|onebit|ninja|winter|water|base):\d{1,4}$/.test(String(v))) { G.floor[k] = String(v); set[k] = String(v); } }
       for (const [k, v] of Object.entries(m.walls || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v) { G.walls[k] = 1; walls[k] = 1; } else { delete G.walls[k]; walls[k] = 0; } }
       if (Object.keys(G.floor).length + Object.keys(G.walls).length > 80000) return { ok: false, err: '땅 지도에 너무 많이 칠했어요' };
       dirty = true;
@@ -884,7 +884,7 @@ async function adminOp(m) {
     case 'roomSave': { // 맵 고치기: 하늘 방 하나의 바닥 타일·장벽 저장 → 모두에게 바로 반영
       const id = String(m.id || ''); if (!/^[a-z0-9]{2,16}$/.test(id)) return { ok: false, err: '방 이름이 이상해요' };
       // 관리자 여러 명이 같이 고쳐도 덮어쓰지 않게: 바뀐 칸만 받아서 합친다 (set: 칸→타일|null, walls: 칸→1|0, hideProps, reset)
-      const okKey = (k) => /^\d{1,3},\d{1,3}$/.test(k), okRef = (v) => /^(town|dungeon|onebit|ninja|winter):\d{1,4}$/.test(String(v));
+      const okKey = (k) => /^\d{1,3},\d{1,3}$/.test(k), okRef = (v) => /^(town|dungeon|onebit|ninja|winter|water|base):\d{1,4}$/.test(String(v));
       if (m.reset) state.roomEdits[id] = { floor: {}, walls: {}, props: {}, hideProps: false };
       const R = state.roomEdits[id] = state.roomEdits[id] || { floor: {}, walls: {}, hideProps: false }; R.floor = R.floor || {}; R.walls = R.walls || {};
       const set = {}, walls = {}, props = {}; R.props = R.props || {};

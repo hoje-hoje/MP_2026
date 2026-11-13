@@ -508,7 +508,7 @@
             if ((x + y) % 2 === 0) { g.fillStyle = '#5a3f9e'; g.fillRect(px + 4, py + 18, TILE - 8, 3); }
             break;
         }
-        { const gf = GFLOOR.get(y * W + x); if (gf) drawSheetTile(g, gf, px, py, TILE); } // 관리자가 깐 타일
+        { const gf = GFLOOR.get(y * W + x); if (gf) drawSheetTile(g, gf, px, py, TILE, x * TILE, y * TILE); } // 관리자가 깐 타일
         { const e = TILES[y * W + x]; if (e && e.k === 'floor') g.drawImage(floorArt(e.c | 0), px, py, TILE, TILE); }
         // 영토 색 + 국경선: 우리 나라는 진하게, 경계는 우리 나라 색 띠 / 나머지 경계는 흰 선
         const o = terrAt(x, y);
@@ -812,12 +812,38 @@
   // 관리자 '맵 고치기'로 바꾼 방 (타일·장벽·소품 숨기기). 서버가 보내 준다
   let ROOM_EDITS = {};
   const GFLOOR = new Map(), GWALL = new Set(), GPROPS = new Map(); // GPROPS: 칸 → { r: 'x:그림'|'u:동물', b: 막힘 } // 땅 지도에 관리자가 깐 타일·장벽 (칸 번호)
-  const SHEETS = { town: { key: 'k_town', cols: 12, name: '타이니 타운' }, dungeon: { key: 'k_dungeon', cols: 12, name: '타이니 던전' }, onebit: { key: 'k_onebit', cols: 49, name: '1비트 팩' }, ninja: { key: 'floor', cols: 22, name: '닌자 바닥' }, winter: { key: 'k_winter', cols: 10, name: '겨울' } };
+  const SHEETS = { town: { key: 'k_town', cols: 12, name: '타이니 타운' }, dungeon: { key: 'k_dungeon', cols: 12, name: '타이니 던전' }, onebit: { key: 'k_onebit', cols: 49, name: '1비트 팩' }, ninja: { key: 'floor', cols: 22, name: '닌자 바닥' }, winter: { key: 'k_winter', cols: 10, name: '겨울' }, water: { key: 'water', cols: 0, name: '물가' }, base: { key: 'base_gen', cols: 8, name: '기본 지형' } };
+  // '기본 지형' 탭: 원래 지도·방에 그려지던 바닥(신전 바닥·보라 벽·허공·방 바닥 무늬)을 타일처럼 깔 수 있게 함. 무늬는 칸 위치에 맞춰 이어짐
+  const BASE_PATS = ['holy', 'holy_edge', 'wall', 'void', 'lawn', 'meadow', 'cobble', 'planks', 'stonefloor', 'carpet', 'grass', 'dirt', 'marble', 'floor_palace', 'brick'];
+  const patCache = {};
+  function patCanvas(key) {
+    if (patCache[key]) return patCache[key];
+    const c = document.createElement('canvas'), g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    if (key === 'holy' || key === 'holy_edge') { c.width = c.height = 64; for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) { const px = x * 32, py = y * 32; g.fillStyle = key === 'holy' ? '#f3ecdc' : '#efdcae'; g.fillRect(px, py, 32, 32); g.fillStyle = '#e2d8c4'; g.fillRect(px, py + 30, 32, 2); g.fillRect(px + (y ? 0 : 16), py, 2, 32); } }
+    else if (key === 'wall') { c.width = c.height = 64; for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) { const px = x * 32, py = y * 32; g.fillStyle = '#6b4fb3'; g.fillRect(px, py, 32, 32); g.fillStyle = '#8467c9'; g.fillRect(px, py, 32, 12); if ((x + y) % 2 === 0) { g.fillStyle = '#5a3f9e'; g.fillRect(px + 4, py + 18, 24, 3); } } }
+    else if (key === 'void') { c.width = c.height = 64; g.fillStyle = '#1b1430'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#8d7ab8'; g.fillRect(12, 40, 2, 2); g.fillStyle = '#f3dcff'; g.fillRect(46, 14, 2, 2); }
+    else if (GEN_FLOOR[key]) { c.width = c.height = 64; GEN_FLOOR[key](g); }
+    else { const im = ART['x_' + key]; if (!im) { c.width = c.height = 32; } else { c.width = im.width * 2; c.height = im.height * 2; g.drawImage(im, 0, 0, c.width, c.height); } }
+    return (patCache[key] = c);
+  }
+  function drawPat(g, key, x, y, wx, wy, size) { // (wx, wy) 기준으로 무늬를 이어서 size×size 칸 그리기
+    const c = patCanvas(key), k = size / TILE, cw = c.width, ch = c.height;
+    let sy = ((wy % ch) + ch) % ch, dy = 0;
+    while (dy < TILE) { const hgt = Math.min(TILE - dy, ch - sy); let sx = ((wx % cw) + cw) % cw, dx = 0;
+      while (dx < TILE) { const wid = Math.min(TILE - dx, cw - sx); g.drawImage(c, sx, sy, wid, hgt, x + dx * k, y + dy * k, wid * k, hgt * k); dx += wid; sx = 0; }
+      dy += hgt; sy = 0; }
+  }
+  function buildBaseSheet() {
+    SHEETS.water.cols = Math.floor(ART.water.width / 16);
+    const c = document.createElement('canvas'), cols = 8; c.width = cols * 16; c.height = Math.ceil(BASE_PATS.length / cols) * 16; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    BASE_PATS.forEach((k, i) => drawPat(g, k, (i % cols) * 16, Math.floor(i / cols) * 16, 0, 0, 16));
+    ART.base_gen = c;
+  }
   // 맵 고치기 소품: 게임에 있는 그림(x:)·동물(u:)을 칸 아래쪽에 맞춰 그림 (너무 크면 높이 140px로 줄임)
   function drawProp(g, ref, x, y) { const [t, n] = ref.split(':'), key = t === 'u' ? 'u:' + n : n, im = t === 'u' ? ART['u_' + n] : ART['x_' + n]; if (!im) return; if (im.height * 2 > 140) pix(g, key, x, y, 0, 140); else pix(g, key, x, y, 2); }
   const NOT_PROPS = new Set(['stonefloor', 'carpet', 'grass', 'dirt', 'marble', 'floor_palace', 'brick', 'door_gold', 'door_cloud', 'burst', 'pin', 'cloud']);
   const propList = () => [...EXTRA, ...TEMPLE].filter((k) => !NOT_PROPS.has(k) && ART['x_' + k]).map((k) => 'x:' + k).concat([...USER.animals, ...USER.monsters].filter((k) => ART['u_' + k]).map((k) => 'u:' + k));
-  function drawSheetTile(g, ref, x, y, size) { const [sh, n] = ref.split(':'), S = SHEETS[sh], im = S && ART[S.key]; if (!im) return; const k = +n; g.drawImage(im, (k % S.cols) * 16, Math.floor(k / S.cols) * 16, 16, 16, x, y, size, size); }
+  function drawSheetTile(g, ref, x, y, size, wx = x, wy = y) { const [sh, n] = ref.split(':'), S = SHEETS[sh], im = S && ART[S.key]; if (!im) return; const k = +n; if (sh === 'base') { if (BASE_PATS[k]) drawPat(g, BASE_PATS[k], x, y, wx, wy, size); return; } g.drawImage(im, (k % S.cols) * 16, Math.floor(k / S.cols) * 16, 16, 16, x, y, size, size); }
   function applyGroundEdit(m) {
     if (m.reset) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); GPROPS.clear(); invalidateChunks(); mapSig = ''; return; }
     const touched = [];
@@ -2710,18 +2736,43 @@
   // 스포이드: 지도에서 칸을 누르면 그 칸의 타일(또는 소품)이 있는 탭으로 바꾸고 골라 줌
   function pickAt(x, y) {
     const sc = scope(), f = cellGet(sc, 'floor', x, y), pr = cellGet(sc, 'prop', x, y);
-    if (f && SHEETS[f.split(':')[0]]) {
+    if (f && SHEETS[f.split(':')[0]]) pickRef(f, false);
+    else if (pr) {
+      EDIT.prop = pr.r; EDIT.propBlock = !!pr.b; EDIT.tool = 'prop'; editUI();
+      const b = document.querySelector(`#edPropPal [data-prop="${pr.r}"]`); if (b) b.scrollIntoView({ block: 'nearest' });
+      toast('🎯 소품을 골랐어요');
+    } else { const ref = baseRefAt(sc, x, y); if (ref) return pickRef(ref, true); toast('여기는 고를 바닥이 없어요'); }
+  }
+  function pickRef(f, base) {
+    {
       const [sh, n] = f.split(':'); EDIT.sheet = sh; EDIT.tile = +n; EDIT.tool = 'paint'; editPalette(); editUI();
       const S = SHEETS[sh], box = $('edPal').parentElement, cv = $('edPal'), k = cv.getBoundingClientRect().width / cv.width;
       box.scrollTop = Math.max(0, (Math.floor(+n / S.cols) * 32 + 16) * k - box.clientHeight / 2);
       box.scrollLeft = Math.max(0, ((+n % S.cols) * 32 + 16) * k - box.clientWidth / 2);
       box.scrollIntoView({ block: 'nearest' }); // 패널이 길어도 팔레트가 보이게
-      toast(`🎯 ${$('editor').querySelector(`[data-sheet="${sh}"]`).textContent} 탭의 타일을 골랐어요`);
-    } else if (pr) {
-      EDIT.prop = pr.r; EDIT.propBlock = !!pr.b; EDIT.tool = 'prop'; editUI();
-      const b = document.querySelector(`#edPropPal [data-prop="${pr.r}"]`); if (b) b.scrollIntoView({ block: 'nearest' });
-      toast('🎯 소품을 골랐어요');
-    } else toast('이 칸은 기본 지형이라 고를 타일이 없어요 (관리자가 깐 타일만 골라져요)');
+      toast(`🎯 ${base ? '원래 바닥을 ' : ''}${SHEETS[sh].name} 탭에서 골랐어요`);
+    }
+  }
+  // 기본 지형 칸 → 실제로 그려진 타일 번호 (땅: 닌자 바닥/물가 시트, 그 밖은 '기본 지형' 탭)
+  function baseRefAt(sc, x, y) {
+    const B = (k) => 'base:' + BASE_PATS.indexOf(k);
+    if (sc === 'ground') {
+      if (x < 0 || y < 0 || x >= W || y >= H) return null;
+      const t = tileAt(x, y), h = hash(x, y), nj = (L) => { const [cx, cy] = L[(h * L.length) | 0]; return 'ninja:' + (cy * 22 + cx); };
+      if (t === T.GRASS) return nj(TL.grass); if (t === T.FOREST) return nj(TL.forest); if (t === T.SAND) return nj(TL.sand); if (t === T.MOUNTAIN) return nj(TL.rock);
+      if (t === T.WATER) { const land = (a, b) => { const q = tileAt(a, b); return q !== T.WATER && q !== T.VOID; }; const N = land(x, y - 1), S = land(x, y + 1), Wd = land(x - 1, y), E = land(x + 1, y);
+        const key = N && Wd ? 'nw' : N && E ? 'ne' : S && Wd ? 'sw' : S && E ? 'se' : N ? 'n' : S ? 's' : Wd ? 'w' : E ? 'e' : 'c'; const [cx, cy] = TL.shore[key]; return 'water:' + (cy * SHEETS.water.cols + cx); }
+      if (t === T.HOLY) return B(tileAt(x, y - 1) === T.VOID || tileAt(x - 1, y) === T.VOID || tileAt(x + 1, y) === T.VOID || tileAt(x, y + 1) === T.VOID ? 'holy_edge' : 'holy');
+      if (t === T.WALL) return B('wall'); return B('void');
+    }
+    const R = ROOMS[sc]; if (!R || x < 0 || y < 0 || x >= R.w || y >= R.h) return null;
+    if (R.wall && y < 2) return B('brick');
+    let key = R.floor;
+    for (const [cx, cy, cw, ch] of R.carpets || []) if (x >= cx && x < cx + cw && y >= cy && y < cy + ch) key = 'carpet';
+    for (const [px, py, pw, ph, k] of R.patches || []) if (x >= px && x < px + pw && y >= py && y < py + ph) key = k;
+    if (BASE_PATS.includes(key)) return B(key);
+    if (key && key.startsWith('na:')) { const [cx, cy] = key.slice(3).split(',').map(Number); return 'ninja:' + (cy * 22 + cx); }
+    return null;
   }
   canvas.addEventListener('mousedown', (e) => { if (!EDIT.on) return; const [x, y] = editTileAt(e); if (EDIT.tool === 'pick' || e.altKey) { e.preventDefault(); pickAt(x, y); return; } stroke = []; if (EDIT.tool === 'fill') { floodFill(x, y); endStroke(); return; } EDIT.painting = true; brushApply(x, y); });
   canvas.addEventListener('mousemove', (e) => { if (!EDIT.on) return; EDIT.hover = editTileAt(e); if (EDIT.painting) brushApply(...EDIT.hover); });
@@ -2751,6 +2802,7 @@
 
   Promise.all([loadWorld(), loadArt()]).then(([data]) => {
     setupWorld(data);
+    buildBaseSheet();
     buildRooms();
     buildMapImage();
     spawnBots();
