@@ -58,6 +58,7 @@
     if (o !== 65535 && o > 0 && gone[o]) return true;
     if (t === T.VOID || t === T.HOLY || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1 || treeAt(x, y) !== null) return true;
     if (GWALL.has(y * W + x)) return true; // 관리자가 칠한 장벽
+    if (GFLOOR.size && isWater(GFLOOR.get(y * W + x))) return true; // 관리자가 깐 물 타일
     { const pr = GPROPS.get(y * W + x); if (pr && pr.b) return true; } // 관리자가 놓은 막힘 소품
     const e = TILES[y * W + x]; if (e && e.k === 'wall' && e.n !== MY_NID) return true; // 남의 방벽
     return STORE_AT.has(y * W + x);
@@ -833,11 +834,34 @@
       while (dx < TILE) { const wid = Math.min(TILE - dx, cw - sx); g.drawImage(c, sx, sy, wid, hgt, x + dx * k, y + dy * k, wid * k, hgt * k); dx += wid; sx = 0; }
       dy += hgt; sy = 0; }
   }
+  // 물 타일: 시트 그림에서 물빛(파랑) 픽셀이 30% 넘는 칸 → 깔면 못 지나감 (선착장·배·얼음 무늬 없는 칸은 통과)
+  const WATERY = new Set();
+  const isWater = (ref) => !!ref && WATERY.has(ref);
+  function findWaterTiles() {
+    for (const [id, S] of Object.entries(SHEETS)) {
+      if (id === 'base') continue; const im = ART[S.key]; if (!im || !S.cols) continue;
+      const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+      let d; try { d = g.getImageData(0, 0, im.width, im.height).data; } catch (e) { continue; }
+      const rows = Math.floor(im.height / 16);
+      for (let ty = 0; ty < rows; ty++) for (let tx = 0; tx < S.cols; tx++) {
+        let op = 0, wet = 0;
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+          const o = ((ty * 16 + y) * im.width + tx * 16 + x) * 4, r = d[o] / 255, gg = d[o + 1] / 255, b = d[o + 2] / 255; if (d[o + 3] < 128) continue; op++;
+          const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), sat = mx ? (mx - mn) / mx : 0; if (mx < 0.45 || sat < 0.25 || mx === mn) continue;
+          let h = mx === r ? ((gg - b) / (mx - mn)) % 6 : mx === gg ? (b - r) / (mx - mn) + 2 : (r - gg) / (mx - mn) + 4; h = ((h * 60) + 360) % 360 / 360;
+          if (h >= 0.47 && h <= 0.6) wet++;
+        }
+        if (op >= 200 && wet / 256 >= 0.3) WATERY.add(id + ':' + (ty * S.cols + tx));
+      }
+    }
+    for (const [cx, cy] of Object.values(TL.shore)) WATERY.add('water:' + (cy * SHEETS.water.cols + cx)); // 게임 원래 물가 조각은 항상 물
+  }
   function buildBaseSheet() {
     SHEETS.water.cols = Math.floor(ART.water.width / 16);
     const c = document.createElement('canvas'), cols = 8; c.width = cols * 16; c.height = Math.ceil(BASE_PATS.length / cols) * 16; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
     BASE_PATS.forEach((k, i) => drawPat(g, k, (i % cols) * 16, Math.floor(i / cols) * 16, 0, 0, 16));
     ART.base_gen = c;
+    findWaterTiles();
   }
   // 맵 고치기 소품: 게임에 있는 그림(x:)·동물(u:)을 칸 아래쪽에 맞춰 그림 (너무 크면 높이 140px로 줄임)
   function drawProp(g, ref, x, y) { const [t, n] = ref.split(':'), key = t === 'u' ? 'u:' + n : n, im = t === 'u' ? ART['u_' + n] : ART['x_' + n]; if (!im) return; if (im.height * 2 > 140) pix(g, key, x, y, 0, 140); else pix(g, key, x, y, 2); }
@@ -879,6 +903,7 @@
       if (R.wall) for (let x = 1; x < R.w - 1; x++) if (R.grid[R.w + x] === 0 && !R.doors.some((d) => d.side === 'N' && Math.abs(d.at - x) <= 1)) R.grid[R.w + x] = 1;
       for (const p of (E.hideProps ? [] : R.props)) if (!p.walk) for (let y = p.y; y < p.y + p.h; y++) for (let x = p.x; x < p.x + p.w; x++) if (R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; // walk: 밟고 지나가는 장식(꽃·동물)
       for (const k of Object.keys(E.walls || {})) { const [x, y] = k.split(',').map(Number); if (x < R.w && y < R.h && R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; } // 관리자가 칠한 빨간 장벽
+      for (const [k, ref] of Object.entries(E.floor || {})) { if (!isWater(ref)) continue; const [x, y] = k.split(',').map(Number); if (x < R.w && y < R.h && R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; } // 물 타일은 못 지나감
       for (const [k, v] of Object.entries(E.props || {})) { const [x, y] = k.split(',').map(Number); if (v.b && x < R.w && y < R.h && R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; } // 막힘 소품
       R.sprites = (E.hideProps ? [] : R.props).map((p) => ({ x: (p.x + p.w / 2) * TILE, y: (p.y + p.h) * TILE, draw: p.draw, board: p.board, prop: p }));
       for (const [k, v] of Object.entries(E.props || {})) { const [x, y] = k.split(',').map(Number); R.sprites.push({ x: (x + 0.5) * TILE, y: (y + 1) * TILE - 2, draw: (g, X, Y) => drawProp(g, v.r, X, Y) }); } // 관리자가 놓은 소품
@@ -2684,6 +2709,7 @@
     const S = SHEETS[EDIT.sheet], im = ART[S.key], cv = $('edPal'), k = 2;
     cv.width = im.width * k; cv.height = im.height * k; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
     g.fillStyle = '#2b2340'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(im, 0, 0, cv.width, cv.height);
+    for (const ref of WATERY) { const [sh, n] = ref.split(':'); if (sh !== EDIT.sheet) continue; const x = (+n % S.cols) * 16 * k, y = Math.floor(+n / S.cols) * 16 * k; g.fillStyle = '#1d4fd8'; g.beginPath(); g.moveTo(x + 32, y); g.lineTo(x + 22, y); g.lineTo(x + 32, y + 10); g.fill(); } // 파란 모서리 = 물(못 지나감)
     const sx = (EDIT.tile % S.cols) * 16 * k, sy = Math.floor(EDIT.tile / S.cols) * 16 * k; g.strokeStyle = '#ffd34d'; g.lineWidth = 3; g.strokeRect(sx + 1.5, sy + 1.5, 16 * k - 3, 16 * k - 3);
     for (const b of document.querySelectorAll('#editor [data-sheet]')) b.setAttribute('aria-pressed', String(b.dataset.sheet === EDIT.sheet));
   }
