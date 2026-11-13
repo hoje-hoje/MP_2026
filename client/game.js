@@ -1743,16 +1743,16 @@
         break;
       }
       case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
-      case 'tile': { if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); break; }
+      case 'tile': { if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); if (m.e && m.e.n === MY_NID) SND.play('place'); break; }
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
-      case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); break;
+      case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
       case 'clock': setClock(m); break;
       case 'roomEdit': if (m.diff) applyRoomDiff(m.id, m.diff); else applyRoomEdit(m.id, m.edit); break;
       case 'groundEdit': applyGroundEdit(m); break;
       case 'rift': toast(m.text); break;
-      case 'hitn': HITN.set(m.terr, { n: m.n, at: performance.now() }); near = null; break;
-      case 'scout': HITN.delete(m.terr); toast(m.text); break;
+      case 'hitn': HITN.set(m.terr, { n: m.n, at: performance.now() }); near = null; SND.play('hit'); break;
+      case 'scout': HITN.delete(m.terr); toast(m.text); SND.play('ok'); break;
       case 'stun': stunUntil = performance.now() + m.ms; step.on = false; toast(m.text); break;
       case 'pos': player.x = m.x; player.y = m.y; step.on = false; netTp = true; if (m.text) toast(m.text); break;
       case 'bailList': {
@@ -1760,10 +1760,10 @@
         for (const b of $('bailBody').querySelectorAll('[data-bail]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'bail', idx: +b.dataset.bail })); $('bailBox').hidden = true; };
         $('bailBox').hidden = false; break;
       }
-      case 'mined': mined.add(m.terr); toast(m.text); break;
+      case 'mined': mined.add(m.terr); toast(m.text); SND.play('coin'); break;
       case 'warp': { const p = m.pos; if (p.scene === 'sky' && ROOMS[p.room]) { player.scene = 'sky'; player.room = ROOMS[p.room]; if (build.on) setBuild(false); } else { player.scene = 'ground'; player.room = null; } player.x = p.x; player.y = p.y; step.on = false; hold.on = false; fadeT = 0.35; lastTerr = null; break; }
-      case 'carry': player.carry = m.carry; toast(m.text); break;
-      case 'arrested': player.carry = null; jailUntil = m.jailUntil || 0; toast(m.text); break;
+      case 'carry': player.carry = m.carry; toast(m.text); SND.play(m.carry ? 'steal' : 'coin'); break;
+      case 'arrested': player.carry = null; jailUntil = m.jailUntil || 0; toast(m.text); SND.play('arrest'); break;
       case 'released': jailUntil = 0; if (player.scene === 'sky' && player.room.id === 'jail') goHome(); toast(m.text); break;
       case 'notice': showNotice(m.notice, true); break;
       case 'settings': testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; if (!$('war').hidden) renderWar(); break;
@@ -2002,7 +2002,7 @@
   const BT = { list: [], i: 0, t0: 0, done: null, raf: 0 };
   function playBattles(reps, done) {
     const seen = new Set(store('mp2026.battleSeen') || []);
-    BT.list = reps.slice(); BT.i = 0; BT.done = done;
+    BT.list = reps.slice(); BT.i = 0; BT.done = done; SND.play('war');
     store('mp2026.battleSeen', [...seen, ...reps.map((r) => r.id)].slice(-80));
     $('battle').hidden = false; startBattle();
   }
@@ -2403,6 +2403,7 @@
     puzzleResult(true, r.kind === 'claim' ? '정답! 영토를 점령했어요' : r.kind === 'army' ? `정답! 병력 +${r.army}` : '정답!', true);
   }
   function puzzleResult(ok, text, done) {
+    SND.play(ok ? 'ok' : 'fail');
     $('pzMsg').textContent = text; $('pzMsg').className = 'msg ' + (ok ? 'good' : 'warn');
     if (ok || done) { curPuzzle = null; clearInterval(pzTimer); setTimeout(() => { $('puzzle').hidden = true; }, ok ? 1300 : 2200); toast(text); }
   }
@@ -2947,6 +2948,73 @@
   });
   canvas.addEventListener('mouseleave', () => { EDIT.hover = null; });
 
+  // ------------------------------------------------------------ 소리: 효과음 + 배경음악 (파일 없이 WebAudio로 만든 도트 게임 소리)
+  // 배경음악은 나중에 받은 음악 파일로 바꿀 수 있게 SND.music(url) 자리를 남겨 둠
+  const SND = (() => {
+    let ac = null, master = null, sfxBus = null, bgmBus = null, bgmOn = false, bgmTimer = 0, step = 0;
+    const vol = (k, d) => { const v = store(k); return (v == null ? d : v) / 100; };
+    function init() {
+      if (ac) return true;
+      try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return false; }
+      master = ac.createGain(); master.connect(ac.destination);
+      sfxBus = ac.createGain(); sfxBus.gain.value = vol('mp2026.sfx', 70) * 0.5; sfxBus.connect(master);
+      bgmBus = ac.createGain(); bgmBus.gain.value = vol('mp2026.bgm', 60) * 0.22; bgmBus.connect(master);
+      return true;
+    }
+    function tone(freq, t0, dur, type = 'square', gain = 0.3, bus = sfxBus, slide = 0) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, t0); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * slide), t0 + dur);
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(bus); o.start(t0); o.stop(t0 + dur + 0.02);
+    }
+    function noise(t0, dur, gain = 0.3, hp = 800, bus = sfxBus) {
+      const n = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = buf; f.type = 'highpass'; f.frequency.value = hp; g.gain.value = gain;
+      src.connect(f); f.connect(g); g.connect(bus); src.start(t0);
+    }
+    const FX = {
+      click: (t) => tone(880, t, 0.05, 'square', 0.12),
+      chop: (t) => { noise(t, 0.08, 0.35, 400); tone(140, t, 0.12, 'triangle', 0.35, sfxBus, 0.6); },
+      coin: (t) => { tone(988, t, 0.08, 'square', 0.18); tone(1319, t + 0.07, 0.18, 'square', 0.18); },
+      hit: (t) => { tone(1500, t, 0.07, 'triangle', 0.25, sfxBus, 0.7); noise(t, 0.05, 0.2, 2500); },
+      ok: (t) => [523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.07, 0.16, 'square', 0.16)),
+      fail: (t) => { tone(330, t, 0.15, 'square', 0.16); tone(247, t + 0.13, 0.25, 'square', 0.16); },
+      steal: (t) => tone(300, t, 0.25, 'square', 0.14, sfxBus, 3),
+      arrest: (t) => { for (let i = 0; i < 4; i++) tone(i % 2 ? 660 : 880, t + i * 0.13, 0.12, 'square', 0.14); },
+      place: (t) => { tone(220, t, 0.06, 'square', 0.18); noise(t, 0.04, 0.15, 1200); },
+      war: (t) => { // 전쟁 나팔 + 북
+        [[196, 0], [196, 0.18], [262, 0.36], [330, 0.62]].forEach(([f, d]) => { tone(f, t + d, d === 0.62 ? 0.9 : 0.22, 'sawtooth', 0.16); tone(f / 2, t + d, d === 0.62 ? 0.9 : 0.22, 'square', 0.08); });
+        for (let i = 0; i < 6; i++) { tone(90, t + i * 0.2, 0.14, 'triangle', 0.4, sfxBus, 0.5); noise(t + i * 0.2, 0.06, 0.15, 200); }
+      },
+      open: (t) => [784, 988, 1175].forEach((f, i) => tone(f, t + i * 0.05, 0.1, 'triangle', 0.14)),
+      bell: (t) => { tone(1568, t, 1.2, 'sine', 0.2); tone(2093, t, 0.8, 'sine', 0.08); },
+    };
+    function play(name) { if (!init() || ac.state === 'suspended') { if (ac) ac.resume(); } if (!ac || !FX[name]) return; try { FX[name](ac.currentTime + 0.01); } catch (e) { /* 무시 */ } }
+    // 배경음악: 가-바-다-사 (Am-F-C-G) 진행의 잔잔한 RPG 루프 (8분음표 16개 × 4마디)
+    const CH = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];
+    const MEL = [76, 0, 74, 72, 74, 0, 76, 79, 77, 0, 76, 74, 72, 0, 0, 0, 72, 0, 74, 76, 79, 0, 76, 74, 74, 0, 72, 71, 72, 0, 0, 0,
+      69, 0, 72, 76, 77, 0, 76, 72, 72, 0, 74, 76, 74, 0, 72, 71, 72, 74, 76, 79, 81, 0, 79, 76, 74, 0, 72, 74, 76, 0, 0, 0];
+    const mf = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    function bgmTick() {
+      if (!bgmOn) return;
+      const spb = 60 / 96 / 2, t = ac.currentTime + 0.05; // 96bpm 8분음표
+      for (let k = 0; k < 4; k++) {
+        const i = (step + k) % 64, bar = Math.floor(i / 16), c = CH[bar], tt = t + k * spb;
+        if (i % 4 === 0) tone(mf(c[0] - 12), tt, spb * 3.6, 'triangle', 0.32, bgmBus); // 베이스
+        tone(mf(c[(i % 3)] + 12), tt, spb * 0.9, 'square', 0.05, bgmBus); // 아르페지오
+        if (MEL[i]) tone(mf(MEL[i]), tt, spb * 1.6, 'square', 0.09, bgmBus); // 멜로디
+      }
+      step = (step + 4) % 64;
+      bgmTimer = setTimeout(bgmTick, spb * 4 * 1000 - 20);
+    }
+    function bgm(on) { if (!init()) return; ac.resume(); if (on && !bgmOn) { bgmOn = true; step = 0; bgmTick(); } else if (!on) { bgmOn = false; clearTimeout(bgmTimer); } }
+    function setVol(kind, v) { store(kind === 'bgm' ? 'mp2026.bgm' : 'mp2026.sfx', v); if (!ac) return; if (kind === 'bgm') bgmBus.gain.value = v / 100 * 0.22; else sfxBus.gain.value = v / 100 * 0.5; }
+    return { play, bgm, setVol };
+  })();
+  // 버튼 누를 때 딸깍
+  document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('button')) SND.play('click'); }, true);
+
   // ------------------------------------------------------------ 타이틀 화면 + 여신 오프닝
   // 들어올 때마다: 로고 + 뒤에 지도 아무 곳이 천천히 흘러감 → Enter 로 시작
   // 처음 온 사람(이름 없음): 여신이 부르고 → 이름 → 세계 설명 → 로고 → 건국 창
@@ -2979,11 +3047,12 @@
     const t = cand[Math.floor(Math.random() * cand.length)] || home;
     TITLE.x = t.center[0] * TILE; TITLE.y = t.center[1] * TILE; const a = Math.random() * Math.PI * 2; TITLE.vx = Math.cos(a) * 22; TITLE.vy = Math.sin(a) * 14;
     TITLE.on = true; document.body.classList.add('titling'); $('title').hidden = false; $('tSet').hidden = true;
-    try { $('tBgm').value = store('mp2026.bgm') ?? 60; } catch (e) { /* 없음 */ }
+    try { $('tBgm').value = store('mp2026.bgm') ?? 60; $('tSfx').value = store('mp2026.sfx') ?? 70; $('tBgmV').textContent = $('tBgm').value + '%'; $('tSfxV').textContent = $('tSfx').value + '%'; } catch (e) { /* 없음 */ }
   }
   function endTitle() {
     if (!TITLE.on) return;
     TITLE.on = false; document.body.classList.remove('titling'); $('title').hidden = true; titleDone = true;
+    SND.bgm((store('mp2026.bgm') ?? 60) > 0); SND.play('open');
     invalidateChunks(); mapSig = '';
     const firstTime = ONLINE ? !nameSet : !store('mp2026.opened');
     if (firstTime) startOpening(); else { if (needFound) openFound('who'); maybeDoomPopup(); }
@@ -2991,7 +3060,8 @@
   $('tStart').addEventListener('click', endTitle);
   $('title').addEventListener('click', (e) => { if (e.target === $('title') || e.target.classList.contains('tstart')) endTitle(); });
   $('tSettings').addEventListener('click', () => { $('tSet').hidden = !$('tSet').hidden; });
-  $('tBgm').addEventListener('input', () => { store('mp2026.bgm', +$('tBgm').value); $('tBgmV').textContent = $('tBgm').value + '%'; });
+  $('tBgm').addEventListener('input', () => { SND.setVol('bgm', +$('tBgm').value); $('tBgmV').textContent = $('tBgm').value + '%'; });
+  $('tSfx').addEventListener('input', () => { SND.setVol('sfx', +$('tSfx').value); $('tSfxV').textContent = $('tSfx').value + '%'; SND.play('coin'); });
   $('tCoupon').addEventListener('click', () => { $('coupon').hidden = false; $('coupon').style.zIndex = 60; setTimeout(() => $('couponIn').focus(), 50); });
 
   // 여신 대사: dim = 화면 밝기(처음엔 어둡다가 밝아짐), input = 이름 적기
