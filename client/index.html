@@ -263,6 +263,16 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 .fgrid span i, .fgrid button i { font-style: normal; font-size: 10px; color: #8a7f9a; }
 .fgrid span.att { background: #ffe1e1; } .fgrid span.def { background: #dff0ff; }
 .fgrid.pick button[aria-pressed="true"] { outline: 3px solid #ffd34d; }
+
+#pzBoard.sudoku { display: grid; grid-template-columns: repeat(9, 1fr); width: min(360px, 86vw); aspect-ratio: 1; margin: 4px auto; border: 3px solid #2b2340; background: #2b2340; gap: 1px; }
+#pzBoard.sudoku button { min-height: 0; padding: 0; border: 0; border-image: none; background: #fffdf8; font: 700 18px var(--font-body); color: #3d5fb8; box-shadow: none; }
+#pzBoard.sudoku button.fix { color: #2b2340; background: #efe6cf; }
+#pzBoard.sudoku button.sel { background: #ffe58a; outline: 2px solid #c27a00; z-index: 1; }
+#pzBoard.sudoku button.bb { margin-bottom: 2px; } #pzBoard.sudoku button.br { margin-right: 2px; }
+#pzBoard.slide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: min(270px, 80vw); aspect-ratio: 1; margin: 4px auto; }
+#pzBoard.slide button { font: 400 34px var(--font-display); min-height: 0; }
+#pzBoard.slide button.empty { visibility: hidden; }
+.pztime { font-family: var(--font-display); font-size: 22px; margin-left: auto; margin-right: 8px; } .pztime.warn { color: #c22f53; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -424,11 +434,10 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 
 <div id="puzzle" hidden>
   <div class="panel card">
-    <div class="head"><h2 id="pzTitle">문제</h2><button id="pzClose" type="button">닫기</button></div>
+    <div class="head"><h2 id="pzTitle">퍼즐</h2><b id="pzTime" class="pztime">5:00</b><button id="pzClose" type="button">그만두기</button></div>
     <p id="pzMode" class="mode"></p>
-    <img id="pzImg" alt="문제 그림" hidden>
-    <p id="pzQ" class="q"></p>
-    <div class="row"><input id="pzIn" type="text" inputmode="decimal" autocomplete="off" placeholder="답"><button id="pzSend" type="button">제출</button></div>
+    <div id="pzBoard"></div>
+    <div class="row"><button id="pzSend" type="button">제출</button></div>
     <p id="pzMsg" class="msg"></p>
   </div>
 </div>

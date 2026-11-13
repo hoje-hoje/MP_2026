@@ -100,7 +100,7 @@ const world = new World(MAP, state.world || null);
 const MPRules = require('../client/rules.js');
 const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT } = MPRules;
 const MPRulesPortal = (t) => MPRules.portalSpot(t, tileAt);
-for (const t of MAP.territories) world.t[t.id].name = MPRules.terrName(t); // 알림에 쓰는 영토 이름
+{ const NM = MPRules.nameAll(MAP.territories); for (const t of MAP.territories) world.t[t.id].name = NM[t.id]; } // 알림에 쓰는 영토 이름 (겹치지 않게)
 world.tileTerr = (i) => terrAtTile(i % MAP.width, Math.floor(i / MAP.width)); // 영역이 넘어갈 때 그 땅의 설치물도 같이
 // ---- 영지: 지형·저장소·설치물
 const TERRAIN = Buffer.from(MAP.terrain_b64, 'base64');
@@ -192,7 +192,10 @@ function realClock() {
 function gameClock() { const c = state.clock || {}; return c.mode === 'manual' ? { day: c.day, slot: c.slot, manual: true } : realClock(); }
 const clockKey = (c) => (c.day - 1) * 3 + SLOTS.indexOf(c.slot);
 const fromKey = (k) => ({ day: Math.floor(k / 3) + 1, slot: SLOTS[k % 3] });
-const gameDayKey = () => 'D' + gameClock().day; // 하루 단위(행동력·금광·체포)는 게임 날짜 기준
+const gameDayKey = () => 'D' + gameClock().day; // 하루 단위(금광 등)는 게임 날짜 기준
+// 행동력·하루 점령 수는 매일 0시(한국 시간)에 다시 (관리자가 시계를 손으로 정했으면 게임 일차 기준)
+const actionDayKey = () => { const c = gameClock(); if (c.manual) return 'D' + c.day; const k = new Date(Date.now() + 9 * 3600e3); return 'K' + k.toISOString().slice(0, 10); };
+const memberCap = () => (gameClock().day >= 3 ? Infinity : NUM.maxMembersEarly); // 1~2일차 6명, 3일차부터 제한 없음
 // 전투 시간 번호: 일차×3 + (아침0·점심1·밤2). 선전포고는 다음 전투 시간에 들어가는데,
 // 실제 시계일 때 그 전투 30분 전이 지났으면 그다음 전투 시간으로 넘어감
 const slotIdx = (day, slot) => day * 3 + SLOTS.indexOf(slot);
@@ -286,7 +289,7 @@ wss.on('connection', (ws) => {
       s = { id: nextId++, ws, token, acc, x: acc.x, y: acc.y, dir: 1, moving: 0, scene: acc.scene || 'ground', room: acc.room || null, lastMove: Date.now(), known: new Set() };
       online.set(s.id, s);
       const nat = world.nationOfPlayer(token); // 나라는 건국 화면에서 세우거나 초대 코드로 들어간다
-      if (nat) { world.refreshActions(nat, gameDayKey()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
+      if (nat) { world.refreshActions(nat, actionDayKey()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       send(ws, {
         t: 'welcome', id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? JAIL_POS : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: arrestsToday(acc), jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
@@ -357,44 +360,74 @@ wss.on('connection', (ws) => {
       }
       case 'found': case 'join': {
         if (m.t === 'found' && !foundingOpen()) return send(ws, { t: 'err', text: '건국 기간(12/14~12/15)이 끝났어요. 유랑민으로 시작해 주세요' });
-        const r = m.t === 'found' ? world.foundNation(s.token, s.acc.name, m.name, m.capital | 0) : world.joinNation(s.token, s.acc.name, m.code);
+        if (m.t === 'join' && (s.acc.joinBanUntil || 0) > Date.now()) return send(ws, { t: 'err', text: `나라를 떠난 지 24시간이 안 됐어요 (${Math.ceil((s.acc.joinBanUntil - Date.now()) / 3600e3)}시간 뒤 가입 가능)` });
+        const r = m.t === 'found' ? world.foundNation(s.token, s.acc.name, m.name, m.capital | 0) : world.joinNation(s.token, s.acc.name, m.code, memberCap());
         if (!r.ok) return send(ws, { t: 'err', text: r.err });
-        world.refreshActions(r.nation, gameDayKey());
+        world.refreshActions(r.nation, actionDayKey());
         dirty = true; broadcastOwners(); sendViews([r.nation.id]);
         send(ws, { t: 'joined', founded: m.t === 'found', chat: (state.chats['nation:' + r.nation.id] || []).slice(-30) });
         sendMeta(s);
         if (m.t === 'join') notifyNation(r.nation.id, `${s.acc.name}님이 우리 나라에 들어왔어요`);
         break;
       }
-      case 'puzzle': {
+      case 'puzzle': { // 제단 퍼즐 시작 (스도쿠·슬라이딩): 시작할 때 행동력 1
         const t = world.t[m.terr | 0]; const n = world.nationOfPlayer(s.token);
         if (!t) return;
         if (s.scene !== 'ground' || s.x == null || Math.hypot(s.x / 32 - t.altar[0] - 0.5, s.y / 32 - t.altar[1] - 0.5) > 3) return send(ws, { t: 'err', text: '제단 가까이에서만 풀 수 있어요' });
         if (!n) return send(ws, { t: 'err', text: '나라가 있어야 퍼즐 보상을 받을 수 있어요' });
         const own = world.ownerOf(t.id);
+        if (world.s.gone[t.id]) return send(ws, { t: 'err', text: '균열에 삼켜진 땅이에요' });
         if (own && own !== n.id) return send(ws, { t: 'err', text: '다른 나라의 제단이에요' });
         if (!own && !world.touches(n.id, t.id)) return send(ws, { t: 'err', text: '우리 땅과 붙어 있어야 점령할 수 있어요' });
-        const solved = new Set(s.acc.solved || []);
-        const pool = bank().filter((q) => !solved.has(q.id));
-        if (!pool.length) return send(ws, { t: 'err', text: '지금 풀 수 있는 문제가 없어요 (문제가 곧 추가돼요)' });
-        const same = pool.filter((q) => q.type === t.type);
-        const q = (same.length ? same : pool)[Math.floor(Math.random() * (same.length || pool.length))];
-        s.pending = { id: q.id, terr: t.id };
-        send(ws, { t: 'puzzle', id: q.id, terr: t.id, type: q.type, question: q.question, image: q.image || null, mode: own ? 'army' : 'claim' });
+        world.refreshActions(n, actionDayKey());
+        if (!own) { const blk = world.claimBlock(n, gameClock().day, actionDayKey()); if (blk) return send(ws, { t: 'err', text: blk }); }
+        if (!world.useAction(n.id, actionDayKey())) return send(ws, { t: 'err', text: '오늘 행동력을 다 썼어요 (0시에 다시 10)' });
+        const kind = Math.random() < 0.5 ? 'sudoku' : 'slide';
+        const id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const board = kind === 'sudoku' ? MPRules.genSudoku() : MPRules.genSlide();
+        const sec = kind === 'sudoku' ? NUM.sudokuSec : NUM.slideSec;
+        s.pending = { id, terr: t.id, kind, board, at: now(), sec, mode: own ? 'army' : 'claim' };
+        dirty = true; sendViews([n.id]);
+        send(ws, { t: 'puzzle', id, terr: t.id, kind, board, sec, mode: own ? 'army' : 'claim' });
         break;
       }
-      case 'answer': {
-        const n = world.nationOfPlayer(s.token);
-        if (!n || !s.pending || s.pending.id !== m.id) return;
-        const q = findPuzzle(m.id); if (!q) return;
-        if (!world.useAction(n.id, gameDayKey())) return send(ws, { t: 'answer', correct: false, text: '오늘 행동력을 다 썼어요 (자정에 다시 10)' });
-        if (!sameAnswer(m.answer, q.answer)) { dirty = true; sendViews([n.id]); return send(ws, { t: 'answer', correct: false, text: '틀렸어요. 다시 도전하려면 행동력 1이 들어요' }); }
-        (s.acc.solved = s.acc.solved || []).push(q.id);
-        const r = world.puzzleReward(n.id, s.pending.terr, gameDayKey());
+      case 'answer': { // 퍼즐 답: 스도쿠는 판 전체, 슬라이딩은 움직인 숫자 순서
+        const n = world.nationOfPlayer(s.token), P = s.pending;
+        if (!n || !P || P.id !== m.id) return;
+        if (m.giveUp) { s.pending = null; return send(ws, { t: 'answer', id: P.id, correct: false, done: true, text: '퍼즐을 그만뒀어요 (행동력 1은 쓴 걸로 쳐요)' }); }
+        if (now() - P.at > (P.sec + 5) * 1000) { s.pending = null; return send(ws, { t: 'answer', id: P.id, correct: false, done: true, text: '시간이 다 됐어요. 다시 도전하려면 행동력 1이 들어요' }); }
+        const right = P.kind === 'sudoku' ? MPRules.checkSudoku(P.board, m.grid) : MPRules.checkSlide(P.board, m.moves);
+        if (!right) return send(ws, { t: 'answer', id: P.id, correct: false, text: P.kind === 'sudoku' ? '아직 틀린 칸이 있어요' : '아직 다 맞추지 못했어요' });
         s.pending = null; dirty = true;
-        if (r.kind === 'claim') broadcastOwners();
+        s.acc.stats = s.acc.stats || {}; s.acc.stats.puzzles = (s.acc.stats.puzzles || 0) + 1;
+        const owner = world.ownerOf(P.terr);
+        if (P.mode === 'claim' && owner) { // 푸는 동안 다른 나라(또는 팀원)가 먼저 점령 → 행동력 돌려줌
+          n.actions += 1; sendViews([n.id]);
+          return send(ws, { t: 'answer', id: P.id, correct: true, done: true, text: owner === n.id ? '정답! 그런데 팀원이 먼저 점령했어요 · 행동력 1을 돌려받았어요' : '정답! 그런데 다른 나라가 먼저 점령했어요 · 행동력 1을 돌려받았어요' });
+        }
+        const r = world.puzzleReward(n.id, P.terr, actionDayKey(), gameClock().day);
+        if (r.kind === 'claim') { broadcastOwners(); notifyNation(n.id, `🏳 ${s.acc.name}님이 ${world.t[P.terr].name}을(를) 점령했어요`); }
+        if (r.kind === 'none') { n.actions += 1; }
         sendViews([n.id]);
-        send(ws, { t: 'answer', correct: true, text: r.kind === 'claim' ? '정답! 영토를 점령했어요' : r.kind === 'army' ? `정답! 병력 +${r.army}` : '정답!' });
+        send(ws, { t: 'answer', id: P.id, correct: true, done: true, text: r.kind === 'claim' ? '정답! 영토를 점령했어요' : r.kind === 'army' ? `정답! 병력 +${r.army}` : `정답! 하지만 ${r.err || '점령할 수 없어요'} · 행동력 1을 돌려받았어요` });
+        break;
+      }
+      case 'leave': { // 나라 나가기
+        const r = world.leaveNation(s.token); if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        s.acc.joinBanUntil = Date.now() + NUM.joinBanH * 3600e3; dirty = true;
+        broadcastOwners(); if (!r.disbanded) { sendViews([r.nation.id]); notifyNation(r.nation.id, `${s.acc.name}님이 나라를 떠났어요`); }
+        send(ws, { t: 'left', text: r.disbanded ? '나라를 해체했어요 · 이제 유랑민이에요 (24시간 동안 가입 불가)' : '나라를 떠났어요 · 이제 유랑민이에요 (24시간 동안 가입 불가)' });
+        sendMeta(s);
+        break;
+      }
+      case 'kick': { // 왕이 팀원 내보내기
+        const n = world.nationOfPlayer(s.token); if (!n) return;
+        const r = world.kick(n.id, s.token, m.idx | 0); if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        const acc = state.accounts[r.key]; if (acc) acc.joinBanUntil = Date.now() + NUM.joinBanH * 3600e3;
+        dirty = true; broadcastOwners(); sendViews([n.id]);
+        const o = [...online.values()].find((x) => x.token === r.key);
+        if (o) { send(o.ws, { t: 'left', text: `${n.name}에서 내보내졌어요 · 이제 유랑민이에요 (24시간 동안 가입 불가)` }); sendMeta(o); }
+        notifyNation(n.id, `${acc ? acc.name : '팀원'}님을 내보냈어요`);
         break;
       }
       case 'kingTo': {
@@ -410,7 +443,7 @@ wss.on('connection', (ws) => {
         if (!n || !t) return;
         // 그 영토 제단 근처에 서 있어야 한다
         if (s.scene !== 'ground' || s.x == null || Math.hypot(s.x / 32 - t.altar[0] - 0.5, s.y / 32 - t.altar[1] - 0.5) > 3) return send(ws, { t: 'err', text: '제단 가까이에서만 점령할 수 있어요' });
-        const r = world.claim(n.id, t.id, gameDayKey());
+        const r = world.claim(n.id, t.id, actionDayKey(), false, gameClock().day);
         if (!r.ok) return send(ws, { t: 'err', text: r.err });
         dirty = true; broadcastOwners(); sendViews([n.id]);
         send(ws, { t: 'ok', text: `${t.name}을(를) 점령했어요` });

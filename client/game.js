@@ -116,7 +116,8 @@
     terr = new Uint16Array(b64bytes(data.territory_u16le_b64).buffer);
     terrs = [null];
     gone = new Uint8Array(data.territories.length + 2);
-    for (const t of data.territories) { terrs[t.id] = t; t.name = terrName(t); if (!window.MP_ONLINE && t.rift && WAVE_DAY[t.rift] <= DAY) gone[t.id] = 1; }
+    const NM = MPRules.nameAll(data.territories);
+    for (const t of data.territories) { terrs[t.id] = t; t.name = NM[t.id]; if (!window.MP_ONLINE && t.rift && WAVE_DAY[t.rift] <= DAY) gone[t.id] = 1; }
     solid = new Uint8Array(W * H);
     noTree = new Uint8Array(W * H);
     for (const t of data.territories) { clearTrees(t.altar[0], t.altar[1], 3); if (t.portal) clearTrees(t.portal[0], t.portal[1], 3); }
@@ -1713,7 +1714,8 @@
       case 'view': applyWorld(null, null, m.view); break;
       case 'night': applyWorld(null, null, m.view); showNight(m.reports || []); break;
       case 'puzzle': showPuzzle(m); break;
-      case 'answer': puzzleResult(m.correct, m.text); break;
+      case 'answer': if (curPuzzle && m.id === curPuzzle.id) puzzleResult(m.correct, m.text, m.done); break; // 예전 퍼즐의 늦은 답은 무시
+      case 'left': myView = null; MY_NID = null; mapSig = ''; toast(m.text); if (!$('war').hidden) renderWar(); break;
       case 'err': if (!$('puzzle').hidden) puzzleResult(false, m.text); toast(m.text); if (!$('war').hidden) renderWar(); break;
       case 'ok': toast(m.text); break;
       case 'name': {
@@ -2078,7 +2080,8 @@
     let h = '';
     if (warTab === 'nation') {
       h += `<div class="plan"><div class="row"><span>초대 코드</span><b class="code">${esc(me.code || '')}</b></div><p class="msg">팀원에게 이 코드를 알려 주면 [초대 코드로 들어가기]로 우리 나라에 들어와요.</p></div>`;
-      h += `<h3>국민 (${me.members})</h3>` + (me.memberList || []).map((m) => `<div class="row"><span>${m.king ? '👑 ' : ''}${esc(m.name)}${m.me ? ' (나)' : ''}</span>${king && !m.king ? `<button data-king="${m.idx}">왕 넘기기</button>` : ''}</div>`).join('');
+      h += `<h3>국민 (${me.members}${DAY < 3 ? ` / ${MPRules.NUM.maxMembersEarly}` : ''})</h3>` + (me.memberList || []).map((m) => `<div class="row"><span>${m.king ? '👑 ' : ''}${esc(m.name)}${m.me ? ' (나)' : ''}</span><span>${king && !m.king ? `<button data-king="${m.idx}">왕 넘기기</button> <button data-kick="${m.idx}">내보내기</button>` : ''}</span></div>`).join('');
+      h += `<div class="row"><span class="msg">나라를 나가면 유랑민이 되고 24시간 동안 다른 나라에 가입할 수 없어요${king && me.members > 1 ? ' · 왕은 먼저 왕을 넘겨야 해요' : ''}</span><button id="btnLeave">나라 나가기</button></div>`;
       if (RIFT_NEXT) {
         const mineR = RIFT_NEXT.terrs.filter((tid) => owners[tid] === me.id);
         h += `<div class="plan"><h3>🌀 다음 균열 · ${RIFT_NEXT.day}일차 아침 (${RIFT_NEXT.wave}차)</h3><p class="msg">지도에서 보라색으로 일렁이는 땅이 무너져요. 수도는 안전하고, 백신을 쓴 땅도 이번엔 버텨요. 백신 ${me.vaccine}개</p>` +
@@ -2136,6 +2139,8 @@
     box.innerHTML = h;
     // 이벤트
     for (const b of box.querySelectorAll('[data-king]')) b.onclick = () => warAction('kingTo', { idx: +b.dataset.king });
+    for (const b of box.querySelectorAll('[data-kick]')) b.onclick = () => { if (confirm('이 팀원을 내보낼까요? 그 사람은 24시간 동안 다른 나라에 가입할 수 없어요.')) warAction('kick', { idx: +b.dataset.kick }); };
+    if ($('btnLeave')) $('btnLeave').onclick = () => { if (confirm(me.members <= 1 ? '혼자 남은 나라예요. 나가면 나라가 해체되고 영토는 주인 없는 땅이 돼요. 나갈까요?' : '나라를 나갈까요? 24시간 동안 다른 나라에 가입할 수 없어요.')) warAction('leave', {}); };
     for (const b of box.querySelectorAll('[data-tgt]')) b.onclick = () => { warTarget = +b.dataset.tgt; renderWar(); };
     for (const b of box.querySelectorAll('[data-vax]')) b.onclick = () => warAction('vaccinate', { terr: +b.dataset.vax });
     for (const b of box.querySelectorAll('[data-intel]')) b.onclick = () => warAction('intel', { battle: +b.dataset.intel });
@@ -2291,49 +2296,86 @@
     toast('유랑민으로 떨어졌어요 · 하늘 유랑민 등록소에서 귀화·용병·건국을 등록할 수 있어요');
   }
 
-  // ------------------------------------------------------------ 제단 수학 퍼즐
-  // 온라인: 문제만 받고 답은 서버가 확인 / 미리보기: puzzles.preview.json (샘플)
-  let previewPuzzles = null, curPuzzle = null;
-  const offSolved = new Set(store('mp2026.solved') || []);
-  async function openPuzzle(t) {
+  // ------------------------------------------------------------ 제단 퍼즐 (스도쿠 5분 · 슬라이딩 3분)
+  // 온라인: 서버가 판을 주고 답을 확인 / 미리보기: 같은 규칙(rules.js)으로 브라우저에서
+  let curPuzzle = null, pzTimer = 0;
+  function openPuzzle(t) {
     if (ONLINE) { if (netOn) ws.send(JSON.stringify({ t: 'puzzle', terr: t.id })); return; }
     if (!OFF_ME) { toast('나라가 있어야 퍼즐 보상을 받을 수 있어요'); return; }
-    if (!previewPuzzles) { try { previewPuzzles = (await (await fetch('puzzles.preview.json')).json()).puzzles; } catch (e) { previewPuzzles = []; } }
-    const pool = previewPuzzles.filter((q) => !offSolved.has(q.id));
-    if (!pool.length) { toast('지금 풀 수 있는 문제가 없어요 (문제가 곧 추가돼요)'); return; }
-    const same = pool.filter((q) => q.type === t.type);
-    const q = (same.length ? same : pool)[0];
-    showPuzzle({ id: q.id, terr: t.id, type: q.type, question: q.question, image: q.image, mode: ownerOf(t.id) ? 'army' : 'claim' }, q);
+    if (!OFF.useAction(OFF_ME)) { toast('오늘 행동력을 다 썼어요'); return; }
+    const kind = Math.random() < 0.5 ? 'sudoku' : 'slide';
+    showPuzzle({ id: 'local', terr: t.id, kind, board: kind === 'sudoku' ? MPRules.genSudoku() : MPRules.genSlide(), sec: kind === 'sudoku' ? MPRules.NUM.sudokuSec : MPRules.NUM.slideSec, mode: ownerOf(t.id) ? 'army' : 'claim' }, true);
+    offSync();
   }
   function showPuzzle(p, local) {
-    curPuzzle = Object.assign({}, p, { local });
-    $('pzTitle').textContent = `🔮 ${p.type} 문제`;
-    $('pzMode').textContent = p.mode === 'claim' ? `맞히면 ${terrLabel(p.terr)}을(를) 점령해요` : `맞히면 병력 +${MPRules.NUM.puzzleArmy}`;
-    $('pzQ').textContent = p.question || '';
-    const img = $('pzImg'); img.hidden = !p.image; if (p.image) { img.src = p.image; img.alt = p.question || '문제 그림'; }
-    $('pzQ').hidden = !!p.image; // 그림이 있으면 글은 그림 설명(alt)으로만
-    $('pzIn').value = ''; $('pzMsg').textContent = '한 번 낼 때마다 행동력 1을 써요.'; $('pzMsg').className = 'msg';
-    $('puzzle').hidden = false; setTimeout(() => $('pzIn').focus(), 50);
+    curPuzzle = Object.assign({}, p, { local, t0: performance.now(), moves: [], cur: p.board.slice(), sel: -1 });
+    $('pzTitle').textContent = p.kind === 'sudoku' ? '🔢 스도쿠' : '🧩 슬라이딩 퍼즐';
+    $('pzMode').textContent = (p.mode === 'claim' ? `풀면 ${terrLabel(p.terr)}을(를) 점령해요` : `풀면 병력 +${MPRules.NUM.puzzleArmy}`) + ` · 제한 ${Math.round(p.sec / 60)}분 · 행동력 1을 썼어요`;
+    $('pzMsg').textContent = p.kind === 'sudoku' ? '칸을 누르고 숫자 키(1~9)를 눌러요. 지우기는 0이나 Backspace. 가로·세로·3×3 칸에 1~9가 한 번씩.' : '빈칸 옆 숫자를 누르거나 방향키로 움직여서 1~8 순서로 맞춰요.'; $('pzMsg').className = 'msg';
+    $('pzSend').hidden = p.kind !== 'sudoku';
+    renderPuzzle();
+    $('puzzle').hidden = false;
+    clearInterval(pzTimer); pzTimer = setInterval(tickPuzzle, 250); tickPuzzle();
   }
+  function tickPuzzle() {
+    if (!curPuzzle) { clearInterval(pzTimer); return; }
+    const left = Math.max(0, curPuzzle.sec - (performance.now() - curPuzzle.t0) / 1000);
+    $('pzTime').textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`; $('pzTime').classList.toggle('warn', left < 30);
+    if (left <= 0) { const P = curPuzzle; curPuzzle = null; clearInterval(pzTimer); if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'answer', id: P.id, giveUp: true })); puzzleResult(false, '시간이 다 됐어요. 다시 도전하려면 행동력 1이 들어요', true); }
+  }
+  function renderPuzzle() {
+    const P = curPuzzle, box = $('pzBoard');
+    if (P.kind === 'sudoku') {
+      box.className = 'sudoku';
+      box.innerHTML = P.cur.map((v, i) => `<button type="button" data-i="${i}" class="${P.board[i] ? 'fix' : ''}${i === P.sel ? ' sel' : ''}${Math.floor(i / 9) % 3 === 2 && Math.floor(i / 9) < 8 ? ' bb' : ''}${i % 9 % 3 === 2 && i % 9 < 8 ? ' br' : ''}">${v || ''}</button>`).join('');
+      for (const b of box.querySelectorAll('button')) b.onclick = () => { const i = +b.dataset.i; if (!P.board[i]) { P.sel = i; renderPuzzle(); } };
+    } else {
+      box.className = 'slide';
+      box.innerHTML = P.cur.map((v) => `<button type="button" data-v="${v}" class="${v ? '' : 'empty'}">${v || ''}</button>`).join('');
+      for (const b of box.querySelectorAll('button')) b.onclick = () => slideMove(+b.dataset.v);
+    }
+  }
+  function slideMove(v) {
+    const P = curPuzzle; if (!P || P.kind !== 'slide') return;
+    const nb = MPRules.slideNext(P.cur, v); if (!nb) return;
+    P.cur = nb; P.moves.push(v); renderPuzzle();
+    if (nb.join() === '1,2,3,4,5,6,7,8,0') submitPuzzle();
+  }
+  addEventListener('keydown', (e) => {
+    const P = curPuzzle; if (!P || $('puzzle').hidden) return;
+    if (P.kind === 'sudoku' && P.sel >= 0) {
+      if (/^[1-9]$/.test(e.key)) { P.cur[P.sel] = +e.key; renderPuzzle(); e.preventDefault(); }
+      else if (e.key === '0' || e.key === 'Backspace' || e.key === 'Delete') { P.cur[P.sel] = 0; renderPuzzle(); e.preventDefault(); }
+      else if (e.key.startsWith('Arrow')) { const d = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -9, ArrowDown: 9 }[e.key]; let i = P.sel; do { i += d; } while (i >= 0 && i < 81 && P.board[i]); if (i >= 0 && i < 81) { P.sel = i; renderPuzzle(); } e.preventDefault(); }
+      else if (e.key === 'Enter') submitPuzzle();
+    } else if (P.kind === 'slide' && e.key.startsWith('Arrow')) { // 방향키: 빈칸 쪽으로 옆 칸을 밀기
+      const z = P.cur.indexOf(0), zr = Math.floor(z / 3), zc = z % 3;
+      const from = { ArrowUp: [zr + 1, zc], ArrowDown: [zr - 1, zc], ArrowLeft: [zr, zc + 1], ArrowRight: [zr, zc - 1] }[e.key];
+      if (from[0] >= 0 && from[0] < 3 && from[1] >= 0 && from[1] < 3) slideMove(P.cur[from[0] * 3 + from[1]]);
+      e.preventDefault();
+    }
+  });
   function submitPuzzle() {
-    if (!curPuzzle) return;
-    const ans = $('pzIn').value.trim();
-    if (!ans) { $('pzMsg').textContent = '답을 입력해 주세요'; return; }
-    if (ONLINE) { ws.send(JSON.stringify({ t: 'answer', id: curPuzzle.id, answer: ans })); return; }
-    if (!OFF.useAction(OFF_ME)) return puzzleResult(false, '오늘 행동력을 다 썼어요 (자정에 다시 10)');
-    if (!MPRules.sameAnswer(ans, curPuzzle.local.answer)) { offSync(); return puzzleResult(false, '틀렸어요. 다시 도전하려면 행동력 1이 들어요'); }
-    offSolved.add(curPuzzle.id); store('mp2026.solved', [...offSolved]);
-    const r = OFF.puzzleReward(OFF_ME, curPuzzle.terr);
+    const P = curPuzzle; if (!P) return;
+    if (P.kind === 'sudoku' && P.cur.some((v) => !v)) { $('pzMsg').textContent = '빈칸을 모두 채워 주세요'; $('pzMsg').className = 'msg warn'; return; }
+    if (ONLINE) { ws.send(JSON.stringify(P.kind === 'sudoku' ? { t: 'answer', id: P.id, grid: P.cur } : { t: 'answer', id: P.id, moves: P.moves })); return; }
+    const right = P.kind === 'sudoku' ? MPRules.checkSudoku(P.board, P.cur) : MPRules.checkSlide(P.board, P.moves);
+    if (!right) return puzzleResult(false, '아직 틀린 칸이 있어요');
+    const r = OFF.puzzleReward(OFF_ME, P.terr, null, DAY);
     offSync();
-    puzzleResult(true, r.kind === 'claim' ? '정답! 영토를 점령했어요' : r.kind === 'army' ? `정답! 병력 +${r.army}` : '정답!');
+    puzzleResult(true, r.kind === 'claim' ? '정답! 영토를 점령했어요' : r.kind === 'army' ? `정답! 병력 +${r.army}` : '정답!', true);
   }
-  function puzzleResult(ok, text) {
+  function puzzleResult(ok, text, done) {
     $('pzMsg').textContent = text; $('pzMsg').className = 'msg ' + (ok ? 'good' : 'warn');
-    if (ok) { curPuzzle = null; setTimeout(() => { $('puzzle').hidden = true; }, 1300); toast(text); }
+    if (ok || done) { curPuzzle = null; clearInterval(pzTimer); setTimeout(() => { $('puzzle').hidden = true; }, ok ? 1300 : 2200); toast(text); }
   }
+
   $('pzSend').addEventListener('click', submitPuzzle);
-  $('pzIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPuzzle(); });
-  $('pzClose').addEventListener('click', () => { $('puzzle').hidden = true; curPuzzle = null; });
+  $('pzClose').addEventListener('click', () => { // 그만두기: 행동력은 이미 씀
+    if (curPuzzle && !confirm('퍼즐을 그만둘까요? 쓴 행동력 1은 돌아오지 않아요.')) return;
+    if (curPuzzle && ONLINE && netOn) ws.send(JSON.stringify({ t: 'answer', id: curPuzzle.id, giveUp: true }));
+    $('puzzle').hidden = true; curPuzzle = null; clearInterval(pzTimer);
+  });
 
   // ------------------------------------------------------------ 루프
   let dpr = 1, vw = 0, vh = 0;

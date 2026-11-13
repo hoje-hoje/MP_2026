@@ -25,7 +25,11 @@
     maxAttackers: 2,               // 한 전투 시간에 한 나라에 선전포고할 수 있는 나라 수
     capitalMoveCost: 1000, capitalMoveCooldownH: 24, // 천도
     actionsPerDay: 10,             // 하루 행동력 (점령·퍼즐)
-    puzzleArmy: 10,                // 퍼즐 1문제 병력
+    puzzleArmy: 10,                // 우리 영토 제단 퍼즐 1문제 병력 (숫자는 나중에)
+    maxMembersEarly: 6,            // 1~2일차 나라 인원 (3일차부터 제한 없음)
+    claimPerDay: 5, claimFreeDay: 5, claimStartDay: 2, // 주인 없는 땅: 2일차부터, 하루 5곳, 5일차부터 제한 없음
+    joinBanH: 24,                  // 나가거나 내보내진 사람은 24시간 동안 가입 불가
+    sudokuSec: 300, slideSec: 180, sudokuGivens: 46, // 퍼즐 시간 제한(초), 스도쿠 쉬운 난이도(처음 보이는 칸 수)
     // 영지 (나라 공용 저장소)
     woodPerTree: 2,                // 나무 1그루 목재
     price: { floor: 20, wall: 60, trap: 150 }, // 하늘 거래소 가격 (코인, 1개)
@@ -177,13 +181,30 @@
       n.name = name;
       return { ok: true, nation: n };
     }
-    joinNation(key, playerName, code) {
+    joinNation(key, playerName, code, maxMembers) {
       if (this.nationOfPlayer(key)) return { ok: false, err: '이미 나라에 속해 있어요' };
       const n = this.alive().find((x) => x.code === String(code || '').toUpperCase().trim());
       if (!n) return { ok: false, err: '그런 초대 코드가 없어요' };
-      if (n.members.length >= NUM.maxMembers) return { ok: false, err: `그 나라는 ${NUM.maxMembers}명이 다 찼어요` };
+      const cap = maxMembers == null ? NUM.maxMembersEarly : maxMembers;
+      if (n.members.length >= cap) return { ok: false, err: `그 나라는 ${cap}명이 다 찼어요 (3일차부터 인원 제한 없음)` };
       n.members.push(key); n.memberNames = n.memberNames || {}; n.memberNames[key] = playerName;
       return { ok: true, nation: n };
+    }
+    // 나라 나가기: 왕은 왕을 넘긴 뒤에만. 혼자 남은 왕이 나가면 나라 해체 (영토는 주인 없는 땅)
+    leaveNation(key) {
+      const n = this.nationOfPlayer(key); if (!n) return { ok: false, err: '나라에 속해 있지 않아요' };
+      if (n.king === key && n.members.length > 1) return { ok: false, err: '왕은 다른 팀원에게 왕을 넘긴 뒤에 나갈 수 있어요' };
+      n.members = n.members.filter((k) => k !== key);
+      if (!n.members.length) { for (const t of this.territoriesOf(n.id)) delete this.s.owner[t]; this.destroy(n); return { ok: true, nation: n, disbanded: true }; }
+      return { ok: true, nation: n };
+    }
+    // 왕이 팀원 내보내기 (idx: 국민 순번)
+    kick(nid, kingKey, idx) {
+      const n = this.nation(nid); const key = n ? n.members[idx | 0] : null;
+      if (!n || n.king !== kingKey) return { ok: false, err: '왕만 내보낼 수 있어요' };
+      if (!key || key === kingKey) return { ok: false, err: '그 사람은 내보낼 수 없어요' };
+      n.members = n.members.filter((k) => k !== key);
+      return { ok: true, nation: n, key };
     }
     transferKing(nid, fromKey, toIdx) {
       const n = this.nation(nid);
@@ -196,16 +217,26 @@
     refreshActions(n, dayKey) { if (dayKey && n.actionDay !== dayKey) { n.actionDay = dayKey; n.actions = NUM.actionsPerDay; } }
 
     // 중립 영토 점령 (나중에 수학 퍼즐을 맞혀야 호출)
-    claim(nid, tid, dayKey, free) {
+    // 하루 점령 제한 확인 (day: 게임 일차). 2일차부터, 5일차부터 제한 없음
+    claimBlock(n, day, dayKey) {
+      if (day != null && day < NUM.claimStartDay) return `주인 없는 땅 점령은 ${NUM.claimStartDay}일차부터예요`;
+      if (day != null && day >= NUM.claimFreeDay) return null;
+      const c = n.claims && n.claims.day === dayKey ? n.claims.n : 0;
+      if (c >= NUM.claimPerDay) return `오늘은 주인 없는 땅을 ${NUM.claimPerDay}곳까지 점령했어요 (${NUM.claimFreeDay}일차부터 제한 없음)`;
+      return null;
+    }
+    claim(nid, tid, dayKey, free, day) {
       const n = this.nation(nid), t = this.t[tid];
       if (!n || n.dead || !t) return { ok: false, err: '나라나 영토가 없어요' };
       this.refreshActions(n, dayKey);
+      const blk = this.claimBlock(n, day, dayKey); if (blk) return { ok: false, err: blk };
       if (this.s.gone[tid]) return { ok: false, err: '균열에 삼켜진 땅이에요' };
       if (this.s.owner[tid]) return { ok: false, err: '이미 주인이 있는 땅이에요' };
       if (!this.touches(nid, tid)) return { ok: false, err: '우리 땅과 붙어 있는 곳만 점령할 수 있어요' };
       if (!free && n.actions <= 0) return { ok: false, err: '오늘 행동력을 다 썼어요' };
       if (!free) n.actions -= 1;
       this.s.owner[tid] = nid;
+      n.claims = n.claims && n.claims.day === dayKey ? n.claims : { day: dayKey, n: 0 }; n.claims.n++;
       return { ok: true };
     }
 
@@ -217,13 +248,12 @@
       if (n.actions <= 0) return false;
       n.actions -= 1; return true;
     }
-    puzzleReward(nid, tid, dayKey) {
+    puzzleReward(nid, tid, dayKey, day) {
       const n = this.nation(nid); if (!n) return { kind: 'none' };
       const own = this.s.owner[tid];
-      if (!own && this.touches(nid, tid)) { this.claim(nid, tid, dayKey, true); return { kind: 'claim' }; }
+      if (!own && this.touches(nid, tid)) { const r = this.claim(nid, tid, dayKey, true, day); return r.ok ? { kind: 'claim' } : { kind: 'none', err: r.err }; }
       if (own === nid) {
-        const extra = n.members.length > 4 ? 0.5 : 1; // 5·6번째 국민이 있으면 보상 절반 (단순화: 나라 전체)
-        const army = Math.round(NUM.puzzleArmy * extra);
+        const army = NUM.puzzleArmy;
         n.army += army; return { kind: 'army', army };
       }
       return { kind: 'none' };
@@ -475,6 +505,16 @@
     if (t.region) return `${t.region} ${a}`;
     const b = ['', '', '동', '서', '남', '북'][(t.id * 13) % 6]; return a + b + SUFFIX[t.ring];
   }
+  // 지도 전체 이름 정하기: 같은 이름이 나오면 뒤에 동·서·남·북·2… 를 붙여 모두 다르게 (번호 순서라 화면·서버 같음)
+  function nameAll(territories) {
+    const used = new Set(), out = {};
+    for (const t of territories.slice().sort((x, y) => x.id - y.id)) {
+      const base = terrName(t); let nm = base;
+      for (let k = 0; used.has(nm); k++) nm = base + ([' 동', ' 서', ' 남', ' 북'][k] || ' ' + (k - 2));
+      used.add(nm); out[t.id] = nm;
+    }
+    return out;
+  }
   // 하늘 포털 자리: 수도 후보 영토는 지도에 정해진 자리, 그 밖의 영토(천도한 수도 등)는 제단 위쪽의 걸을 수 있는 칸
   const PORTAL_OFFS = [[0, -3], [0, 3], [-3, -2], [3, -2], [-3, 2], [3, 2], [0, -4], [0, 4], [-4, 0], [4, 0]];
   function portalSpot(t, tileAt) {
@@ -482,6 +522,45 @@
     for (const [dx, dy] of PORTAL_OFFS) { const x = t.altar[0] + dx, y = t.altar[1] + dy, k = tileAt(x, y); if ((k === T.GRASS || k === T.FOREST || k === T.SAND) && !treeKind(k, x, y) && (tileAt(x, y + 1) === T.GRASS || tileAt(x, y + 1) === T.SAND || tileAt(x, y + 1) === T.FOREST)) return [x, y]; }
     return [t.altar[0], t.altar[1] - 2];
   }
+  // ------------------------------------------------------------ 제단 퍼즐: 스도쿠 · 슬라이딩
+  const shuffle = (a, rnd = Math.random) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  // 스도쿠 9×9: 꽉 찬 판을 만들고 givens 칸만 남김. 답은 '규칙에 맞고 처음 칸과 같으면' 정답 (답이 여럿이어도 됨)
+  function genSudoku(givens = NUM.sudokuGivens, rnd = Math.random) {
+    const g = new Array(81).fill(0);
+    const ok = (i, v) => { const r = Math.floor(i / 9), c = i % 9, br = r - r % 3, bc = c - c % 3; for (let k = 0; k < 9; k++) { if (g[r * 9 + k] === v || g[k * 9 + c] === v || g[(br + Math.floor(k / 3)) * 9 + bc + k % 3] === v) return false; } return true; };
+    const fill = (i) => { if (i === 81) return true; for (const v of shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9], rnd)) if (ok(i, v)) { g[i] = v; if (fill(i + 1)) return true; g[i] = 0; } return false; };
+    fill(0);
+    const keep = new Set(shuffle([...Array(81).keys()], rnd).slice(0, givens));
+    return g.map((v, i) => (keep.has(i) ? v : 0));
+  }
+  function checkSudoku(puzzle, ans) {
+    if (!Array.isArray(ans) || ans.length !== 81) return false;
+    const a = ans.map((v) => v | 0);
+    if (a.some((v, i) => v < 1 || v > 9 || (puzzle[i] && puzzle[i] !== v))) return false;
+    for (let k = 0; k < 9; k++) {
+      const row = new Set(), col = new Set(), box = new Set();
+      for (let j = 0; j < 9; j++) { row.add(a[k * 9 + j]); col.add(a[j * 9 + k]); box.add(a[(Math.floor(k / 3) * 3 + Math.floor(j / 3)) * 9 + (k % 3) * 3 + j % 3]); }
+      if (row.size !== 9 || col.size !== 9 || box.size !== 9) return false;
+    }
+    return true;
+  }
+  // 슬라이딩 퍼즐 3×3 (0 = 빈칸): 맞춘 상태에서 무작위로 움직여 섞음 → 항상 풀 수 있음
+  const SLIDE_DONE = [1, 2, 3, 4, 5, 6, 7, 8, 0];
+  const slideNext = (b, tile) => { const z = b.indexOf(0), i = b.indexOf(tile); if (i < 0 || tile === 0) return null; const zr = Math.floor(z / 3), zc = z % 3, r = Math.floor(i / 3), c = i % 3; if (Math.abs(zr - r) + Math.abs(zc - c) !== 1) return null; const nb = b.slice(); nb[z] = tile; nb[i] = 0; return nb; };
+  function genSlide(steps = 60, rnd = Math.random) {
+    let b = SLIDE_DONE.slice(), last = -1;
+    for (let k = 0; k < steps; k++) { const z = b.indexOf(0), zr = Math.floor(z / 3), zc = z % 3; const opts = [[zr - 1, zc], [zr + 1, zc], [zr, zc - 1], [zr, zc + 1]].filter(([r, c]) => r >= 0 && r < 3 && c >= 0 && c < 3).map(([r, c]) => b[r * 3 + c]).filter((t) => t !== last); const t = opts[Math.floor(rnd() * opts.length)]; b = slideNext(b, t); last = t; }
+    if (b.join() === SLIDE_DONE.join()) return genSlide(steps + 1, rnd);
+    return b;
+  }
+  // moves: 움직인 숫자 칸들 (빈칸 옆 칸만 움직일 수 있음)
+  function checkSlide(start, moves) {
+    if (!Array.isArray(moves) || moves.length > 2000) return false;
+    let b = start.slice();
+    for (const t of moves) { const nb = slideNext(b, t | 0); if (!nb) return false; b = nb; }
+    return b.join() === SLIDE_DONE.join();
+  }
+
   // 금광 기본 위치: 영토마다 1곳. 제단에서 4칸 이상, 저장소 자리에서 3칸 이상 떨어진 걸을 수 있는 칸
   function mineSpot(t, tileAt, terrAt) {
     const st = t.capitalCandidate ? storageSpot(t, tileAt) : null;
@@ -495,5 +574,5 @@
     }
     return null;
   }
-  return { World, NUM, FRONTS, frontName, terrName, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { World, NUM, FRONTS, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
