@@ -97,7 +97,11 @@ const MAP = JSON.parse(fs.readFileSync(STATIC['/world.json'], 'utf8'));
 const TERR = new Uint16Array(Buffer.from(MAP.territory_u16le_b64, 'base64').buffer.slice(0));
 const terrAtPx = (x, y) => { const tx = Math.floor(x / 32), ty = Math.floor(y / 32); if (tx < 0 || ty < 0 || tx >= MAP.width || ty >= MAP.height) return -1; const v = TERR[ty * MAP.width + tx]; return v === 65535 ? -1 : v; };
 const world = new World(MAP, state.world || null);
-const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT } = require('../client/rules.js');
+const MPRules = require('../client/rules.js');
+const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT } = MPRules;
+const MPRulesPortal = (t) => MPRules.portalSpot(t, tileAt);
+for (const t of MAP.territories) world.t[t.id].name = MPRules.terrName(t); // 알림에 쓰는 영토 이름
+world.tileTerr = (i) => terrAtTile(i % MAP.width, Math.floor(i / MAP.width)); // 영역이 넘어갈 때 그 땅의 설치물도 같이
 // ---- 영지: 지형·저장소·설치물
 const TERRAIN = Buffer.from(MAP.terrain_b64, 'base64');
 // 관리자가 '나무·산 없애기'로 비운 칸 (산 → 풀밭, 나무 없음)
@@ -125,6 +129,10 @@ function frontsFor(attNid, tid) {
   return [1 / 6, 1 / 2, 5 / 6].map((k) => border[Math.min(border.length - 1, Math.floor(border.length * k))]);
 }
 function storageOf(n) { return n && world.t[n.capital] ? (n.storePos || storageSpot(world.t[n.capital], tileAt)) : null; }
+// 저장소 입구 전부 (수도 옆 본 저장소 + 빼앗은 땅·옛 수도에 남은 입구). 재료는 하나로 통합
+function storesOf(n) { if (!n || n.dead) return []; const main = storageOf(n); return (main ? [main] : []).concat((n.extraStores || []).filter((p) => world.ownerOf(terrAtTile(p[0], p[1])) === n.id)); }
+const pubNations = () => { const o = world.publicNations(); for (const n of world.alive()) if (o[n.id]) o[n.id].stores = storesOf(n); return o; };
+const nearStore = (s, n, r = 2) => storesOf(n).some((p) => nextTo(s, p[0], p[1], r));
 // 금광 위치: 옮겼으면 그 자리, 아니면 기본 자리
 const MINE_DEF = {};
 function mineOf(tid) { if (world.s.mines[tid]) return world.s.mines[tid]; if (!(tid in MINE_DEF)) MINE_DEF[tid] = world.t[tid] ? mineSpot(world.t[tid], tileAt, terrAtTile) : null; return MINE_DEF[tid]; }
@@ -185,6 +193,21 @@ function gameClock() { const c = state.clock || {}; return c.mode === 'manual' ?
 const clockKey = (c) => (c.day - 1) * 3 + SLOTS.indexOf(c.slot);
 const fromKey = (k) => ({ day: Math.floor(k / 3) + 1, slot: SLOTS[k % 3] });
 const gameDayKey = () => 'D' + gameClock().day; // 하루 단위(행동력·금광·체포)는 게임 날짜 기준
+// 전투 시간 번호: 일차×3 + (아침0·점심1·밤2). 선전포고는 다음 전투 시간에 들어가는데,
+// 실제 시계일 때 그 전투 30분 전이 지났으면 그다음 전투 시간으로 넘어감
+const slotIdx = (day, slot) => day * 3 + SLOTS.indexOf(slot);
+function battleSlotFor() {
+  const c = gameClock();
+  let idx = c.slot === 'morning' ? slotIdx(c.day, 'lunch') : c.slot === 'lunch' ? slotIdx(c.day, 'night') : slotIdx(c.day + 1, 'lunch');
+  if (!c.manual) {
+    const k = new Date(Date.now() + 9 * 3600e3), mins = k.getUTCHours() * 60 + k.getUTCMinutes();
+    const at = SLOTS[idx % 3] === 'lunch' ? 13 * 60 : 22 * 60;
+    const left = (at - mins + 1440) % 1440;
+    if (left < 30) idx = SLOTS[idx % 3] === 'lunch' ? idx + 1 : idx + 2;
+  }
+  return idx;
+}
+function slotLabel(idx) { const d = Math.floor(idx / 3), c = gameClock(); const when = d === c.day ? '오늘' : d === c.day + 1 ? '내일' : `${d}일차`; return `${when} ${SLOTS[idx % 3] === 'lunch' ? '점심 1시' : '밤 10시'}`; }
 function nextSlotLabel() { const c = gameClock(); return c.slot === 'morning' ? '오늘 점심 1시' : c.slot === 'lunch' ? '오늘 밤 10시' : '내일 점심 1시'; }
 const FOUNDING_LAST_DAY = process.env.FOUNDING_LAST_DAY || '2026-12-15'; // 건국은 D2(12/15)까지
 const foundingOpen = () => state.settings.founding === 'open' ? true : state.settings.founding === 'closed' ? false : testMode() || gameClock().day <= 2;
@@ -229,7 +252,8 @@ const jailed = (acc) => (acc.jailUntil || 0) > Date.now();
 function sendMeta(s) { const mm = { t: 'meta', p: meta(s) }; for (const o of online.values()) if (o === s || o.known.has(s.id)) send(o.ws, mm); }
 function capitalPos(acc, token) { // 그 사람 나라 수도 포털 앞 (나라 없으면 null)
   const n = world.nationOfPlayer(token); const t = n && world.t[n.capital];
-  return t ? { x: t.portal[0] * 32 + 16, y: (t.portal[1] + 1) * 32 + 16, scene: 'ground', room: null } : null;
+  const pt = t && MPRulesPortal(t);
+  return t ? { x: pt[0] * 32 + 16, y: (pt[1] + 1) * 32 + 16, scene: 'ground', room: null } : null;
 }
 const JAIL_POS = { x: 7 * 32 + 16, y: 5 * 32 + 16, scene: 'sky', room: 'jail' };
 function placeAt(s, pos) { if (!pos) return; Object.assign(s, { x: pos.x, y: pos.y, scene: pos.scene, room: pos.room, moved: true }); Object.assign(s.acc, pos); dirty = true; send(s.ws, { t: 'warp', pos }); }
@@ -266,7 +290,7 @@ wss.on('connection', (ws) => {
       send(ws, {
         t: 'welcome', id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? JAIL_POS : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: arrestsToday(acc), jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
-        view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
+        view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
         roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
@@ -295,7 +319,7 @@ wss.on('connection', (ws) => {
           if (trapN && (!myN || myN.id !== trapN)) { // 덫: 3초 동안 못 움직임
             delete world.s.traps[i]; s.acc.stunUntil = Date.now() + 3000; dirty = true;
             sendTrap(trapN, i, false); send(ws, { t: 'stun', ms: 3000, text: '덫에 걸렸어요! 3초 동안 못 움직여요' });
-            notifyNation(trapN, `🪤 덫에 ${myN ? myN.name + '의 ' : ''}${s.acc.name}이(가) 걸렸어요! (${world.t[terrAtTile(tx, ty)] ? terrAtTile(tx, ty) + '번 영토' : ''})`);
+            notifyNation(trapN, `🪤 덫에 ${myN ? myN.name + '의 ' : ''}${s.acc.name}이(가) 걸렸어요! (${world.t[terrAtTile(tx, ty)] ? world.t[terrAtTile(tx, ty)].name : ''})`);
           }
         }
         { const nd = m.dir < 0 ? -1 : 1, nf = Math.max(0, Math.min(3, m.f | 0)), nm = m.moving ? 1 : 0; if (s.x !== x || s.y !== y || s.dir !== nd || s.face !== nf || s.moving !== nm || s.scene !== scene || s.room !== room) s.moved = true;
@@ -389,54 +413,69 @@ wss.on('connection', (ws) => {
         const r = world.claim(n.id, t.id, gameDayKey());
         if (!r.ok) return send(ws, { t: 'err', text: r.err });
         dirty = true; broadcastOwners(); sendViews([n.id]);
-        send(ws, { t: 'ok', text: `${t.id}번 영토를 점령했어요` });
+        send(ws, { t: 'ok', text: `${t.name}을(를) 점령했어요` });
         break;
       }
-      case 'declare': case 'cancel': case 'defend': {
+      case 'declare': case 'defend': {
         const n = world.nationOfPlayer(s.token);
         if (!n) return;
-        if (n.king !== s.token) return send(ws, { t: 'err', text: '전쟁 결정은 왕만 할 수 있어요' });
-        const cb = m.t === 'cancel' ? world.s.battles.find((b) => b.id === (m.battle | 0) && b.att === n.id) : null;
-        const r = m.t === 'declare' ? world.declare(n.id, m.terr | 0, m.troops) : m.t === 'cancel' ? world.cancel(n.id, m.battle | 0) : world.defend(n.id, m.terr | 0, m.troops);
+        if (n.king !== s.token) return send(ws, { t: 'err', text: m.t === 'declare' ? '선전포고는 왕만 할 수 있어요' : '방어 배치는 왕만 할 수 있어요' });
+        const slot = world.s.curSlot = battleSlotFor();
+        const r = m.t === 'declare' ? world.declare(n.id, m.terr | 0, m.troops, slot) : world.defend(n.id, m.battle | 0, m.troops);
         if (!r.ok) return send(ws, { t: 'err', text: r.err });
         dirty = true;
-        if (m.t === 'declare') r.battle.f = frontsFor(n.id, r.battle.target); // 국경 위 A·B·C 전선 자리
-        const other = m.t === 'declare' ? r.battle.def : cb ? cb.def : null;
-        sendViews(other ? [n.id, other] : [n.id]);
-        if (m.t !== 'defend') broadcastOwners();
-        if (m.t === 'declare') notifyNation(other, `⚔ ${n.name}이(가) ${m.terr | 0}번 영토에 선전포고했어요! ${nextSlotLabel()} 전투`);
-        send(ws, { t: 'ok', text: m.t === 'declare' ? `선전포고 완료 · ${nextSlotLabel()}에 결과가 나와요` : m.t === 'cancel' ? '선전포고를 취소했어요' : '방어 배치 저장' });
+        if (m.t === 'declare') {
+          r.battle.f = frontsFor(n.id, r.battle.target); // 지도의 전선 진지 3곳
+          const D = world.nation(r.battle.def), when = slotLabel(r.battle.slot);
+          sendViews([n.id, r.battle.def]); broadcastOwners();
+          notifyNation(r.battle.def, `⚔ ${n.name}이(가) ${world.t[r.battle.target].name}에 선전포고했어요! ${when} 전투 · 전선 ${r.battle.F}곳 · 왕은 방어 배치를 정해 주세요`);
+          notifyNation(n.id, `⚔ ${D ? D.name : ''}에 선전포고했어요 · ${when} 전투 · 팀원은 전선 진지에서 충원할 수 있어요`);
+          return send(ws, { t: 'ok', text: `선전포고 완료 · ${when}에 결과가 나와요` });
+        }
+        sendViews([n.id]);
+        send(ws, { t: 'ok', text: '방어 배치 저장' });
+        break;
+      }
+      case 'moveCapital': { // 천도 (왕)
+        const n = world.nationOfPlayer(s.token); if (!n) return;
+        if (n.king !== s.token) return send(ws, { t: 'err', text: '천도는 왕만 할 수 있어요' });
+        const before = storageOf(n), old = n.capital;
+        const r = world.moveCapital(n.id, m.terr | 0, Date.now()); if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        if (before) { n.extraStores = (n.extraStores || []).concat([before]); delete n.storePos; } // 옛 저장소 건물은 입구로 남고, 본 저장소는 새 수도로
+        dirty = true; broadcastOwners(); sendViews([n.id]);
+        notifyNation(n.id, `🏰 천도! 수도가 ${world.t[old].name || old}에서 ${world.t[n.capital].name || n.capital}(으)로 옮겨졌어요`);
         break;
       }
       case 'resolveNow': { if (testMode()) resolveNight('test'); break; }
       case 'vaccinate': { // 백신 쓰기
         const n = world.nationOfPlayer(s.token); if (!n) return;
         const r = world.vaccinate(n.id, m.terr | 0); if (!r.ok) return send(ws, { t: 'err', text: r.err });
-        dirty = true; sendViews([n.id]); broadcastOwners(); notifyNation(n.id, `💉 ${s.acc.name}님이 ${m.terr | 0}번 영토에 백신을 썼어요 (이번 균열에서 안전)`);
+        dirty = true; sendViews([n.id]); broadcastOwners(); notifyNation(n.id, `💉 ${s.acc.name}님이 ${(world.t[m.terr | 0] || {}).name}에 백신을 썼어요 (이번 균열에서 안전)`);
         break;
       }
       case 'defaultDef': { // 기본 방어 비율 (왕)
         const n = world.nationOfPlayer(s.token); if (!n) return;
         if (n.king !== s.token) return send(ws, { t: 'err', text: '기본 방어는 왕만 정할 수 있어요' });
         const r = world.setDefault(n.id, m.ratio); if (!r.ok) return send(ws, { t: 'err', text: r.err });
-        dirty = true; sendViews([n.id]); send(ws, { t: 'ok', text: `기본 방어 비율 저장: A ${n.defaultDef[0]} · B ${n.defaultDef[1]} · C ${n.defaultDef[2]}` });
+        dirty = true; sendViews([n.id]); send(ws, { t: 'ok', text: `기본 방어 비율 저장: ${n.defaultDef.join(' : ')}` });
         break;
       }
       case 'intel': { // 첩보 쓰기: 공격해 온 나라 전선 하나 보기
         const n = world.nationOfPlayer(s.token); if (!n) return;
         const r = world.useIntel(n.id, m.battle | 0); if (!r.ok) return send(ws, { t: 'err', text: r.err });
-        dirty = true; sendViews([n.id]); notifyNation(n.id, `🔍 첩보: ${'ABC'[r.front]} 전선에 적 병력 ${r.troops}명 (${s.acc.name}님이 알아냄)`);
+        dirty = true; sendViews([n.id]); notifyNation(n.id, `🔍 첩보: ${MPRules.frontName(r.front)} 전선에 적 병력 ${r.troops}명 (${s.acc.name}님이 알아냄)`);
         break;
       }
-      case 'reinforce': { // 전선 근처에서 병력 충원
-        const n = world.nationOfPlayer(s.token); const b = world.s.battles.find((x) => x.id === (m.battle | 0)); const f = m.front | 0;
-        if (!n || !b || !b.f || !b.f[f]) return;
-        if (!nextTo(s, b.f[f][0], b.f[f][1], NUM.frontRange + 0.5)) return send(ws, { t: 'err', text: `${'ABC'[f]} 전선 가까이 가야 충원할 수 있어요` });
-        if (now() - (s.lastReinforce || 0) < 1500) return;
+      case 'reinforce': { // 공격팀 충원·빼기 (팀원 누구나, 전선 진지 근처에서 숫자 입력)
+        const n = world.nationOfPlayer(s.token); const b = world.s.battles.find((x) => x.id === (m.battle | 0));
+        if (!n || !b || !b.f) return;
+        if (!b.f.some((p) => nextTo(s, p[0], p[1], NUM.frontRange + 0.5))) return send(ws, { t: 'err', text: '전선 진지 가까이 가야 충원할 수 있어요' });
+        if (now() - (s.lastReinforce || 0) < 800) return;
         s.lastReinforce = now();
-        const r = world.reinforce(n.id, b.id, f); if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        const r = world.reinforce(n.id, b.id, m.front | 0, m.amount); if (!r.ok) return send(ws, { t: 'err', text: r.err });
         dirty = true; sendViews([n.id]);
-        send(ws, { t: 'ok', text: `${'ABC'[f]} 전선 ${r.side === 'att' ? '공격' : '방어'} 병력 +${r.amt} (지금 ${r.now})` });
+        send(ws, { t: 'ok', text: `${MPRules.frontName(m.front | 0)} 전선 ${r.amount > 0 ? '충원 +' + r.amount : '빼기 ' + r.amount} (지금 ${r.now}) · 충원 ${r.used}/${r.cap}` });
+        if (r.amount > 0) notifyNation(n.id, `🪖 ${s.acc.name}님이 ${MPRules.frontName(m.front | 0)} 전선에 병력 ${r.amount}명 충원 (${r.used}/${r.cap})`);
         break;
       }
       case 'redeem': { // 쿠폰: 한 번 쓰면 모두에게 사라진다
@@ -565,19 +604,19 @@ wss.on('connection', (ws) => {
         if (!e || e.k !== 'wall' || (n && n.id === e.n) || !nextTo(s, x, y)) return;
         if (m.t === 'breakStart') {
           s.breaking = { i, at: now() };
-          if (now() - (s.lastBreakAlert || 0) > 15000) { s.lastBreakAlert = now(); notifyNation(e.n, `🧱 방벽이 공격받고 있어요! (${terrAtTile(x, y)}번 영토 · ${n ? n.name + '의 ' : ''}${s.acc.name})`); }
+          if (now() - (s.lastBreakAlert || 0) > 15000) { s.lastBreakAlert = now(); notifyNation(e.n, `🧱 방벽이 공격받고 있어요! (${(world.t[terrAtTile(x, y)] || {}).name} · ${n ? n.name + '의 ' : ''}${s.acc.name})`); }
           return;
         }
         if (!s.breaking || s.breaking.i !== i || now() - s.breaking.at < NUM.wallBreakSec * 1000 - 300) return;
         s.breaking = null; delete world.s.tiles[i]; dirty = true; sendTile(i);
-        notifyNation(e.n, `🧱 ${terrAtTile(x, y)}번 영토의 방벽이 부서졌어요!`);
+        notifyNation(e.n, `🧱 ${(world.t[terrAtTile(x, y)] || {}).name}의 방벽이 부서졌어요!`);
         send(ws, { t: 'ok', text: '방벽을 부쉈어요' });
         break;
       }
       case 'stealStart': case 'steal': { // 적 저장소 털기: 3초 꾹 → 들 수 있는 만큼
         const n = world.nationOfPlayer(s.token), V = world.nation(String(m.nid || ''));
         if (!n || !V || V.dead || V.id === n.id) return;
-        const spot = storageOf(V); if (!spot || !nextTo(s, spot[0], spot[1], 2)) return send(ws, { t: 'err', text: '저장소 바로 옆에서만 털 수 있어요' });
+        if (!nearStore(s, V)) return send(ws, { t: 'err', text: '저장소 입구 바로 옆에서만 털 수 있어요' });
         if (s.acc.carry) return send(ws, { t: 'err', text: '이미 훔친 걸 들고 있어요. 우리 저장소에 먼저 넣으세요' });
         s.acc.stoleAt = s.acc.stoleAt || {};
         const wait = (s.acc.stoleAt[V.id] || 0) + 30 * 60e3 - Date.now();
@@ -599,7 +638,7 @@ wss.on('connection', (ws) => {
       }
       case 'deposit': { // 훔친 것 우리 저장소에 넣기
         const n = world.nationOfPlayer(s.token), c = s.acc.carry; if (!n || !c) return;
-        const spot = storageOf(n); if (!spot || !nextTo(s, spot[0], spot[1], 2)) return;
+        if (!nearStore(s, n)) return;
         n.coin += c.coin; n.wood = (n.wood || 0) + c.wood; s.acc.carry = null; dirty = true;
         sendViews([n.id]); sendMeta(s); send(ws, { t: 'carry', carry: null, text: `우리 저장소에 넣었어요: 코인 +${c.coin}${c.wood ? `, 목재 +${c.wood}` : ''}` });
         notifyNation(n.id, `💰 ${s.acc.name}님이 훔쳐 온 코인 ${c.coin}${c.wood ? `, 목재 ${c.wood}` : ''}을(를) 저장소에 넣었어요`);
@@ -709,7 +748,7 @@ setInterval(() => {
 
 // ------------------------------------------------------------ 나라·전투 방송
 function broadcastOwners() {
-  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: world.publicNations(), battles: world.publicBattles(), mines: world.s.mines, gone: Object.keys(world.s.gone).map(Number), riftNext: world.s.riftNext });
+  const msg = JSON.stringify({ t: 'owners', owners: world.s.owner, nations: pubNations(), battles: world.publicBattles(), mines: world.s.mines, gone: Object.keys(world.s.gone).map(Number), riftNext: world.s.riftNext });
   for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
 }
 function sendViews(nids) {
@@ -725,16 +764,23 @@ function notifyNation(nid, text) {
   const n = world.nation(nid); if (!n) return;
   for (const o of online.values()) if (n.members.includes(o.token)) send(o.ws, { t: 'ok', text });
 }
-// 지휘관 수: 그 영토(땅 위)에 마지막으로 서 있던 그 나라 국민
-function cmdCount(nid, tid) {
-  const n = world.nation(nid); if (!n) return 0;
-  let c = 0;
-  for (const key of n.members) { const a = state.accounts[key]; if (a && a.scene === 'ground' && a.x != null && terrAtPx(a.x, a.y) === tid) c++; }
-  return c;
-}
-function resolveNight(why) {
+function resolveNight(why, slot) {
   const before = Object.assign({}, world.s.owner);
-  const reports = world.resolveAll(cmdCount);
+  const reports = world.resolveAll(slot);
+  for (const r of reports) {
+    if (!r.lost.length) continue;
+    const A = world.nation(r.att), D = world.nation(r.def), lostSet = new Set(r.lost);
+    // 빼앗은 땅에 있던 저장소 입구는 공격팀의 입구가 됨
+    const take = (p) => p && lostSet.has(terrAtTile(p[0], p[1]));
+    if (D) {
+      const moved = [];
+      if (D.storePos && take(D.storePos)) { moved.push(D.storePos); delete D.storePos; }
+      D.extraStores = (D.extraStores || []).filter((p) => (take(p) ? (moved.push(p), false) : true));
+      if (A) A.extraStores = (A.extraStores || []).concat(moved);
+    }
+    // 멸망: 팀원은 유랑민
+    if (r.destroyed && r.members) for (const key of r.members) { const o = [...online.values()].find((x) => x.token === key); if (o) { send(o.ws, { t: 'ok', text: `💀 ${r.defName}이(가) 멸망했어요. 이제 유랑민이에요 — 하늘 유랑민 등록소에서 다른 나라로 귀화할 수 있어요` }); sendMeta(o); } }
+  }
   for (const tid of Object.keys(world.s.mines)) if (world.s.owner[tid] !== before[tid]) delete world.s.mines[tid]; // 주인이 바뀐 영토의 금광은 기본 자리로
   for (const n of world.alive()) if (n.storePos && world.ownerOf(terrAtTile(n.storePos[0], n.storePos[1])) !== n.id) delete n.storePos; // 저장소 자리를 빼앗기면 수도 옆으로
   state.lastResolved = `${gameClock().day}일차 ${SLOT_LABEL[gameClock().slot]}`; dirty = true; saveState();
@@ -754,7 +800,7 @@ const doomDay = () => state.doomDay || 5;
 const waveDay = (k) => doomDay() + 2 * k - 1; // 선포 다음 날부터 이틀마다 (기본 6·8·10·12·14일차)
 function clockMsg() { const c = gameClock(); return { t: 'clock', day: c.day, slot: c.slot, doomDay: doomDay(), lastDay: LAST_DAY, riftNext: world.s.riftNext, gone: Object.keys(world.s.gone).map(Number) }; }
 function onEnter(c) {
-  if (c.slot === 'lunch' || c.slot === 'night') resolveNight(`${c.day}일차 ${SLOT_LABEL[c.slot]}`);
+  if (c.slot === 'lunch' || c.slot === 'night') resolveNight(`${c.day}일차 ${SLOT_LABEL[c.slot]}`, slotIdx(c.day, c.slot));
   // 멸망 선포: 선포일 점심. 첫 균열 예고도 그때
   if (c.slot === 'lunch' && c.day === doomDay()) { broadcastNotice(`⚡ 신들이 선포했다: ${LAST_DAY}일차(12/28), 이 세계는 멸망한다. 내일부터 균열이 땅을 삼킨다.`); forecast(1); }
   if (c.slot !== 'morning') return;
@@ -784,6 +830,7 @@ function doWave(k) {
 }
 function broadcastNotice(text) { state.notice = { text, ts: Date.now() }; dirty = true; const msg = JSON.stringify({ t: 'notice', notice: state.notice }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); }
 function tickClock() {
+  world.s.curSlot = battleSlotFor();
   const cur = clockKey(gameClock());
   if (state.lastClockKey == null) state.lastClockKey = cur; // 처음 켤 때는 지난 일을 다시 하지 않음
   if (cur < state.lastClockKey) state.lastClockKey = cur; // 관리자가 되돌리면 그냥 맞춤

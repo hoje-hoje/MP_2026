@@ -254,6 +254,15 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   #tools button { font-size: 14px; padding: 0 10px; }
 }
 @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+
+.fronts.many { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px; }
+.fronts.many .front span { font-size: 12px; }
+.fronts input.low { outline: 3px solid #c22f53; }
+.fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 3px; margin: 4px 0; }
+.fgrid span, .fgrid button { display: flex; flex-direction: column; align-items: center; font-size: 12px; padding: 2px; border: 2px solid #e4dcc4; background: #fffdf8; min-height: 0; }
+.fgrid span i, .fgrid button i { font-style: normal; font-size: 10px; color: #8a7f9a; }
+.fgrid span.att { background: #ffe1e1; } .fgrid span.def { background: #dff0ff; }
+.fgrid.pick button[aria-pressed="true"] { outline: 3px solid #ffd34d; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -348,6 +357,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 <div class="r"><span>모양</span><button data-shape="1" type="button">1칸</button><button data-shape="h3" type="button">가로 3칸</button><button data-shape="v3" type="button">세로 3칸</button><button data-shape="s3" type="button">3×3</button></div>
 <div class="r" id="buildColors"></div></div>
 <div id="storeBox" class="modalbox" hidden><div class="panel card"><h2>📦 우리 저장소</h2><div id="storeBody"></div><div class="seg"><button id="storeBuild" type="button">설치 모드 켜기</button><button id="storeClose" type="button">닫기</button></div></div></div>
+<div id="reinBox" class="modalbox" hidden><div class="panel card"><h2>🪖 전선 진지</h2><div id="reinBody"></div><div class="seg"><button id="reinAdd" type="button">충원</button><button id="reinSub" type="button">빼기</button><button id="reinClose" type="button">닫기</button></div></div></div>
 <div id="shopBox" class="modalbox" hidden><div class="panel card"><h2>🛒 하늘 거래소</h2><div id="shopBody"></div><div class="seg"><button id="shopClose" type="button">닫기</button></div></div></div>
 <div id="coupon" hidden>
   <div class="panel card">

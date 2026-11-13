@@ -15,9 +15,15 @@
     startArmy: 50, startCoin: 1000,
     maxDeclare: 2,                 // 하룻밤 선전포고 최대
     maxMembers: 6,                 // 나라 인원 최대
-    supplyPer: 0.05, supplyMax: 0.4, // 보급선: 수도에서 영토 1개 건널 때마다 -5%, 최대 -40%
-    cmdPer: 0.10, cmdMax: 0.30,    // 지휘관 보너스: 그 영토에 서 있는 국민 1명당 +10%, 최대 +30%
-    lossLose: 0.5, lossWin: 0.25,  // 전투 손실
+    // 영역전 (블로토) — 규칙서 16장
+    minFrontPct: 0.2,              // 모든 전선에 (보낸 병력 ÷ 전선 수)의 20% 이상
+    defBonus: 1.1,                 // 방어 병력 1.1배, 같으면 방어 승
+    loserSurvive: 0.2,             // 진 전선은 20%만 살아 돌아옴 (이긴 쪽은 란체스터 √(이긴² − 진²))
+    lootPct: 0.1,                  // 걸린 재료 중 공격팀이 가져가는 몫 (나머지는 버려짐)
+    prisonerPct: 0.1,              // 방어 승리: 공격팀이 잃은 병력의 10%를 포로로
+    reinforcePct: 0.1,             // 공격팀 충원: 선전포고 병력의 10%까지 (모든 전선 합쳐)
+    maxAttackers: 2,               // 한 전투 시간에 한 나라에 선전포고할 수 있는 나라 수
+    capitalMoveCost: 1000, capitalMoveCooldownH: 24, // 천도
     actionsPerDay: 10,             // 하루 행동력 (점령·퍼즐)
     puzzleArmy: 10,                // 퍼즐 1문제 병력
     // 영지 (나라 공용 저장소)
@@ -59,13 +65,17 @@
   }
   const COLORS = ['#3d5fb8', '#c94a3c', '#277a58', '#8a4fc0', '#9a5f10', '#1f7f8f', '#b03a78', '#4f6b1f', '#5a4fc0', '#a0522d', '#2b6f9e', '#7a3fa0'];
   const teamColor = (n) => COLORS[((n | 0) - 1 + COLORS.length * 10) % COLORS.length];
-  const FRONTS = ['A', 'B', 'C'];
+  const FRONTS = ['A', 'B', 'C']; // 예전 3전선 (지금은 전선 수가 2k+1로 바뀜)
+  const frontName = (i) => (i < 26 ? String.fromCharCode(65 + i) : 'Z' + (i - 25));
 
   function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1, tiles: {}, traps: {}, chopped: {}, mines: {}, gone: {}, vax: {}, riftNext: null }; }
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const randCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
-  const clampTroops = (arr) => (Array.isArray(arr) && arr.length === 3) ? arr.map((v) => Math.max(0, Math.floor(+v || 0))) : null;
-  const sum = (a) => a[0] + a[1] + a[2];
+  const clampTroops = (arr, n = 3) => (Array.isArray(arr) && arr.length === n && n > 0 && n <= 99) ? arr.map((v) => Math.max(0, Math.min(1e7, Math.floor(+v || 0)))) : null;
+  const sum = (a) => (a || []).reduce((x, y) => x + (y || 0), 0);
+  // 전선마다 꼭 넣어야 하는 최소 병력 = (보낸 병력 ÷ 전선 수)의 20% (올림)
+  const minPerFront = (total, F) => (total > 0 ? Math.ceil(NUM.minFrontPct * total / F) : 0);
+  const okMin = (arr) => { const m = minPerFront(sum(arr), arr.length); return arr.every((v) => v >= m); };
 
   class World {
     constructor(map, state) {
@@ -75,6 +85,7 @@
       this.s = state || emptyState();
       for (const k of ['tiles', 'traps', 'chopped', 'mines', 'gone', 'vax']) this.s[k] = this.s[k] || {}; // 예전 저장 상태 호환 (mines: 옮긴 금광 위치)
       this._dist = {};
+      for (const b of this.s.battles || []) { if (!b.F) b.F = b.a.length; if (!b.ar) b.ar = b.a.map(() => 0); if (b.rd) { const D = this.s.nations[b.def]; if (D) D.army += sum(b.rd); delete b.rd; } } // 예전 3전선 전투 호환
     }
 
     // ---------------------------------------------------------- 조회
@@ -99,7 +110,14 @@
       }
       return d[to] == null ? 99 : d[to];
     }
-    supply(nid, tid) { const n = this.nation(nid); return Math.min(NUM.supplyMax, NUM.supplyPer * Math.max(0, this.distance(n.capital, tid) - 1)); }
+    // 여러 출발점에서 영역을 몇 번 건너야 닿는지 (공격팀 땅 → 방어팀 영역 순서 정하기)
+    distFrom(srcSet) {
+      const d = {}; const q = [];
+      for (const s0 of srcSet) { d[s0] = 0; q.push(s0); }
+      while (q.length) { const c = q.shift(); for (const nb of (this.t[c] ? this.t[c].neighbors : [])) if (d[nb] == null) { d[nb] = d[c] + 1; q.push(nb); } }
+      return d;
+    }
+    frontCount(nid) { return 2 * this.territoriesOf(nid).length + 1; } // 전선 수 = 영역 수 k → 2k+1
 
     // ---------------------------------------------------------- 나라
     capitalForTeam(team) {
@@ -213,62 +231,65 @@
 
     // ---------------------------------------------------------- 전투 (블로토)
     tonight(nid) { return this.s.battles.filter((b) => b.att === nid || b.def === nid); }
-    declaresLeft(nid) { return NUM.maxDeclare - this.s.battles.filter((b) => b.att === nid).length; }
+    // slot: 전투 시간 번호 (서버가 정함: 일차·점심/밤). 같은 전투 시간 안에서만 횟수를 셈
+    declaresLeft(nid, slot) { return NUM.maxDeclare - this.s.battles.filter((b) => b.att === nid && (slot == null || b.slot === slot)).length; }
 
-    declare(nid, tid, troops) {
+    declare(nid, tid, troops, slot) {
       const n = this.nation(nid), t = this.t[tid];
-      troops = clampTroops(troops);
-      if (!n || n.dead || !t || !troops) return { ok: false, err: '잘못된 요청이에요' };
+      if (!n || n.dead || !t) return { ok: false, err: '잘못된 요청이에요' };
       const def = this.s.owner[tid];
       if (!def) return { ok: false, err: '주인 없는 땅은 전투가 아니라 점령으로 가져와요' };
       if (def === nid) return { ok: false, err: '우리 땅이에요' };
-      if (!this.touches(nid, tid)) return { ok: false, err: '우리 땅과 붙어 있는 적 영토만 공격할 수 있어요' };
-      if (this.declaresLeft(nid) <= 0) return { ok: false, err: `이번 전투 선전포고는 ${NUM.maxDeclare}곳까지예요` };
-      if (this.s.battles.some((b) => b.target === tid)) return { ok: false, err: '그 땅은 이번 전투에 이미 다른 나라가 공격해요' };
+      if (this.s.gone[tid]) return { ok: false, err: '균열에 삼켜진 땅이에요' };
+      if (!this.touches(nid, tid)) return { ok: false, err: '우리 땅과 경계선이 붙은 적 영토만 공격할 수 있어요' };
+      const F = this.frontCount(def);
+      troops = clampTroops(troops, F);
+      if (!troops) return { ok: false, err: `전선 ${F}곳에 모두 병력을 정해 주세요` };
+      if (this.declaresLeft(nid, slot) <= 0) return { ok: false, err: `한 전투 시간에 선전포고는 ${NUM.maxDeclare}번까지예요` };
+      if (this.s.battles.some((b) => b.target === tid && b.slot === slot)) return { ok: false, err: '그 땅은 이번 전투에 이미 다른 나라가 공격해요' };
+      const atks = new Set(this.s.battles.filter((b) => b.def === def && b.slot === slot).map((b) => b.att));
+      if (!atks.has(nid) && atks.size >= NUM.maxAttackers) return { ok: false, err: `전쟁의 신의 가호: 그 나라는 이번 전투에 이미 ${NUM.maxAttackers}나라와 싸워요` };
       const total = sum(troops);
       if (total <= 0) return { ok: false, err: '병력을 1명 이상 보내야 해요' };
       if (total > n.army) return { ok: false, err: `병력이 모자라요 (보유 ${n.army})` };
+      if (!okMin(troops)) return { ok: false, err: `모든 전선에 최소 ${minPerFront(total, F)}명은 보내야 해요 (보낸 병력 ÷ 전선 수의 20%)` };
       n.army -= total;
-      const b = { id: this.s.nextBattle++, night: this.s.night, att: nid, def, target: tid, a: troops, d: null };
+      const b = { id: this.s.nextBattle++, night: this.s.night, slot, att: nid, def, target: tid, F, a: troops, ar: troops.map(() => 0), d: null };
       this.s.battles.push(b);
       return { ok: true, battle: b };
     }
-    cancel(nid, battleId) {
-      const i = this.s.battles.findIndex((b) => b.id === battleId && b.att === nid);
-      if (i < 0) return { ok: false, err: '취소할 선전포고가 없어요' };
-      this.nation(nid).army += sum(this.s.battles[i].a);
-      const D = this.nation(this.s.battles[i].def); if (D && this.s.battles[i].rd) D.army += sum(this.s.battles[i].rd); // 방어 충원은 돌려줌
-      this.s.battles.splice(i, 1);
-      return { ok: true };
-    }
-    // 기본 방어 비율: 방어 배치를 못 했을 때 이 비율로 자동 배치 (A·B·C 퍼센트)
+    // 기본 방어 비율: 방어 배치를 못 했을 때 이 비율로 자동 배치 (전선 수가 다르면 비율을 되풀이해서 씀)
     setDefault(nid, ratio) {
-      const n = this.nation(nid); const r = clampTroops(ratio);
-      if (!n || !r || sum(r) <= 0) return { ok: false, err: 'A·B·C 중 하나는 0보다 커야 해요' };
+      const n = this.nation(nid); const r = Array.isArray(ratio) && ratio.length >= 1 && ratio.length <= 99 ? ratio.map((v) => Math.max(0, Math.floor(+v || 0))) : null;
+      if (!n || !r || sum(r) <= 0) return { ok: false, err: '비율 중 하나는 0보다 커야 해요' };
       n.defaultDef = r; return { ok: true };
     }
-    // 전선 근처에서 병력 충원 (공격·방어 둘 다)
-    reinforce(nid, battleId, front) {
+    // 공격팀 충원·빼기 (팀원 누구나, 전선 근처에서): 선전포고 병력의 10%까지, 선전포고 때 병력은 못 뺌
+    reinforce(nid, battleId, front, amount) {
       const n = this.nation(nid), b = this.s.battles.find((x) => x.id === battleId);
-      if (!n || !b || front < 0 || front > 2) return { ok: false, err: '충원할 전투가 없어요' };
-      if (b.att !== nid && b.def !== nid) return { ok: false, err: '우리 나라 전투가 아니에요' };
-      const amt = Math.min(NUM.reinforce, n.army);
-      if (amt <= 0) return { ok: false, err: '저장소에 남은 병력이 없어요' };
-      n.army -= amt;
-      if (b.att === nid) b.a[front] += amt; else { b.rd = b.rd || [0, 0, 0]; b.rd[front] += amt; }
-      return { ok: true, amt, side: b.att === nid ? 'att' : 'def', now: b.att === nid ? b.a[front] : (b.d ? b.d[front] : 0) + b.rd[front] };
+      if (!n || !b || b.att !== nid) return { ok: false, err: '우리가 공격하는 전투에만 충원할 수 있어요' };
+      if (!(front >= 0 && front < b.F)) return { ok: false, err: '그런 전선이 없어요' };
+      amount = Math.trunc(+amount || 0); if (!amount) return { ok: false, err: '숫자를 적어 주세요' };
+      b.ar = b.ar || b.a.map(() => 0);
+      const cap = Math.floor(NUM.reinforcePct * sum(b.a)), used = sum(b.ar);
+      if (amount > 0) {
+        if (used + amount > cap) return { ok: false, err: `충원은 모든 전선 합쳐 ${cap}명까지예요 (남은 ${cap - used}명)` };
+        if (amount > n.army) return { ok: false, err: `나라 병력이 모자라요 (남은 ${n.army})` };
+      } else if (-amount > b.ar[front]) return { ok: false, err: `이 전선에서 뺄 수 있는 충원 병력은 ${b.ar[front]}명이에요 (선전포고 때 병력은 못 빼요)` };
+      n.army -= amount; b.ar[front] += amount;
+      return { ok: true, amount, now: b.a[front] + b.ar[front], used: sum(b.ar), cap };
     }
-    // 첩보: 공격해 온 나라의 전선 하나 병력 보기. 그 나라 전용 첩보 → 없으면 아무 나라용 첩보
+    // 첩보: 공격해 온 나라의 전선 하나 병력 보기 (방어할 때만). 그 나라 전용 첩보 → 없으면 아무 나라용 첩보
     useIntel(nid, battleId) {
       const n = this.nation(nid), b = this.s.battles.find((x) => x.id === battleId && x.def === nid);
       if (!n || !b) return { ok: false, err: '공격받는 전투에만 쓸 수 있어요' };
       b.rev = b.rev || [];
-      const left = [0, 1, 2].filter((f) => !b.rev.includes(f));
-      if (!left.length) return { ok: false, err: '세 전선을 다 알아냈어요' };
+      const left = b.a.map((_, f) => f).filter((f) => !b.rev.includes(f));
+      if (!left.length) return { ok: false, err: '모든 전선을 다 알아냈어요' };
       n.intel = n.intel || {};
       if ((n.intel[b.att] || 0) > 0) n.intel[b.att]--; else if ((n.intelAny || 0) > 0) n.intelAny--; else return { ok: false, err: '쓸 수 있는 첩보가 없어요' };
       const f = left[Math.floor(Math.random() * left.length)]; b.rev.push(f);
-      return { ok: true, front: f, troops: b.a[f] };
+      return { ok: true, front: f, troops: b.a[f] + ((b.ar || [])[f] || 0) };
     }
     // 균열: 백신 쓰기 (다음 웨이브 예고에 든 우리 영토 하나를 그 웨이브에서 지킴)
     vaccinate(nid, tid) {
@@ -280,6 +301,7 @@
       if (!(n.vaccine > 0)) return { ok: false, err: '백신이 없어요 (하늘 거래소)' };
       n.vaccine--; this.s.vax[tid] = rn.wave; return { ok: true };
     }
+    refund(b) { const A = this.nation(b.att), D = this.nation(b.def); if (A && !A.dead) A.army += sum(b.a) + sum(b.ar); if (D && !D.dead && b.d) D.army += sum(b.d); }
     // 균열 웨이브: 예고된 땅이 무너진다. 나라 수도와 백신 맞은 땅은 안전
     riftWave(wave, terrs) {
       const caps = new Set(this.alive().map((n) => n.capital)), fell = [], saved = [];
@@ -288,82 +310,123 @@
         if (caps.has(tid) || this.s.vax[tid] === wave) { saved.push(tid); continue; }
         this.s.gone[tid] = 1; fell.push({ tid, owner: this.s.owner[tid] || null }); delete this.s.owner[tid];
       }
-      this.s.battles = this.s.battles.filter((b) => { if (!this.s.gone[b.target]) return true; const A = this.nation(b.att), D = this.nation(b.def); if (A) A.army += sum(b.a); if (D) D.army += (b.d ? sum(b.d) : 0) + (b.rd ? sum(b.rd) : 0); return false; });
+      this.s.battles = this.s.battles.filter((b) => { if (!this.s.gone[b.target]) return true; this.refund(b); return false; });
       this.s.riftNext = null;
       return { fell, saved };
     }
-    publicBattles() { return this.s.battles.map((b) => ({ id: b.id, target: b.target, att: b.att, def: b.def, f: b.f || null })); }
-    defend(nid, tid, troops) {
+    publicBattles() { return this.s.battles.map((b) => ({ id: b.id, target: b.target, att: b.att, def: b.def, f: b.f || null, F: b.F, slot: b.slot })); }
+    // 방어 배치 (왕만 — 서버에서 확인): 막을 병력 수와 배치는 전투 전까지 몇 번이든 바꿀 수 있음
+    defend(nid, battleId, troops) {
       const n = this.nation(nid);
-      troops = clampTroops(troops);
-      const b = this.s.battles.find((x) => x.def === nid && x.target === tid);
-      if (!n || !b || !troops) return { ok: false, err: '방어할 전투가 없어요' };
+      const b = this.s.battles.find((x) => x.def === nid && x.id === battleId);
+      if (!n || !b) return { ok: false, err: '방어할 전투가 없어요' };
+      troops = clampTroops(troops, b.F);
+      if (!troops) return { ok: false, err: `전선 ${b.F}곳에 모두 병력을 정해 주세요` };
       const prev = b.d ? sum(b.d) : 0;
-      if (sum(troops) > n.army + prev) return { ok: false, err: `병력이 모자라요 (보유 ${n.army + prev})` };
+      if (sum(troops) > n.army + prev) return { ok: false, err: `병력이 모자라요 (쓸 수 있는 병력 ${n.army + prev})` };
+      if (!okMin(troops)) return { ok: false, err: `모든 전선에 최소 ${minPerFront(sum(troops), b.F)}명은 배치해야 해요 (막을 병력 ÷ 전선 수의 20%)` };
       n.army += prev - sum(troops);
       b.d = troops; n.lastDef = troops.slice();
       return { ok: true };
     }
+    // 자동 방어: 남은 병력을 아직 배치 안 한 전투 수로 나누고, 기본 비율로 전선에 나눈 뒤 최소치를 맞춤
+    autoDefense(D, b, pending) {
+      const left = pending.filter((x) => x.def === b.def && !x.d && !x._done).length || 1;
+      const pool = Math.floor(D.army / left), F = b.F;
+      const r0 = D.defaultDef && sum(D.defaultDef) > 0 ? D.defaultDef : [1];
+      const w = Array.from({ length: F }, (_, i) => r0[i % r0.length]);
+      let d = w.map((v) => Math.floor(pool * v / (sum(w) || 1)));
+      d[0] += pool - sum(d);
+      const m = minPerFront(pool, F);
+      for (let i = 0; i < F; i++) if (d[i] < m) { let need = m - d[i]; d[i] = m; while (need > 0) { let j = d.indexOf(Math.max(...d)); if (d[j] <= m) break; const k = Math.min(need, d[j] - m); d[j] -= k; need -= k; } }
+      D.army -= sum(d);
+      return d;
+    }
 
-    // 13시·22시: 모든 전투를 한 번에 처리. cmdCount(nid, tid) = 그 영토에 서 있는 그 나라 국민 수
-    resolveAll(cmdCount) {
+    // 13시·22시: 그 전투 시간의 전투를 한 번에 처리. slot 이 없으면 전부 처리 (테스트용)
+    resolveAll(slot) {
       const reports = [];
-      const pending = this.s.battles.slice();
-      this.s.battles = [];
+      const pending = this.s.battles.filter((b) => slot == null || b.slot == null || b.slot <= slot).sort((x, y) => x.id - y.id);
+      this.s.battles = this.s.battles.filter((b) => !pending.includes(b));
       for (const b of pending) {
         const A = this.nation(b.att), D = this.nation(b.def);
-        if (!A || A.dead || !D || D.dead || this.s.owner[b.target] !== b.def) { if (A && !A.dead) A.army += sum(b.a); if (D && !D.dead) D.army += (b.d ? sum(b.d) : 0) + (b.rd ? sum(b.rd) : 0); continue; }
+        if (!A || A.dead || !D || D.dead || this.s.owner[b.target] !== b.def) { this.refund(b); continue; }
+        const F = b.F, ar = b.ar || b.a.map(() => 0), aT = b.a.map((v, i) => v + ar[i]);
         let d = b.d, auto = false;
-        if (!d) {
-          // 방어 배치를 안 냈으면: 남은 병력을 이번 전투에 공격받는 수만큼 나눠, 지난 배치 비율(없으면 균등)로
-          const left = pending.filter((x) => x.def === b.def && !x.d && !x._done).length || 1;
-          const pool = Math.floor(D.army / left);
-          const r = D.defaultDef && sum(D.defaultDef) > 0 ? D.defaultDef : D.lastDef && sum(D.lastDef) > 0 ? D.lastDef : [1, 1, 1]; // 기본 방어 비율 > 지난 배치 > 균등
-          d = r.map((v) => Math.floor(pool * v / sum(r)));
-          d[0] += pool - sum(d);
-          D.army -= sum(d); auto = true;
-        }
-        if (b.rd) d = d.map((v, k) => v + b.rd[k]); // 전선 근처에서 충원한 방어 병력
+        if (!d) { d = this.autoDefense(D, b, pending); auto = true; }
         b._done = true;
-        const cA = Math.min(NUM.cmdMax, NUM.cmdPer * (cmdCount ? cmdCount(b.att, b.target) : 0));
-        const cD = Math.min(NUM.cmdMax, NUM.cmdPer * (cmdCount ? cmdCount(b.def, b.target) : 0));
-        const mA = 1 + cA - this.supply(b.att, b.target);
-        const mD = 1 + cD - this.supply(b.def, b.target);
-        const effA = b.a.map((v) => Math.round(v * mA * 10) / 10);
-        const effD = d.map((v) => Math.round(v * mD * 10) / 10);
-        const fronts = effA.map((v, i) => (v > effD[i] ? 'att' : 'def')); // 같으면 방어 승
-        const attWins = fronts.filter((f) => f === 'att').length >= 2;
-        const lossA = Math.ceil(sum(b.a) * (attWins ? NUM.lossWin : NUM.lossLose));
-        const lossD = Math.ceil(sum(d) * (attWins ? NUM.lossLose : NUM.lossWin));
-        A.army += sum(b.a) - lossA; D.army += sum(d) - lossD;
-        let merged = false;
-        if (attWins) {
-          this.s.owner[b.target] = b.att;
-          if (b.target === D.capital) { this.merge(A, D); merged = true; }
+        const effD = d.map((v) => Math.round(v * NUM.defBonus * 10) / 10);
+        const fronts = aT.map((v, i) => (v > effD[i] ? 'att' : 'def')); // 같으면 방어 승
+        const attWon = fronts.filter((f) => f === 'att').length, defWon = F - attWon;
+        const attWins = attWon * 2 > F;
+        // 병력 손실 (전선마다, 란체스터 제곱 법칙): 이긴 쪽 남는 병력 = √(이긴² − 진²), 진 쪽은 20%만 살아 돌아옴
+        let survA = 0, survD = 0;
+        for (let i = 0; i < F; i++) {
+          if (fronts[i] === 'att') { survA += Math.floor(Math.sqrt(Math.max(0, aT[i] ** 2 - effD[i] ** 2))); survD += Math.floor(d[i] * NUM.loserSurvive); }
+          else { survD += Math.min(d[i], Math.floor(Math.sqrt(Math.max(0, effD[i] ** 2 - aT[i] ** 2)) / NUM.defBonus)); survA += Math.floor(aT[i] * NUM.loserSurvive); }
         }
+        const lossA = sum(aT) - survA, lossD = sum(d) - survD;
+        A.army += survA; D.army += survD;
         const rep = {
-          id: b.id, night: b.night, target: b.target, att: b.att, def: b.def, attName: A.name, defName: D.name,
-          a: b.a, d, autoDef: auto, effA, effD, mA: Math.round(mA * 100) / 100, mD: Math.round(mD * 100) / 100,
-          fronts, winner: attWins ? 'att' : 'def', lossA, lossD, merged, capital: b.target === D.capital,
+          id: b.id, night: b.night, slot: b.slot, target: b.target, att: b.att, def: b.def, attName: A.name, defName: D.name, F,
+          a: aT, d, autoDef: auto, effA: aT, effD, fronts, attWon, defWon, winner: attWins ? 'att' : 'def', lossA, lossD,
+          capital: b.target === D.capital, lost: [], loot: null, prisoners: 0, destroyed: false, newCapital: null, members: null,
         };
+        if (attWins) {
+          // 잃는 영역 수 = ⌈방어팀 영역 수 × (공격이 이긴 전선 − 방어가 이긴 전선) ÷ 전선 수⌉
+          const mine = this.territoriesOf(D.id), k = mine.length;
+          const L = Math.min(k, Math.max(1, Math.ceil(k * (attWon - defWon) / F)));
+          // 순서: 선전포고한 영역 → 공격팀 땅(빼앗은 땅 포함)에서 가까운 영역 → 같으면 수도가 아닌 곳 먼저
+          const lost = [b.target]; this.s.owner[b.target] = A.id;
+          while (lost.length < L) {
+            const dist = this.distFrom(this.territoriesOf(A.id));
+            const cand = this.territoriesOf(D.id).sort((x, y) => (dist[x] ?? 99) - (dist[y] ?? 99) || (x === D.capital) - (y === D.capital) || x - y);
+            if (!cand.length) break; lost.push(cand[0]); this.s.owner[cand[0]] = A.id;
+          }
+          rep.lost = lost;
+          // 재료: 잃은 영역 비율만큼 걸리고, 그중 10%가 공격팀으로, 나머지는 버려짐
+          const share = lost.length / k, loot = {};
+          const take = (obj, key) => { const v = Math.floor((obj[key] || 0) * share); obj[key] = (obj[key] || 0) - v; return v; };
+          for (const key of ['coin', 'wood', 'vaccine']) { const v = take(D, key); const g = Math.floor(v * NUM.lootPct); A[key] = (A[key] || 0) + g; loot[key] = g; }
+          D.items = D.items || {}; A.items = A.items || {};
+          for (const key of ['floor', 'wall', 'trap']) { const v = take(D.items, key); const g = Math.floor(v * NUM.lootPct); A.items[key] = (A.items[key] || 0) + g; loot[key] = g; }
+          rep.loot = loot;
+          // 빼앗은 영역의 저장소 입구·설치물은 공격팀 것
+          for (const [ti, e] of Object.entries(this.s.tiles || {})) if (e.n === D.id && lost.includes(this.tileTerr ? this.tileTerr(+ti) : -1)) e.n = A.id;
+          if (this.territoriesOf(D.id).length === 0) { rep.destroyed = true; rep.members = D.members.slice(); this.destroy(D); }
+          else if (lost.includes(D.capital)) {
+            // 강제 천도: 남은 영역 중 공격팀에게서 가장 먼 곳
+            const dist = this.distFrom(this.territoriesOf(A.id));
+            const far = this.territoriesOf(D.id).sort((x, y) => (dist[y] ?? 99) - (dist[x] ?? 99) || x - y)[0];
+            D.capital = far; D.capitalMovedAt = 0; rep.newCapital = far;
+          }
+        } else {
+          const pr = Math.floor(lossA * NUM.prisonerPct); D.army += pr; rep.prisoners = pr; // 방어 보상: 포로
+        }
         reports.push(rep);
       }
       this.s.reports = this.s.reports.concat(reports).slice(-300);
       this.s.night += 1;
       return reports;
     }
-
-    // 수도 함락 → 나라 전체 병합
-    merge(A, D) {
-      for (const k of Object.keys(this.s.owner)) if (this.s.owner[k] === D.id) this.s.owner[k] = A.id;
-      for (const m of D.members) if (!A.members.includes(m)) A.members.push(m);
-      A.provinces = A.provinces.concat(D.provinces.filter((p) => !A.provinces.includes(p)));
-      A.army += D.army; A.coin += D.coin; A.wood = (A.wood || 0) + (D.wood || 0); A.vaccine = (A.vaccine || 0) + (D.vaccine || 0);
-      for (const k of ['floor', 'wall', 'trap']) { A.items = A.items || {}; A.items[k] = (A.items[k] || 0) + ((D.items || {})[k] || 0); }
-      for (const [i, e] of Object.entries(this.s.tiles || {})) if (e.n === D.id) e.n = A.id;
-      for (const [i, nid] of Object.entries(this.s.traps || {})) if (nid === D.id) this.s.traps[i] = A.id;
-      D.army = 0; D.coin = 0; D.dead = true; D.mergedInto = A.id;
-      for (const b of this.s.battles) if (b.def === D.id) b.def = A.id;
+    // 모든 영역을 잃은 나라: 멸망 → 팀원은 유랑민
+    destroy(D) {
+      D.dead = true; D.army = 0; D.coin = 0; D.wood = 0; D.vaccine = 0; D.items = {}; D.members = []; D.destroyedAt = Date.now();
+      for (const b of this.s.battles.filter((x) => x.att === D.id || x.def === D.id)) this.refund(b);
+      this.s.battles = this.s.battles.filter((x) => x.att !== D.id && x.def !== D.id);
+    }
+    // 천도 (왕만 — 서버에서 확인): 비용, 우리 영역, 전투 대기 중 불가, 하루에 한 번
+    moveCapital(nid, tid, now) {
+      const n = this.nation(nid);
+      if (!n || n.dead) return { ok: false, err: '나라가 없어요' };
+      if (this.s.owner[tid] !== nid) return { ok: false, err: '우리 영역으로만 천도할 수 있어요' };
+      if (tid === n.capital) return { ok: false, err: '이미 수도예요' };
+      if (this.s.battles.some((b) => b.def === nid)) return { ok: false, err: '선전포고를 받은 동안은 천도할 수 없어요' };
+      const wait = (n.capitalMovedAt || 0) + NUM.capitalMoveCooldownH * 3600e3 - now;
+      if (wait > 0) return { ok: false, err: `천도는 하루에 한 번이에요 (${Math.ceil(wait / 3600e3)}시간 뒤)` };
+      if ((n.coin || 0) < NUM.capitalMoveCost) return { ok: false, err: `코인이 모자라요 (천도 ${NUM.capitalMoveCost})` };
+      n.coin -= NUM.capitalMoveCost; n.oldCapitals = (n.oldCapitals || []).concat(n.capital).slice(-20); n.capital = tid; n.capitalMovedAt = now;
+      return { ok: true };
     }
 
     // ---------------------------------------------------------- 참가자에게 보낼 화면 정보
@@ -382,14 +445,14 @@
           defaultDef: n.defaultDef || null, intelAny: n.intelAny || 0, intel: n.intel || {},
           wood: n.wood || 0, vaccine: n.vaccine || 0, items: Object.assign({ floor: 0, wall: 0, trap: 0 }, n.items), vaccinePrice: NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0),
           isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length,
-          declaresLeft: this.declaresLeft(n.id), provinces: n.provinces, code: n.code,
+          declaresLeft: this.declaresLeft(n.id, this.s.curSlot), provinces: n.provinces, code: n.code,
           // 접속 열쇠(토큰)는 절대 내보내지 않는다: 순번만
           memberList: n.members.map((k, i) => ({ idx: i, name: (n.memberNames || {})[k] || '?', king: k === n.king, me: k === key })),
         },
         night: this.s.night,
-        outgoing: this.s.battles.filter((b) => b.att === n.id).map((b) => ({ id: b.id, target: b.target, def: b.def, a: b.a, f: b.f || null })),
+        outgoing: this.s.battles.filter((b) => b.att === n.id).map((b) => ({ id: b.id, target: b.target, def: b.def, a: b.a, ar: b.ar || b.a.map(() => 0), F: b.F, cap: Math.floor(NUM.reinforcePct * sum(b.a)), f: b.f || null, slot: b.slot })),
         // 공격 병력은 숨김 (첩보로 알아낸 전선만 보임)
-        incoming: this.s.battles.filter((b) => b.def === n.id).map((b) => ({ id: b.id, target: b.target, att: b.att, d: b.d, rd: b.rd || [0, 0, 0], f: b.f || null, rev: (b.rev || []).map((f) => ({ f, n: b.a[f] })), intel: ((n.intel || {})[b.att] || 0) + (n.intelAny || 0) })),
+        incoming: this.s.battles.filter((b) => b.def === n.id).map((b) => ({ id: b.id, target: b.target, att: b.att, d: b.d, F: b.F, f: b.f || null, slot: b.slot, rev: (b.rev || []).map((f) => ({ f, n: b.a[f] + ((b.ar || [])[f] || 0) })), intel: ((n.intel || {})[b.att] || 0) + (n.intelAny || 0) })),
         reports: this.s.reports.filter((r) => r.att === n.id || r.def === n.id).slice(-12),
       };
     }
@@ -404,6 +467,21 @@
     return (accepts || []).some((a) => { const x = norm(a); if (x === g) return true; const nx = num(x), ng = num(g); return !isNaN(nx) && !isNaN(ng) && Math.abs(nx - ng) < 1e-9; });
   }
 
+  // 영토 이름 (번호로 고정 — 화면과 서버 알림이 같은 이름을 씀)
+  const SYL = ['라온', '솔빛', '미르', '벼리', '가람', '누리', '다온', '초롱', '하람', '윤슬', '아라', '한결', '새벽', '별하', '온새', '나린', '해솔', '그루', '여울', '도담', '마루', '보람', '시나', '이든'];
+  const SUFFIX = { inner: '령', middle: '주', frontier: ' 변경' };
+  function terrName(t) {
+    const a = SYL[(t.id * 7) % SYL.length];
+    if (t.region) return `${t.region} ${a}`;
+    const b = ['', '', '동', '서', '남', '북'][(t.id * 13) % 6]; return a + b + SUFFIX[t.ring];
+  }
+  // 하늘 포털 자리: 수도 후보 영토는 지도에 정해진 자리, 그 밖의 영토(천도한 수도 등)는 제단 위쪽의 걸을 수 있는 칸
+  const PORTAL_OFFS = [[0, -3], [0, 3], [-3, -2], [3, -2], [-3, 2], [3, 2], [0, -4], [0, 4], [-4, 0], [4, 0]];
+  function portalSpot(t, tileAt) {
+    if (t.portal) return t.portal;
+    for (const [dx, dy] of PORTAL_OFFS) { const x = t.altar[0] + dx, y = t.altar[1] + dy, k = tileAt(x, y); if ((k === T.GRASS || k === T.FOREST || k === T.SAND) && !treeKind(k, x, y) && (tileAt(x, y + 1) === T.GRASS || tileAt(x, y + 1) === T.SAND || tileAt(x, y + 1) === T.FOREST)) return [x, y]; }
+    return [t.altar[0], t.altar[1] - 2];
+  }
   // 금광 기본 위치: 영토마다 1곳. 제단에서 4칸 이상, 저장소 자리에서 3칸 이상 떨어진 걸을 수 있는 칸
   function mineSpot(t, tileAt, terrAt) {
     const st = t.capitalCandidate ? storageSpot(t, tileAt) : null;
@@ -417,5 +495,5 @@
     }
     return null;
   }
-  return { World, NUM, FRONTS, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { World, NUM, FRONTS, frontName, terrName, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
