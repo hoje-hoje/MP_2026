@@ -58,6 +58,7 @@
     if (o !== 65535 && o > 0 && gone[o]) return true;
     if (t === T.VOID || t === T.HOLY || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1 || treeAt(x, y) !== null) return true;
     if (GWALL.has(y * W + x)) return true; // 관리자가 칠한 장벽
+    { const pr = GPROPS.get(y * W + x); if (pr && pr.b) return true; } // 관리자가 놓은 막힘 소품
     const e = TILES[y * W + x]; if (e && e.k === 'wall' && e.n !== MY_NID) return true; // 남의 방벽
     return STORE_AT.has(y * W + x);
   }
@@ -810,23 +811,29 @@
   function buildRooms() { for (const id of Object.keys(ROOMS)) buildRoom(id); }
   // 관리자 '맵 고치기'로 바꾼 방 (타일·장벽·소품 숨기기). 서버가 보내 준다
   let ROOM_EDITS = {};
-  const GFLOOR = new Map(), GWALL = new Set(); // 땅 지도에 관리자가 깐 타일·장벽 (칸 번호)
+  const GFLOOR = new Map(), GWALL = new Set(), GPROPS = new Map(); // GPROPS: 칸 → { r: 'x:그림'|'u:동물', b: 막힘 } // 땅 지도에 관리자가 깐 타일·장벽 (칸 번호)
   const SHEETS = { town: { key: 'k_town', cols: 12, name: '타이니 타운' }, dungeon: { key: 'k_dungeon', cols: 12, name: '타이니 던전' }, onebit: { key: 'k_onebit', cols: 49, name: '1비트 팩' }, ninja: { key: 'floor', cols: 22, name: '닌자 바닥' }, winter: { key: 'k_winter', cols: 10, name: '겨울' } };
+  // 맵 고치기 소품: 게임에 있는 그림(x:)·동물(u:)을 칸 아래쪽에 맞춰 그림 (너무 크면 높이 140px로 줄임)
+  function drawProp(g, ref, x, y) { const [t, n] = ref.split(':'), key = t === 'u' ? 'u:' + n : n, im = t === 'u' ? ART['u_' + n] : ART['x_' + n]; if (!im) return; if (im.height * 2 > 140) pix(g, key, x, y, 0, 140); else pix(g, key, x, y, 2); }
+  const NOT_PROPS = new Set(['stonefloor', 'carpet', 'grass', 'dirt', 'marble', 'floor_palace', 'brick', 'door_gold', 'door_cloud', 'burst', 'pin', 'cloud']);
+  const propList = () => [...EXTRA, ...TEMPLE].filter((k) => !NOT_PROPS.has(k) && ART['x_' + k]).map((k) => 'x:' + k).concat([...USER.animals, ...USER.monsters].filter((k) => ART['u_' + k]).map((k) => 'u:' + k));
   function drawSheetTile(g, ref, x, y, size) { const [sh, n] = ref.split(':'), S = SHEETS[sh], im = S && ART[S.key]; if (!im) return; const k = +n; g.drawImage(im, (k % S.cols) * 16, Math.floor(k / S.cols) * 16, 16, 16, x, y, size, size); }
   function applyGroundEdit(m) {
-    if (m.reset) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); invalidateChunks(); mapSig = ''; return; }
+    if (m.reset) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); GPROPS.clear(); invalidateChunks(); mapSig = ''; return; }
     const touched = [];
     for (const [k, v] of Object.entries(m.set || {})) { const [x, y] = k.split(',').map(Number), i = y * W + x; if (v) GFLOOR.set(i, v); else GFLOOR.delete(i); touched.push(i); }
     for (const [k, v] of Object.entries(m.walls || {})) { const [x, y] = k.split(',').map(Number), i = y * W + x; if (v) GWALL.add(i); else GWALL.delete(i); }
+    for (const [k, v] of Object.entries(m.props || {})) { const [x, y] = k.split(',').map(Number), i = y * W + x; if (v) GPROPS.set(i, v); else GPROPS.delete(i); }
     let cl = 0; for (const [k, v] of Object.entries(m.clear || {})) { const [x, y] = k.split(',').map(Number), i = y * W + x; if (v) GCLEAR.add(i); else GCLEAR.delete(i); touched.push(i); cl++; }
     if (cl) mapSig = '';
     if (touched.length < 400) for (const i of touched) dirtyTile(i); else invalidateChunks();
   }
   function applyRoomDiff(id, d) { // 다른 관리자가 바꾼 칸만 합치기
-    if (d.reset) ROOM_EDITS[id] = { floor: {}, walls: {}, hideProps: false };
+    if (d.reset) ROOM_EDITS[id] = { floor: {}, walls: {}, props: {}, hideProps: false };
     const E = ROOM_EDITS[id] = ROOM_EDITS[id] || { floor: {}, walls: {}, hideProps: false }; E.floor = E.floor || {}; E.walls = E.walls || {};
     for (const [k, v] of Object.entries(d.set || {})) { if (v) E.floor[k] = v; else delete E.floor[k]; }
     for (const [k, v] of Object.entries(d.walls || {})) { if (v) E.walls[k] = 1; else delete E.walls[k]; }
+    E.props = E.props || {}; for (const [k, v] of Object.entries(d.props || {})) { if (v) E.props[k] = v; else delete E.props[k]; }
     E.hideProps = !!d.hideProps;
     if (ROOMS[id]) { buildRoom(id); if (player.room && player.room.id === id) player.room = ROOMS[id]; }
   }
@@ -846,7 +853,9 @@
       if (R.wall) for (let x = 1; x < R.w - 1; x++) if (R.grid[R.w + x] === 0 && !R.doors.some((d) => d.side === 'N' && Math.abs(d.at - x) <= 1)) R.grid[R.w + x] = 1;
       for (const p of (E.hideProps ? [] : R.props)) if (!p.walk) for (let y = p.y; y < p.y + p.h; y++) for (let x = p.x; x < p.x + p.w; x++) if (R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; // walk: 밟고 지나가는 장식(꽃·동물)
       for (const k of Object.keys(E.walls || {})) { const [x, y] = k.split(',').map(Number); if (x < R.w && y < R.h && R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; } // 관리자가 칠한 빨간 장벽
+      for (const [k, v] of Object.entries(E.props || {})) { const [x, y] = k.split(',').map(Number); if (v.b && x < R.w && y < R.h && R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; } // 막힘 소품
       R.sprites = (E.hideProps ? [] : R.props).map((p) => ({ x: (p.x + p.w / 2) * TILE, y: (p.y + p.h) * TILE, draw: p.draw, board: p.board, prop: p }));
+      for (const [k, v] of Object.entries(E.props || {})) { const [x, y] = k.split(',').map(Number); R.sprites.push({ x: (x + 0.5) * TILE, y: (y + 1) * TILE - 2, draw: (g, X, Y) => drawProp(g, v.r, X, Y) }); } // 관리자가 놓은 소품
       R.doors.forEach((d) => {
         const label = d.to === 'ground' ? '땅으로 내려가기' : ROOMS[d.to].name;
         const [x, y] = d.side === 'N' ? [(d.at + 0.5) * TILE, TILE] : d.side === 'S' ? [(d.at + 0.5) * TILE, R.h * TILE] : d.side === 'W' ? [TILE, (d.at + 1) * TILE] : [(R.w - 1) * TILE, (d.at + 1) * TILE];
@@ -1604,7 +1613,7 @@
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
         player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
         if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
-        if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls, clear: m.groundEdits.clear }); invalidateChunks(); mapSig = ''; }
+        if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); GPROPS.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls, clear: m.groundEdits.clear, props: m.groundEdits.props }); invalidateChunks(); mapSig = ''; }
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         if (!m.view) openFound('who'); else $('found').hidden = true;
@@ -2328,7 +2337,7 @@
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -camX * dpr * zoom, -camY * dpr * zoom);
     skyCam.x = camX; skyCam.y = camY;
     ctx.drawImage(R.canvas, -SKY_M, -SKY_M);
-    if (EDIT.on) editOverlay(R);
+    if (EDIT.on) { editOverlay(R); propGhost(); if (EDIT.lastScene !== R.id) { EDIT.lastScene = R.id; editUI(); } }
     const list = R.sprites.slice();
     for (const b of others('sky', R)) list.push(b);
     list.push(player);
@@ -2383,6 +2392,7 @@
       const i = ty * W + tx, e = TILES[i];
       if (e && e.k === 'wall') list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawWall(g, X, Y, e.n) });
       if (MY_TRAPS.has(i)) list.push({ x: tx * TILE + 16, y: ty * TILE + 4, draw: (g, X, Y) => drawTrap(g, X, Y + 24) });
+      const pr = GPROPS.get(i); if (pr) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawProp(g, pr.r, X, Y) });
     }
     for (const n of nodes) if (!gone[n.id] && n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1 && !(build.moving && build.moving.kind === 'mine' && build.moving.terr === n.id)) list.push({ x: n.x, y: n.y, draw: (g, X, Y) => drawOre(g, X, Y, mined.has(n.id)) });
     for (const [i, nid] of STORE_AT) { if (build.moving && build.moving.kind === 'store' && nid === MY_NID) continue; const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); }
@@ -2424,7 +2434,7 @@
       const k = Math.min(1, (performance.now() - hold.t0) / hold.ms);
       ctx.fillStyle = '#2b2340'; ctx.fillRect(player.x - 26, player.y - 96, 52, 10); ctx.fillStyle = '#ffd34d'; ctx.fillRect(player.x - 24, player.y - 94, 48 * k, 6);
     }
-    if (EDIT.on) groundEditOverlay(tx0, tx1, ty0, ty1);
+    if (EDIT.on) { groundEditOverlay(tx0, tx1, ty0, ty1); propGhost(); if (EDIT.lastScene !== 'ground') { EDIT.lastScene = 'ground'; editUI(); } }
     nightTint(); // 낮·밤
     if (performance.now() < stunUntil) { ctx.font = `700 13px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd34d'; ctx.fillText('✦ 꼼짝 못 함 ✦', player.x, player.y - 100); }
   }
@@ -2530,9 +2540,9 @@
 
   // ------------------------------------------------------------ 관리자 '맵 고치기' (주소 끝 ?edit=1, 관리자 비밀번호 필요)
   // ZEP 처럼: 타일 깔기 / 지우개 / 빨간 장벽 칠하기·지우기, 장벽 보이기 on/off, 기본 소품 숨기기, 시간대 미리보기
-  const EDIT = { on: false, key: '', tool: 'paint', brush: 1, sheet: 'town', tile: 0, showWalls: true, slot: null, room: 'temple', dirty: false, timer: 0, painting: false };
+  const EDIT = { prop: null, propBlock: true, on: false, key: '', tool: 'paint', brush: 1, sheet: 'town', tile: 0, showWalls: true, slot: null, room: 'temple', dirty: false, timer: 0, painting: false };
   const skyCam = { x: 0, y: 0 }, groundCam = { x: 0, y: 0 };
-  const gPending = { set: {}, walls: {}, clear: {} };
+  const gPending = { set: {}, walls: {}, clear: {}, props: {} };
   function groundEditOverlay(tx0, tx1, ty0, ty1) {
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const i = ty * W + tx;
@@ -2549,24 +2559,25 @@
   const rPending = {}; // 하늘 방별로 아직 서버에 안 보낸 칸
   const touched = { ground: false, groundClear: false, rooms: new Set() };
   function cellGet(sc, kind, x, y) {
-    if (sc === 'ground') { const i = y * W + x; return kind === 'floor' ? (GFLOOR.get(i) || null) : kind === 'wall' ? (GWALL.has(i) ? 1 : 0) : (GCLEAR.has(i) ? 1 : 0); }
-    const E = ROOM_EDITS[sc] || {}, k = x + ',' + y; return kind === 'floor' ? ((E.floor || {})[k] || null) : ((E.walls || {})[k] ? 1 : 0);
+    if (sc === 'ground') { const i = y * W + x; return kind === 'floor' ? (GFLOOR.get(i) || null) : kind === 'prop' ? (GPROPS.get(i) || null) : kind === 'wall' ? (GWALL.has(i) ? 1 : 0) : (GCLEAR.has(i) ? 1 : 0); }
+    const E = ROOM_EDITS[sc] || {}, k = x + ',' + y; return kind === 'floor' ? ((E.floor || {})[k] || null) : kind === 'prop' ? ((E.props || {})[k] || null) : ((E.walls || {})[k] ? 1 : 0);
   }
   function cellSet(sc, kind, x, y, v) {
     const k = x + ',' + y;
     if (sc === 'ground') {
       const i = y * W + x;
       if (kind === 'floor') { if (v) GFLOOR.set(i, v); else GFLOOR.delete(i); gPending.set[k] = v || null; dirtyTile(i); }
+      else if (kind === 'prop') { if (v) GPROPS.set(i, v); else GPROPS.delete(i); gPending.props[k] = v || null; }
       else if (kind === 'wall') { if (v) GWALL.add(i); else GWALL.delete(i); gPending.walls[k] = v ? 1 : 0; }
       else { if (v) GCLEAR.add(i); else GCLEAR.delete(i); gPending.clear[k] = v ? 1 : 0; touched.groundClear = true; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) dirtyTile((y + dy) * W + x + dx); }
       touched.ground = true; return;
     }
     const E = ROOM_EDITS[sc] = ROOM_EDITS[sc] || { floor: {}, walls: {}, hideProps: false }; E.floor = E.floor || {}; E.walls = E.walls || {};
-    const P = rPending[sc] = rPending[sc] || { set: {}, walls: {} };
-    if (kind === 'floor') { if (v) E.floor[k] = v; else delete E.floor[k]; P.set[k] = v || null; } else { if (v) E.walls[k] = 1; else delete E.walls[k]; P.walls[k] = v ? 1 : 0; }
+    const P = rPending[sc] = rPending[sc] || { set: {}, walls: {}, props: {} }; P.props = P.props || {}; E.props = E.props || {};
+    if (kind === 'floor') { if (v) E.floor[k] = v; else delete E.floor[k]; P.set[k] = v || null; } else if (kind === 'prop') { if (v) E.props[k] = v; else delete E.props[k]; P.props[k] = v || null; } else { if (v) E.walls[k] = 1; else delete E.walls[k]; P.walls[k] = v ? 1 : 0; }
     touched.rooms.add(sc);
   }
-  function change(sc, kind, x, y, v) { const b = cellGet(sc, kind, x, y); if (b === v) return false; cellSet(sc, kind, x, y, v); if (stroke) stroke.push([sc, kind, x, y, b, v]); return true; }
+  function change(sc, kind, x, y, v) { const b = cellGet(sc, kind, x, y); if (b === v || (b && v && typeof v === 'object' && JSON.stringify(b) === JSON.stringify(v))) return false; cellSet(sc, kind, x, y, v); if (stroke) stroke.push([sc, kind, x, y, b, v]); return true; }
   // 바뀐 것 화면에 반영하고 잠시 뒤 저장
   function flushEdits() {
     if (touched.groundClear) { mapSig = ''; applyWorld(); }
@@ -2586,6 +2597,8 @@
       else if (EDIT.tool === 'unwall') change(sc, 'wall', x, y, 0);
       else if (EDIT.tool === 'clear' && sc === 'ground' && (treeAt(x, y) || terrain[y * W + x] === T.MOUNTAIN)) change(sc, 'clear', x, y, 1);
       else if (EDIT.tool === 'unclear' && sc === 'ground') change(sc, 'clear', x, y, 0);
+      else if (EDIT.tool === 'prop' && EDIT.prop) change(sc, 'prop', x, y, { r: EDIT.prop, b: EDIT.propBlock ? 1 : 0 });
+      else if (EDIT.tool === 'unprop') change(sc, 'prop', x, y, null);
     }
     flushEdits();
   }
@@ -2616,9 +2629,9 @@
     $('edSave').textContent = `${redo ? '다시 함' : '되돌림'} (${st.length}칸) · 저장 대기…`;
   }
   async function groundSave(reset) {
-    const body = reset ? { reset: true } : { set: gPending.set, walls: gPending.walls, clear: gPending.clear };
-    gPending.set = {}; gPending.walls = {}; gPending.clear = {};
-    try { const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: EDIT.key, op: 'groundSave' }, body)) }).then((x) => x.json()); $('edSave').textContent = r.ok ? `저장됨 · 땅 타일 ${r.floor} · 장벽 ${r.walls} · 비운 칸 ${r.clear}` : '저장 실패: ' + r.err; }
+    const body = reset ? { reset: true } : { set: gPending.set, walls: gPending.walls, clear: gPending.clear, props: gPending.props };
+    gPending.set = {}; gPending.walls = {}; gPending.clear = {}; gPending.props = {};
+    try { const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: EDIT.key, op: 'groundSave' }, body)) }).then((x) => x.json()); $('edSave').textContent = r.ok ? `저장됨 · 땅 타일 ${r.floor} · 장벽 ${r.walls} · 비운 칸 ${r.clear} · 소품 ${r.props}` : '저장 실패: ' + r.err; }
     catch (e) { $('edSave').textContent = '저장 실패 (연결 확인)'; }
   }
   function editOverlay(R) {
@@ -2629,13 +2642,14 @@
     for (let y = 0; y <= R.h; y++) { ctx.beginPath(); ctx.moveTo(0, y * TILE); ctx.lineTo(R.w * TILE, y * TILE); ctx.stroke(); }
     if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.tool === 'fill' ? 1 : EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') || EDIT.tool === 'unwall' ? '#ff3344' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint' || EDIT.tool === 'fill') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
   }
+  function propGhost() { if (EDIT.hover && EDIT.tool === 'prop' && EDIT.prop) { const [hx, hy] = EDIT.hover; ctx.globalAlpha = 0.65; drawProp(ctx, EDIT.prop, hx * TILE + 16, (hy + 1) * TILE - 2); ctx.globalAlpha = 1; } }
   function editTileAt(e) { const r = canvas.getBoundingClientRect(), cam = player.scene === 'sky' ? skyCam : groundCam; const wx = (e.clientX - r.left) / zoom + cam.x, wy = (e.clientY - r.top) / zoom + cam.y; return [Math.floor(wx / TILE), Math.floor(wy / TILE)]; }
   async function editSave(id, extra) {
     id = id || player.room.id;
-    const P = rPending[id] || { set: {}, walls: {} }; delete rPending[id];
+    const P = rPending[id] || { set: {}, walls: {}, props: {} }; delete rPending[id];
     try {
-      const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: EDIT.key, op: 'roomSave', id, set: P.set, walls: P.walls }, extra || {})) }).then((x) => x.json());
-      $('edSave').textContent = r.ok ? `저장됨 · 타일 ${r.floor} · 장벽 ${r.walls}` : '저장 실패: ' + r.err; EDIT.dirty = !r.ok;
+      const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: EDIT.key, op: 'roomSave', id, set: P.set, walls: P.walls, props: P.props || {} }, extra || {})) }).then((x) => x.json());
+      $('edSave').textContent = r.ok ? `저장됨 · 타일 ${r.floor} · 장벽 ${r.walls} · 소품 ${r.props}` : '저장 실패: ' + r.err; EDIT.dirty = !r.ok;
     } catch (e) { $('edSave').textContent = '저장 실패 (연결 확인)'; }
   }
   function editPalette() {
@@ -2645,7 +2659,20 @@
     const sx = (EDIT.tile % S.cols) * 16 * k, sy = Math.floor(EDIT.tile / S.cols) * 16 * k; g.strokeStyle = '#ffd34d'; g.lineWidth = 3; g.strokeRect(sx + 1.5, sy + 1.5, 16 * k - 3, 16 * k - 3);
     for (const b of document.querySelectorAll('#editor [data-sheet]')) b.setAttribute('aria-pressed', String(b.dataset.sheet === EDIT.sheet));
   }
+  function propPalette() {
+    const box = $('edPropPal'); if (box.dataset.built) return; box.dataset.built = 1;
+    for (const ref of propList()) {
+      const b = document.createElement('button'); b.type = 'button'; b.title = ref; b.dataset.prop = ref;
+      const c = document.createElement('canvas'); c.width = c.height = 40; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+      const [t, n] = ref.split(':'), im = t === 'u' ? ART['u_' + n] : ART['x_' + n]; const k = Math.min(36 / im.width, 36 / im.height, 2); g.drawImage(im, (40 - im.width * k) / 2, 40 - im.height * k - 2, im.width * k, im.height * k);
+      b.appendChild(c); b.onclick = () => { EDIT.prop = ref; EDIT.tool = 'prop'; editUI(); }; box.appendChild(b);
+    }
+  }
   function editUI() {
+    propPalette();
+    $('edPropBox').hidden = !(EDIT.tool === 'prop' || EDIT.tool === 'unprop');
+    for (const b of document.querySelectorAll('#edPropPal [data-prop]')) b.setAttribute('aria-pressed', String(b.dataset.prop === EDIT.prop));
+    $('edPropBlock').textContent = EDIT.propBlock ? '놓을 소품: 막힘 (못 지나감)' : '놓을 소품: 통과 (지나갈 수 있음)';
     for (const b of document.querySelectorAll('#editor [data-tool]')) b.setAttribute('aria-pressed', String(b.dataset.tool === EDIT.tool));
     for (const b of document.querySelectorAll('#editor [data-brush]')) b.setAttribute('aria-pressed', String(+b.dataset.brush === EDIT.brush));
     for (const b of document.querySelectorAll('#editor [data-slot]')) b.setAttribute('aria-pressed', String(b.dataset.slot === SLOT));
@@ -2673,6 +2700,7 @@
   for (const b of document.querySelectorAll('#editor [data-brush]')) b.addEventListener('click', () => { EDIT.brush = +b.dataset.brush; editUI(); });
   for (const b of document.querySelectorAll('#editor [data-slot]')) b.addEventListener('click', () => { EDIT.slot = b.dataset.slot; SLOT = EDIT.slot; drawSunMoon(); editUI(); });
   $('edWalls').addEventListener('click', () => { EDIT.showWalls = !EDIT.showWalls; editUI(); });
+  $('edPropBlock').addEventListener('click', () => { EDIT.propBlock = !EDIT.propBlock; editUI(); });
   $('edProps').addEventListener('click', () => { const R = player.room; const E = ROOM_EDITS[R.id] = ROOM_EDITS[R.id] || { floor: {}, walls: {} }; E.hideProps = !E.hideProps; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); editSave(R.id, { hideProps: E.hideProps }); });
   $('edClear').addEventListener('click', () => { if (player.scene !== 'sky') { if (confirm('땅 지도에 깐 타일과 장벽을 전부 지울까요? 되돌릴 수 없어요.')) { applyGroundEdit({ reset: true }); groundSave(true); } return; } const R = player.room; if (!confirm(`${R.name}에 깐 타일과 장벽을 모두 지울까요?`)) return; ROOM_EDITS[R.id] = { floor: {}, walls: {}, hideProps: false }; delete rPending[R.id]; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); editSave(R.id, { reset: true }); });
   $('edExit').addEventListener('click', () => { location.href = '/'; });

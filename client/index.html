@@ -87,6 +87,10 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #editor select { flex: 1; font: inherit; padding: 4px; }
 #editor .pal { max-height: 300px; overflow: auto; border: 3px solid #2b2340; background: #2b2340; }
 #editor .pal canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
+#editor .pal.props { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; padding: 2px; max-height: 220px; }
+#editor .pal.props button { min-height: 44px; padding: 0; border: 2px solid transparent; border-image: none; background: #3a2f55; }
+#editor .pal.props button[aria-pressed="true"] { outline: 3px solid #ffd34d; }
+#editor .pal.props canvas { width: 40px; height: 40px; margin: auto; }
 #editor .msg { margin: 0; font-size: 11px; color: #6b6280; line-height: 1.5; }
 #warAlert { position: fixed; inset: 0; z-index: 30; background: rgba(43,10,30,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #warAlert[hidden] { display: none; }
@@ -302,6 +306,8 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   <div class="r"><button type="button" data-tool="paint">🖌 타일 깔기</button><button type="button" data-tool="fill">🪣 채우기</button><button type="button" data-tool="erase">🧽 타일 지우기</button></div>
   <div class="r"><button type="button" data-tool="wall">🟥 장벽 칠하기</button><button type="button" data-tool="unwall">⬜ 장벽 지우기</button></div>
   <div class="r"><button type="button" data-tool="clear">🪓 나무·산 없애기</button><button type="button" data-tool="unclear">↩ 되살리기</button></div>
+  <div class="r"><button type="button" data-tool="prop">🌳 소품 놓기</button><button type="button" data-tool="unprop">🗑 소품 치우기</button></div>
+  <div id="edPropBox" hidden><div class="r"><button type="button" id="edPropBlock">놓을 소품: 막힘</button></div><div class="pal props" id="edPropPal"></div></div>
   <div class="r"><span>붓</span><button type="button" data-brush="1">1칸</button><button type="button" data-brush="3">3×3</button></div>
   <div class="r"><button type="button" id="edWalls">장벽 보기: 켜짐</button><button type="button" id="edProps">기본 소품: 보임</button></div>
   <div class="r"><span>시간</span><button type="button" data-slot="morning">아침</button><button type="button" data-slot="lunch">점심</button><button type="button" data-slot="night">밤</button></div>

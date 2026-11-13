@@ -818,6 +818,8 @@ function adminStatus() {
     wander: state.wander.length,
   };
 }
+// ---- 맵 고치기 소품: { r: 'x:그림이름' | 'u:동물이름', b: 1(막힘)|0 }
+function cleanProp(v) { if (!v || typeof v !== 'object') return null; const r = String(v.r || ''); if (!/^[xu]:[a-z0-9_]{1,24}$/.test(r)) return null; return { r, b: v.b ? 1 : 0 }; }
 // ---- 문제 관리
 const PUZZLE_TYPES = ['기하', '대수', '확통', '미적분', '수열', '논리'];
 function newPuzzleId() { for (;;) { const id = 'q' + crypto.randomBytes(4).toString('hex'); if (!findPuzzle(id)) return id; } }
@@ -867,31 +869,33 @@ async function adminOp(m) {
     case 'resolve': resolveNight('관리자'); return { ok: true };
     case 'groundSave': { // 맵 고치기: 땅 지도. 바뀐 칸만 받는다 (set: 칸→타일 또는 null, walls: 칸→1 또는 0, reset: 전부 지우기)
       const G = state.groundEdits, okKey = (k) => /^\d{1,3},\d{1,3}$/.test(k) && k.split(',').every((v) => +v < 720);
-      if (m.reset) { state.groundEdits = { floor: {}, walls: {}, clear: {} }; rebuildClear(); dirty = true; const msg = JSON.stringify({ t: 'groundEdit', reset: true }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return { ok: true, floor: 0, walls: 0 }; }
-      const set = {}, walls = {}, clear = {}; G.clear = G.clear || {};
+      if (m.reset) { state.groundEdits = { floor: {}, walls: {}, clear: {}, props: {} }; rebuildClear(); dirty = true; const msg = JSON.stringify({ t: 'groundEdit', reset: true }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return { ok: true, floor: 0, walls: 0 }; }
+      const set = {}, walls = {}, clear = {}, props = {}; G.clear = G.clear || {}; G.props = G.props || {};
+      for (const [k, v] of Object.entries(m.props || {}).slice(0, 3000)) { if (!okKey(k)) continue; const pv = cleanProp(v); if (pv) G.props[k] = pv; else delete G.props[k]; props[k] = pv; }
       for (const [k, v] of Object.entries(m.clear || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v) { G.clear[k] = 1; clear[k] = 1; } else { delete G.clear[k]; clear[k] = 0; } }
       if (Object.keys(clear).length) rebuildClear();
       for (const [k, v] of Object.entries(m.set || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v === null) { delete G.floor[k]; set[k] = null; } else if (/^(town|dungeon|onebit|ninja|winter):\d{1,4}$/.test(String(v))) { G.floor[k] = String(v); set[k] = String(v); } }
       for (const [k, v] of Object.entries(m.walls || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v) { G.walls[k] = 1; walls[k] = 1; } else { delete G.walls[k]; walls[k] = 0; } }
       if (Object.keys(G.floor).length + Object.keys(G.walls).length > 80000) return { ok: false, err: '땅 지도에 너무 많이 칠했어요' };
       dirty = true;
-      const msg = JSON.stringify({ t: 'groundEdit', set, walls, clear }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
-      return { ok: true, floor: Object.keys(G.floor).length, walls: Object.keys(G.walls).length, clear: Object.keys(G.clear).length };
+      const msg = JSON.stringify({ t: 'groundEdit', set, walls, clear, props }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+      return { ok: true, floor: Object.keys(G.floor).length, walls: Object.keys(G.walls).length, clear: Object.keys(G.clear).length, props: Object.keys(G.props).length };
     }
     case 'roomSave': { // 맵 고치기: 하늘 방 하나의 바닥 타일·장벽 저장 → 모두에게 바로 반영
       const id = String(m.id || ''); if (!/^[a-z0-9]{2,16}$/.test(id)) return { ok: false, err: '방 이름이 이상해요' };
       // 관리자 여러 명이 같이 고쳐도 덮어쓰지 않게: 바뀐 칸만 받아서 합친다 (set: 칸→타일|null, walls: 칸→1|0, hideProps, reset)
       const okKey = (k) => /^\d{1,3},\d{1,3}$/.test(k), okRef = (v) => /^(town|dungeon|onebit|ninja|winter):\d{1,4}$/.test(String(v));
-      if (m.reset) state.roomEdits[id] = { floor: {}, walls: {}, hideProps: false };
+      if (m.reset) state.roomEdits[id] = { floor: {}, walls: {}, props: {}, hideProps: false };
       const R = state.roomEdits[id] = state.roomEdits[id] || { floor: {}, walls: {}, hideProps: false }; R.floor = R.floor || {}; R.walls = R.walls || {};
-      const set = {}, walls = {};
+      const set = {}, walls = {}, props = {}; R.props = R.props || {};
+      for (const [k, v] of Object.entries(m.props || {}).slice(0, 3000)) { if (!okKey(k)) continue; const pv = cleanProp(v); if (pv) R.props[k] = pv; else delete R.props[k]; props[k] = pv; }
       for (const [k, v] of Object.entries(m.set || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v === null) { delete R.floor[k]; set[k] = null; } else if (okRef(v)) { R.floor[k] = String(v); set[k] = String(v); } }
       for (const [k, v] of Object.entries(m.walls || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v) R.walls[k] = 1; else delete R.walls[k]; walls[k] = v ? 1 : 0; }
       if ('hideProps' in m) R.hideProps = !!m.hideProps;
       if (Object.keys(R.floor).length + Object.keys(R.walls).length > 12000) return { ok: false, err: '너무 많아요' };
       dirty = true;
-      const msg = JSON.stringify({ t: 'roomEdit', id, diff: { set, walls, hideProps: R.hideProps, reset: !!m.reset } }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
-      return { ok: true, floor: Object.keys(R.floor).length, walls: Object.keys(R.walls).length };
+      const msg = JSON.stringify({ t: 'roomEdit', id, diff: { set, walls, props, hideProps: R.hideProps, reset: !!m.reset } }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+      return { ok: true, floor: Object.keys(R.floor).length, walls: Object.keys(R.walls).length, props: Object.keys(R.props).length };
     }
     case 'clock': { // 게임 시계: auto(실제 시간) / manual(일차·시간대). 앞으로 가면 그 사이 전투·균열이 차례로 일어남
       if (m.mode === 'auto') state.clock = { mode: 'auto' };
