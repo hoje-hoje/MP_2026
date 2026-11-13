@@ -85,9 +85,10 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #editor button { min-height: 32px; font-size: 12px; padding: 0 6px; }
 #editor button[aria-pressed="true"] { filter: brightness(1.25); outline: 3px solid #ffd34d; }
 #editor select { flex: 1; font: inherit; padding: 4px; }
-#editor .pal { max-height: 300px; overflow: auto; border: 3px solid #2b2340; background: #2b2340; }
+#editor > * { flex-shrink: 0; } /* 패널이 작아도 팔레트가 납작해지지 않게 (패널 자체가 스크롤) */
+#editor .pal { height: 260px; overflow: auto; border: 3px solid #2b2340; background: #2b2340; }
 #editor .pal canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
-#editor .pal.props { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; padding: 2px; max-height: 220px; }
+#editor .pal.props { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; padding: 2px; height: auto; max-height: 220px; }
 #editor .pal.props button { min-height: 44px; padding: 0; border: 2px solid transparent; border-image: none; background: #3a2f55; }
 #editor .pal.props button[aria-pressed="true"] { outline: 3px solid #ffd34d; }
 #editor .pal.props canvas { width: 40px; height: 40px; margin: auto; }
@@ -305,6 +306,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   <h3>🗺 맵 고치기 <small>(관리자)</small></h3>
   <label>방 <select id="edRoom"></select></label>
   <div class="r"><button type="button" data-tool="paint">🖌 타일 깔기</button><button type="button" data-tool="fill">🪣 채우기</button><button type="button" data-tool="erase">🧽 타일 지우기</button></div>
+  <div class="r"><button type="button" data-tool="pick">🎯 스포이드 (지도에서 타일 고르기 · Alt+클릭)</button></div>
   <div class="r"><button type="button" data-tool="wall">🟥 장벽 칠하기</button><button type="button" data-tool="unwall">⬜ 장벽 지우기</button></div>
   <div class="r"><button type="button" data-tool="clear">🪓 나무·산 없애기</button><button type="button" data-tool="unclear">↩ 되살리기</button></div>
   <div class="r"><button type="button" data-tool="prop">🌳 소품 놓기</button><button type="button" data-tool="unprop">🗑 소품 치우기</button></div>

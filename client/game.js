@@ -2707,7 +2707,23 @@
   $('edClear').addEventListener('click', () => { if (player.scene !== 'sky') { if (confirm('땅 지도에 깐 타일과 장벽을 전부 지울까요? 되돌릴 수 없어요.')) { applyGroundEdit({ reset: true }); groundSave(true); } return; } const R = player.room; if (!confirm(`${R.name}에 깐 타일과 장벽을 모두 지울까요?`)) return; ROOM_EDITS[R.id] = { floor: {}, walls: {}, hideProps: false }; delete rPending[R.id]; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); editSave(R.id, { reset: true }); });
   $('edExit').addEventListener('click', () => { location.href = '/'; });
   $('edPal').addEventListener('click', (e) => { const S = SHEETS[EDIT.sheet], r = $('edPal').getBoundingClientRect(), k = $('edPal').width / r.width; const tx = Math.floor((e.clientX - r.left) * k / 32), ty = Math.floor((e.clientY - r.top) * k / 32); const n = ty * S.cols + tx; if (tx < S.cols) { EDIT.tile = n; if (EDIT.tool !== 'fill') EDIT.tool = 'paint'; editPalette(); editUI(); } });
-  canvas.addEventListener('mousedown', (e) => { if (!EDIT.on) return; stroke = []; const [x, y] = editTileAt(e); if (EDIT.tool === 'fill') { floodFill(x, y); endStroke(); return; } EDIT.painting = true; brushApply(x, y); });
+  // 스포이드: 지도에서 칸을 누르면 그 칸의 타일(또는 소품)이 있는 탭으로 바꾸고 골라 줌
+  function pickAt(x, y) {
+    const sc = scope(), f = cellGet(sc, 'floor', x, y), pr = cellGet(sc, 'prop', x, y);
+    if (f && SHEETS[f.split(':')[0]]) {
+      const [sh, n] = f.split(':'); EDIT.sheet = sh; EDIT.tile = +n; EDIT.tool = 'paint'; editPalette(); editUI();
+      const S = SHEETS[sh], box = $('edPal').parentElement, cv = $('edPal'), k = cv.getBoundingClientRect().width / cv.width;
+      box.scrollTop = Math.max(0, (Math.floor(+n / S.cols) * 32 + 16) * k - box.clientHeight / 2);
+      box.scrollLeft = Math.max(0, ((+n % S.cols) * 32 + 16) * k - box.clientWidth / 2);
+      box.scrollIntoView({ block: 'nearest' }); // 패널이 길어도 팔레트가 보이게
+      toast(`🎯 ${$('editor').querySelector(`[data-sheet="${sh}"]`).textContent} 탭의 타일을 골랐어요`);
+    } else if (pr) {
+      EDIT.prop = pr.r; EDIT.propBlock = !!pr.b; EDIT.tool = 'prop'; editUI();
+      const b = document.querySelector(`#edPropPal [data-prop="${pr.r}"]`); if (b) b.scrollIntoView({ block: 'nearest' });
+      toast('🎯 소품을 골랐어요');
+    } else toast('이 칸은 기본 지형이라 고를 타일이 없어요 (관리자가 깐 타일만 골라져요)');
+  }
+  canvas.addEventListener('mousedown', (e) => { if (!EDIT.on) return; const [x, y] = editTileAt(e); if (EDIT.tool === 'pick' || e.altKey) { e.preventDefault(); pickAt(x, y); return; } stroke = []; if (EDIT.tool === 'fill') { floodFill(x, y); endStroke(); return; } EDIT.painting = true; brushApply(x, y); });
   canvas.addEventListener('mousemove', (e) => { if (!EDIT.on) return; EDIT.hover = editTileAt(e); if (EDIT.painting) brushApply(...EDIT.hover); });
   addEventListener('mouseup', () => { if (EDIT.painting) endStroke(); EDIT.painting = false; });
   addEventListener('keydown', (e) => { // Ctrl+Z 되돌리기, Ctrl+Y / Ctrl+Shift+Z 다시 하기
