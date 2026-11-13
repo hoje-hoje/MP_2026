@@ -1654,8 +1654,21 @@
   function connect() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
     ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: store('mp2026.token'), name: player.name, team: 0, look: lookPayload() }));
-    ws.onmessage = (ev) => { try { onNet(JSON.parse(ev.data)); } catch (e) { /* 무시 */ } };
+    ws.binaryType = 'arraybuffer';
+    ws.onmessage = (ev) => { try { if (typeof ev.data === 'string') onNet(JSON.parse(ev.data)); else onPositions(new DataView(ev.data)); } catch (e) { /* 무시 */ } };
     ws.onclose = () => { netOn = false; remotes.clear(); setNet('연결이 끊겼어요 · 다시 연결하는 중…'); setTimeout(connect, 2000); };
+  }
+  // 주변 사람 위치 (서버가 이진으로 보냄): [1][접속자 u16] + [id u32][x u16][y u16][방향·걷기·얼굴] × n
+  function onPositions(v) {
+    if (v.getUint8(0) !== 1) return;
+    onlineCount = v.getUint16(1, true);
+    for (let q = 3; q + 9 <= v.byteLength; q += 9) {
+      const id = v.getUint32(q, true), x = v.getUint16(q + 4, true), y = v.getUint16(q + 6, true), f = v.getUint8(q + 8);
+      const r = remotes.get(id); if (!r) continue;
+      if (r.x == null || Math.hypot(x - r.x, y - r.y) > 400) { r.x = x; r.y = y; }
+      r.tx = x; r.ty = y; r.dir = f & 1 ? -1 : 1; r.moving = !!(f & 2); r.face = (f >> 2) & 3;
+    }
+    setNet(`접속 중 ${onlineCount}명 · ${player.team}팀 채팅`);
   }
   function onNet(m) {
     switch (m.t) {
@@ -1747,7 +1760,7 @@
   function netTick(dt) {
     for (const r of remotes.values()) {
       if (r.tx == null) continue;
-      const k = Math.min(1, dt * 12);
+      const k = Math.min(1, dt * 7); // 위치는 초당 5번 오므로 그 사이를 부드럽게 이어 그림
       r.x += (r.tx - r.x) * k; r.y += (r.ty - r.y) * k;
       if (r.emote) { r.emoteT -= dt; if (r.emoteT <= 0) r.emote = null; }
     }

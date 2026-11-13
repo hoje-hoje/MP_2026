@@ -17,7 +17,8 @@ const { World } = require('../client/rules.js');
 const PORT = +process.env.PORT || 8080;
 const ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
-const TICK_MS = 100;               // 위치 방송 주기 (초당 10번)
+const TICK_MS = 200;               // 위치 방송 주기 (초당 5번 · 화면은 부드럽게 이어 그림)
+const VIEW_CAP = 60;               // 한 사람에게 보내는 주변 사람 최대 수 (가까운 순) — 150명이 하늘에 모여도 전송량 제한
 const AOI_X = 44 * 32, AOI_Y = 30 * 32; // 땅에서 '주변'으로 보는 범위 (px)
 const MAX_SPEED = 32 / 0.04 * 1.2;  // 칸 이동(빨리 걷기 테스트 포함) 기준 최대 속도    // 허용 최대 속도 (빨리 걷기 테스트 포함, px/s)
 const CHAT_MAX = 120, CHAT_KEEP = 60;
@@ -41,6 +42,8 @@ const STATIC = {
 };
 const ASSET_DIR = path.join(ROOT, 'client', 'assets');
 let worldPublic = null; // 균열 정보(rift)를 뺀 지도: 참가자에게는 이것만 보낸다
+const zlib = require('zlib');
+const gzCache = new Map(); // 압축해 둔 파일 (ETag별)
 function publicWorld() {
   if (worldPublic) return worldPublic;
   const w = JSON.parse(fs.readFileSync(STATIC['/world.json'], 'utf8'));
@@ -72,9 +75,15 @@ const server = http.createServer((req, res) => {
     const etag = `"${isWorld ? 'w' : ''}${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
     const cache = isAsset ? 'public, max-age=600, stale-while-revalidate=604800' : 'no-cache';
     if (String(req.headers['if-none-match'] || '').replace(/^W\//, '') === etag) { res.writeHead(304, { ETag: etag, 'Cache-Control': cache }); return res.end(); }
-    const body = isWorld ? publicWorld() : fs.readFileSync(file);
+    let body = isWorld ? publicWorld() : fs.readFileSync(file);
     const type = url.pathname === '/admin' ? MIME['.html'] : MIME[path.extname(file)] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache, ETag: etag });
+    const head = { 'Content-Type': type, 'Cache-Control': cache, ETag: etag, Vary: 'Accept-Encoding' };
+    // 글자 파일(지도·코드·화면)은 gzip으로 줄여 보냄 (그림·글꼴은 이미 압축돼 있음)
+    if (/json|javascript|html|css|svg/.test(type) && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
+      let z = gzCache.get(etag + file); if (!z) { z = zlib.gzipSync(body, { level: 9 }); gzCache.set(etag + file, z); }
+      body = z; head['Content-Encoding'] = 'gzip';
+    }
+    res.writeHead(200, head);
     res.end(body);
   } catch (e) { res.writeHead(500); res.end('error'); }
 });
@@ -223,7 +232,7 @@ function capitalPos(acc, token) { // 그 사람 나라 수도 포털 앞 (나라
   return t ? { x: t.portal[0] * 32 + 16, y: (t.portal[1] + 1) * 32 + 16, scene: 'ground', room: null } : null;
 }
 const JAIL_POS = { x: 7 * 32 + 16, y: 5 * 32 + 16, scene: 'sky', room: 'jail' };
-function placeAt(s, pos) { if (!pos) return; Object.assign(s, { x: pos.x, y: pos.y, scene: pos.scene, room: pos.room }); Object.assign(s.acc, pos); dirty = true; send(s.ws, { t: 'warp', pos }); }
+function placeAt(s, pos) { if (!pos) return; Object.assign(s, { x: pos.x, y: pos.y, scene: pos.scene, room: pos.room, moved: true }); Object.assign(s.acc, pos); dirty = true; send(s.ws, { t: 'warp', pos }); }
 
 wss.on('connection', (ws) => {
   let s = null;
@@ -260,7 +269,7 @@ wss.on('connection', (ws) => {
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
         roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
-      if (nat) broadcastOwners();
+      if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
       return;
     }
     switch (m.t) {
@@ -289,7 +298,8 @@ wss.on('connection', (ws) => {
             notifyNation(trapN, `🪤 덫에 ${myN ? myN.name + '의 ' : ''}${s.acc.name}이(가) 걸렸어요! (${world.t[terrAtTile(tx, ty)] ? terrAtTile(tx, ty) + '번 영토' : ''})`);
           }
         }
-        s.x = x; s.y = y; s.dir = m.dir < 0 ? -1 : 1; s.face = Math.max(0, Math.min(3, m.f | 0)); s.moving = m.moving ? 1 : 0; s.scene = scene; s.room = room; s.lastMove = now;
+        { const nd = m.dir < 0 ? -1 : 1, nf = Math.max(0, Math.min(3, m.f | 0)), nm = m.moving ? 1 : 0; if (s.x !== x || s.y !== y || s.dir !== nd || s.face !== nf || s.moving !== nm || s.scene !== scene || s.room !== room) s.moved = true;
+        s.x = x; s.y = y; s.dir = nd; s.face = nf; s.moving = nm; s.scene = scene; s.room = room; s.lastMove = now; }
         Object.assign(s.acc, { x, y, scene, room }); dirty = true;
         break;
       }
@@ -664,21 +674,37 @@ function near(a, b) {
   return Math.abs(a.x - b.x) < AOI_X && Math.abs(a.y - b.y) < AOI_Y;
 }
 
-// 주변 사람 위치만 묶어서 보낸다: [id, x, y, dir, moving]
+// 주변 사람 위치만 묶어서 보낸다 (전송량 절약)
+//  - 움직인 사람(또는 새로 보이게 된 사람)만 보냄
+//  - 이진 형식: [1][접속자 수 u16] + 사람마다 [id u32][x u16][y u16][방향·걷기·얼굴 1바이트] = 9바이트
+//  - 너무 많으면 가까운 VIEW_CAP명만
+let lastCountSent = 0, countAt = 0;
 setInterval(() => {
+  const n = online.size, sendCount = n !== lastCountSent || Date.now() - countAt > 5000;
+  if (sendCount) { lastCountSent = n; countAt = Date.now(); }
   for (const viewer of online.values()) {
-    if (viewer.x == null) continue;
-    const p = [];
-    const seen = new Set();
-    for (const o of online.values()) {
-      if (o === viewer || !near(viewer, o)) continue;
+    if (viewer.x == null || viewer.ws.readyState !== 1) continue;
+    let list = [];
+    for (const o of online.values()) if (o !== viewer && near(viewer, o)) list.push(o);
+    if (list.length > VIEW_CAP) { // 이미 보이던 사람은 그대로 두고, 남는 자리만 가까운 새 사람으로 채움 (들락날락 메시지 방지)
+      const keep = list.filter((o) => viewer.known.has(o.id)).slice(0, VIEW_CAP);
+      if (keep.length < VIEW_CAP) { const d = (o) => (o.x - viewer.x) ** 2 + (o.y - viewer.y) ** 2; const fresh = list.filter((o) => !viewer.known.has(o.id)).sort((a, b) => d(a) - d(b)); list = keep.concat(fresh.slice(0, VIEW_CAP - keep.length)); }
+      else list = keep;
+    }
+    const seen = new Set(), out = [];
+    for (const o of list) {
       seen.add(o.id);
-      if (!viewer.known.has(o.id)) { viewer.known.add(o.id); send(viewer.ws, { t: 'meta', p: meta(o) }); }
-      p.push([o.id, Math.round(o.x), Math.round(o.y), o.dir, o.moving, o.face | 0]);
+      const fresh = !viewer.known.has(o.id);
+      if (fresh) { viewer.known.add(o.id); send(viewer.ws, { t: 'meta', p: meta(o) }); }
+      if (fresh || o.moved) out.push(o);
     }
     for (const id of viewer.known) if (!seen.has(id)) { viewer.known.delete(id); send(viewer.ws, { t: 'leave', id }); }
-    send(viewer.ws, { t: 'state', p, n: online.size });
+    if (!out.length && !sendCount) continue;
+    const b = Buffer.allocUnsafe(3 + out.length * 9); b[0] = 1; b.writeUInt16LE(Math.min(n, 65535), 1);
+    out.forEach((o, i) => { const q = 3 + i * 9; b.writeUInt32LE(o.id >>> 0, q); b.writeUInt16LE(Math.max(0, Math.min(65535, Math.round(o.x))), q + 4); b.writeUInt16LE(Math.max(0, Math.min(65535, Math.round(o.y))), q + 6); b[q + 8] = (o.dir < 0 ? 1 : 0) | (o.moving ? 2 : 0) | ((o.face & 3) << 2); });
+    viewer.ws.send(b);
   }
+  for (const o of online.values()) o.moved = false;
 }, TICK_MS);
 
 // ------------------------------------------------------------ 나라·전투 방송
