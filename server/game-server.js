@@ -782,13 +782,13 @@ function adminHttp(req, res) {
   if (!ADMIN_KEY) return out(503, { ok: false, err: '서버에 ADMIN_KEY가 설정되지 않았어요 (Render → Environment)' });
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   const f = adminFails.get(ip);
-  if (f && f.until > Date.now()) return out(429, { ok: false, err: '비밀번호를 여러 번 틀렸어요. 1분 뒤에 다시 해 주세요' });
+  if (f && f.until > Date.now()) return out(429, { ok: false, err: '비밀번호를 여러 번 틀렸어요. 30초 뒤에 다시 해 주세요' });
   let body = '';
   req.on('data', (c) => { body += c; if (body.length > 4e6) req.destroy(); }); // 문제 그림 때문에 넉넉하게
   req.on('end', async () => {
     let m; try { m = JSON.parse(body); } catch (e) { return out(400, { ok: false, err: '잘못된 요청' }); }
     if (!keyOk(m.key)) {
-      const g = adminFails.get(ip) || { n: 0, until: 0 }; g.n++; if (g.n >= 5) { g.n = 0; g.until = Date.now() + 60e3; } adminFails.set(ip, g);
+      const g = adminFails.get(ip) || { n: 0, until: 0 }; g.n++; if (g.n >= 10) { g.n = 0; g.until = Date.now() + 30e3; } adminFails.set(ip, g); // 같은 학교 와이파이로 여럿이 들어와도 덜 막히게
       return out(401, { ok: false, err: '비밀번호가 달라요' });
     }
     adminFails.delete(ip);
@@ -880,14 +880,18 @@ async function adminOp(m) {
     }
     case 'roomSave': { // 맵 고치기: 하늘 방 하나의 바닥 타일·장벽 저장 → 모두에게 바로 반영
       const id = String(m.id || ''); if (!/^[a-z0-9]{2,16}$/.test(id)) return { ok: false, err: '방 이름이 이상해요' };
-      const e = m.edit || {}, out = { floor: {}, walls: {}, hideProps: !!e.hideProps };
-      const okKey = (k) => /^\d{1,3},\d{1,3}$/.test(k);
-      for (const [k, v] of Object.entries(e.floor || {})) if (okKey(k) && /^(town|dungeon|onebit|ninja|winter):\d{1,4}$/.test(String(v))) out.floor[k] = String(v);
-      for (const k of Object.keys(e.walls || {})) if (okKey(k)) out.walls[k] = 1;
-      if (Object.keys(out.floor).length + Object.keys(out.walls).length > 12000) return { ok: false, err: '너무 많아요' };
-      state.roomEdits[id] = out; dirty = true;
-      const msg = JSON.stringify({ t: 'roomEdit', id, edit: out }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
-      return { ok: true, floor: Object.keys(out.floor).length, walls: Object.keys(out.walls).length };
+      // 관리자 여러 명이 같이 고쳐도 덮어쓰지 않게: 바뀐 칸만 받아서 합친다 (set: 칸→타일|null, walls: 칸→1|0, hideProps, reset)
+      const okKey = (k) => /^\d{1,3},\d{1,3}$/.test(k), okRef = (v) => /^(town|dungeon|onebit|ninja|winter):\d{1,4}$/.test(String(v));
+      if (m.reset) state.roomEdits[id] = { floor: {}, walls: {}, hideProps: false };
+      const R = state.roomEdits[id] = state.roomEdits[id] || { floor: {}, walls: {}, hideProps: false }; R.floor = R.floor || {}; R.walls = R.walls || {};
+      const set = {}, walls = {};
+      for (const [k, v] of Object.entries(m.set || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v === null) { delete R.floor[k]; set[k] = null; } else if (okRef(v)) { R.floor[k] = String(v); set[k] = String(v); } }
+      for (const [k, v] of Object.entries(m.walls || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v) R.walls[k] = 1; else delete R.walls[k]; walls[k] = v ? 1 : 0; }
+      if ('hideProps' in m) R.hideProps = !!m.hideProps;
+      if (Object.keys(R.floor).length + Object.keys(R.walls).length > 12000) return { ok: false, err: '너무 많아요' };
+      dirty = true;
+      const msg = JSON.stringify({ t: 'roomEdit', id, diff: { set, walls, hideProps: R.hideProps, reset: !!m.reset } }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+      return { ok: true, floor: Object.keys(R.floor).length, walls: Object.keys(R.walls).length };
     }
     case 'clock': { // 게임 시계: auto(실제 시간) / manual(일차·시간대). 앞으로 가면 그 사이 전투·균열이 차례로 일어남
       if (m.mode === 'auto') state.clock = { mode: 'auto' };

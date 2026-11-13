@@ -822,6 +822,14 @@
     if (cl) mapSig = '';
     if (touched.length < 400) for (const i of touched) dirtyTile(i); else invalidateChunks();
   }
+  function applyRoomDiff(id, d) { // 다른 관리자가 바꾼 칸만 합치기
+    if (d.reset) ROOM_EDITS[id] = { floor: {}, walls: {}, hideProps: false };
+    const E = ROOM_EDITS[id] = ROOM_EDITS[id] || { floor: {}, walls: {}, hideProps: false }; E.floor = E.floor || {}; E.walls = E.walls || {};
+    for (const [k, v] of Object.entries(d.set || {})) { if (v) E.floor[k] = v; else delete E.floor[k]; }
+    for (const [k, v] of Object.entries(d.walls || {})) { if (v) E.walls[k] = 1; else delete E.walls[k]; }
+    E.hideProps = !!d.hideProps;
+    if (ROOMS[id]) { buildRoom(id); if (player.room && player.room.id === id) player.room = ROOMS[id]; }
+  }
   function applyRoomEdit(id, e) { ROOM_EDITS[id] = e; if (ROOMS[id]) { buildRoom(id); if (player.room === ROOMS[id]) player.room = ROOMS[id]; } }
   function buildRoom(id) {
     {
@@ -1651,7 +1659,7 @@
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
       case 'clock': setClock(m); break;
-      case 'roomEdit': applyRoomEdit(m.id, m.edit); break;
+      case 'roomEdit': if (m.diff) applyRoomDiff(m.id, m.diff); else applyRoomEdit(m.id, m.edit); break;
       case 'groundEdit': applyGroundEdit(m); break;
       case 'rift': toast(m.text); break;
       case 'hitn': HITN.set(m.terr, { n: m.n, at: performance.now() }); near = null; break;
@@ -2538,6 +2546,7 @@
   }
   // ---- 칸 하나 읽기/바꾸기 (땅 지도 'ground' 또는 하늘 방 id). 모든 변경은 획(stroke)에 기록 → Ctrl+Z
   const undoStack = [], redoStack = []; let stroke = null;
+  const rPending = {}; // 하늘 방별로 아직 서버에 안 보낸 칸
   const touched = { ground: false, groundClear: false, rooms: new Set() };
   function cellGet(sc, kind, x, y) {
     if (sc === 'ground') { const i = y * W + x; return kind === 'floor' ? (GFLOOR.get(i) || null) : kind === 'wall' ? (GWALL.has(i) ? 1 : 0) : (GCLEAR.has(i) ? 1 : 0); }
@@ -2553,7 +2562,8 @@
       touched.ground = true; return;
     }
     const E = ROOM_EDITS[sc] = ROOM_EDITS[sc] || { floor: {}, walls: {}, hideProps: false }; E.floor = E.floor || {}; E.walls = E.walls || {};
-    if (kind === 'floor') { if (v) E.floor[k] = v; else delete E.floor[k]; } else { if (v) E.walls[k] = 1; else delete E.walls[k]; }
+    const P = rPending[sc] = rPending[sc] || { set: {}, walls: {} };
+    if (kind === 'floor') { if (v) E.floor[k] = v; else delete E.floor[k]; P.set[k] = v || null; } else { if (v) E.walls[k] = 1; else delete E.walls[k]; P.walls[k] = v ? 1 : 0; }
     touched.rooms.add(sc);
   }
   function change(sc, kind, x, y, v) { const b = cellGet(sc, kind, x, y); if (b === v) return false; cellSet(sc, kind, x, y, v); if (stroke) stroke.push([sc, kind, x, y, b, v]); return true; }
@@ -2620,10 +2630,11 @@
     if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.tool === 'fill' ? 1 : EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') || EDIT.tool === 'unwall' ? '#ff3344' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint' || EDIT.tool === 'fill') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
   }
   function editTileAt(e) { const r = canvas.getBoundingClientRect(), cam = player.scene === 'sky' ? skyCam : groundCam; const wx = (e.clientX - r.left) / zoom + cam.x, wy = (e.clientY - r.top) / zoom + cam.y; return [Math.floor(wx / TILE), Math.floor(wy / TILE)]; }
-  async function editSave(id) {
+  async function editSave(id, extra) {
     id = id || player.room.id;
+    const P = rPending[id] || { set: {}, walls: {} }; delete rPending[id];
     try {
-      const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: EDIT.key, op: 'roomSave', id, edit: ROOM_EDITS[id] }) }).then((x) => x.json());
+      const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: EDIT.key, op: 'roomSave', id, set: P.set, walls: P.walls }, extra || {})) }).then((x) => x.json());
       $('edSave').textContent = r.ok ? `저장됨 · 타일 ${r.floor} · 장벽 ${r.walls}` : '저장 실패: ' + r.err; EDIT.dirty = !r.ok;
     } catch (e) { $('edSave').textContent = '저장 실패 (연결 확인)'; }
   }
@@ -2662,8 +2673,8 @@
   for (const b of document.querySelectorAll('#editor [data-brush]')) b.addEventListener('click', () => { EDIT.brush = +b.dataset.brush; editUI(); });
   for (const b of document.querySelectorAll('#editor [data-slot]')) b.addEventListener('click', () => { EDIT.slot = b.dataset.slot; SLOT = EDIT.slot; drawSunMoon(); editUI(); });
   $('edWalls').addEventListener('click', () => { EDIT.showWalls = !EDIT.showWalls; editUI(); });
-  $('edProps').addEventListener('click', () => { const R = player.room; const E = ROOM_EDITS[R.id] = ROOM_EDITS[R.id] || { floor: {}, walls: {} }; E.hideProps = !E.hideProps; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); clearTimeout(EDIT.timer); EDIT.timer = setTimeout(editSave, 300); });
-  $('edClear').addEventListener('click', () => { if (player.scene !== 'sky') { if (confirm('땅 지도에 깐 타일과 장벽을 전부 지울까요? 되돌릴 수 없어요.')) { applyGroundEdit({ reset: true }); groundSave(true); } return; } const R = player.room; if (!confirm(`${R.name}에 깐 타일과 장벽을 모두 지울까요?`)) return; ROOM_EDITS[R.id] = { floor: {}, walls: {}, hideProps: false }; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); editSave(); });
+  $('edProps').addEventListener('click', () => { const R = player.room; const E = ROOM_EDITS[R.id] = ROOM_EDITS[R.id] || { floor: {}, walls: {} }; E.hideProps = !E.hideProps; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); editSave(R.id, { hideProps: E.hideProps }); });
+  $('edClear').addEventListener('click', () => { if (player.scene !== 'sky') { if (confirm('땅 지도에 깐 타일과 장벽을 전부 지울까요? 되돌릴 수 없어요.')) { applyGroundEdit({ reset: true }); groundSave(true); } return; } const R = player.room; if (!confirm(`${R.name}에 깐 타일과 장벽을 모두 지울까요?`)) return; ROOM_EDITS[R.id] = { floor: {}, walls: {}, hideProps: false }; delete rPending[R.id]; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); editSave(R.id, { reset: true }); });
   $('edExit').addEventListener('click', () => { location.href = '/'; });
   $('edPal').addEventListener('click', (e) => { const S = SHEETS[EDIT.sheet], r = $('edPal').getBoundingClientRect(), k = $('edPal').width / r.width; const tx = Math.floor((e.clientX - r.left) * k / 32), ty = Math.floor((e.clientY - r.top) * k / 32); const n = ty * S.cols + tx; if (tx < S.cols) { EDIT.tile = n; if (EDIT.tool !== 'fill') EDIT.tool = 'paint'; editPalette(); editUI(); } });
   canvas.addEventListener('mousedown', (e) => { if (!EDIT.on) return; stroke = []; const [x, y] = editTileAt(e); if (EDIT.tool === 'fill') { floodFill(x, y); endStroke(); return; } EDIT.painting = true; brushApply(x, y); });
@@ -2679,7 +2690,7 @@
   function setupDoomCard() {
     const date = 13 + DAY;
     if (!DOOM) {
-      $('doomL').textContent = '아직은 평화로운 세계';
+      $('doomL').textContent = '';
       $('doomD').textContent = `${DAY}일차`;
       $('doomR').textContent = `12/${date} · ${ONLINE ? SLOT_NAME[SLOT] : PHASE}`;
       $('doomBar').hidden = true;
