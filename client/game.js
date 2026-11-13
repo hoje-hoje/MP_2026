@@ -49,11 +49,12 @@
   function b64bytes(s) { const bin = atob(s); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
   function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k) || 'null'); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
 
-  const tileAt = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? T.VOID : terrain[y * W + x];
+  const GCLEAR = new Set(); // 관리자가 '나무·산 없애기'로 비운 칸: 산은 풀밭이 되고 나무는 안 생김
+  const tileAt = (x, y) => { if (x < 0 || y < 0 || x >= W || y >= H) return T.VOID; const i = y * W + x, t = terrain[i]; return t === T.MOUNTAIN && GCLEAR.has(i) ? T.GRASS : t; };
   const terrAt = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? -1 : (terr[y * W + x] === 65535 ? -1 : terr[y * W + x]);
   function blocked(x, y) {
     if (x < 0 || y < 0 || x >= W || y >= H) return true;
-    const t = terrain[y * W + x], o = terr[y * W + x];
+    const t = tileAt(x, y), o = terr[y * W + x];
     if (o !== 65535 && o > 0 && gone[o]) return true;
     if (t === T.VOID || t === T.HOLY || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1 || treeAt(x, y) !== null) return true;
     if (GWALL.has(y * W + x)) return true; // 관리자가 칠한 장벽
@@ -82,8 +83,8 @@
   // 나무: 바닥에 굽지 않고 따로 그려서(깊이 정렬) 뒤로 지나갈 수 있게, 줄기 칸은 못 지나가게.
   let noTree = new Uint8Array(1);
   function treeAt(x, y) {
-    if (x < 0 || y < 0 || x >= W || y >= H || noTree[y * W + x]) return null;
-    const t = terrain[y * W + x];
+    if (x < 0 || y < 0 || x >= W || y >= H || noTree[y * W + x] || GCLEAR.has(y * W + x)) return null;
+    const t = tileAt(x, y);
     if (t !== T.FOREST && t !== T.GRASS) return null;
     const o = terr[y * W + x]; if (o !== 65535 && o > 0 && gone[o]) return null;
     const h = hash(x, y, 7);
@@ -813,10 +814,12 @@
   const SHEETS = { town: { key: 'k_town', cols: 12, name: '타이니 타운' }, dungeon: { key: 'k_dungeon', cols: 12, name: '타이니 던전' }, onebit: { key: 'k_onebit', cols: 49, name: '1비트 팩' }, ninja: { key: 'floor', cols: 22, name: '닌자 바닥' }, winter: { key: 'k_winter', cols: 10, name: '겨울' } };
   function drawSheetTile(g, ref, x, y, size) { const [sh, n] = ref.split(':'), S = SHEETS[sh], im = S && ART[S.key]; if (!im) return; const k = +n; g.drawImage(im, (k % S.cols) * 16, Math.floor(k / S.cols) * 16, 16, 16, x, y, size, size); }
   function applyGroundEdit(m) {
-    if (m.reset) { for (const i of [...GFLOOR.keys(), ...GWALL]) dirtyTile(i); GFLOOR.clear(); GWALL.clear(); return; }
+    if (m.reset) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); invalidateChunks(); mapSig = ''; return; }
     const touched = [];
     for (const [k, v] of Object.entries(m.set || {})) { const [x, y] = k.split(',').map(Number), i = y * W + x; if (v) GFLOOR.set(i, v); else GFLOOR.delete(i); touched.push(i); }
     for (const [k, v] of Object.entries(m.walls || {})) { const [x, y] = k.split(',').map(Number), i = y * W + x; if (v) GWALL.add(i); else GWALL.delete(i); }
+    let cl = 0; for (const [k, v] of Object.entries(m.clear || {})) { const [x, y] = k.split(',').map(Number), i = y * W + x; if (v) GCLEAR.add(i); else GCLEAR.delete(i); touched.push(i); cl++; }
+    if (cl) mapSig = '';
     if (touched.length < 400) for (const i of touched) dirtyTile(i); else invalidateChunks();
   }
   function applyRoomEdit(id, e) { ROOM_EDITS[id] = e; if (ROOMS[id]) { buildRoom(id); if (player.room === ROOMS[id]) player.room = ROOMS[id]; } }
@@ -1387,7 +1390,7 @@
     const d = img.data;
     const base = { [T.VOID]: [27, 20, 48], [T.WATER]: [111, 183, 232], [T.MOUNTAIN]: [138, 129, 151], [T.HOLY]: [250, 238, 200] };
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const i = y * W + x, t = terrain[i], o = terr[i];
+      const i = y * W + x, t = GCLEAR.has(i) && terrain[i] === T.MOUNTAIN ? T.GRASS : terrain[i], o = terr[i];
       let c3 = base[t];
       if (o !== 65535 && o > 0 && gone[o]) c3 = [52, 30, 88];
       else if (!c3) {
@@ -1593,7 +1596,7 @@
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
         player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
         if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
-        if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls }); invalidateChunks(); }
+        if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls, clear: m.groundEdits.clear }); invalidateChunks(); mapSig = ''; }
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         if (!m.view) openFound('who'); else $('found').hidden = true;
@@ -2521,33 +2524,37 @@
   // ZEP 처럼: 타일 깔기 / 지우개 / 빨간 장벽 칠하기·지우기, 장벽 보이기 on/off, 기본 소품 숨기기, 시간대 미리보기
   const EDIT = { on: false, key: '', tool: 'paint', brush: 1, sheet: 'town', tile: 0, showWalls: true, slot: null, room: 'temple', dirty: false, timer: 0, painting: false };
   const skyCam = { x: 0, y: 0 }, groundCam = { x: 0, y: 0 };
-  const gPending = { set: {}, walls: {} };
+  const gPending = { set: {}, walls: {}, clear: {} };
   function groundEditOverlay(tx0, tx1, ty0, ty1) {
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const i = ty * W + tx;
+      if (GCLEAR.has(i)) { ctx.strokeStyle = 'rgba(80,220,120,0.8)'; ctx.setLineDash([4, 3]); ctx.strokeRect(tx * TILE + 2.5, ty * TILE + 2.5, TILE - 5, TILE - 5); ctx.setLineDash([]); }
       if (EDIT.showWalls) { if (GWALL.has(i)) { ctx.fillStyle = 'rgba(255,30,50,0.5)'; ctx.fillRect(tx * TILE, ty * TILE, TILE, TILE); ctx.strokeStyle = 'rgba(200,0,30,0.8)'; ctx.strokeRect(tx * TILE + 0.5, ty * TILE + 0.5, TILE - 1, TILE - 1); } else if (blocked(tx, ty)) { ctx.fillStyle = 'rgba(255,90,90,0.2)'; ctx.fillRect(tx * TILE, ty * TILE, TILE, TILE); } }
     }
     ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1;
     for (let x = tx0; x <= tx1; x++) { ctx.beginPath(); ctx.moveTo(x * TILE, ty0 * TILE); ctx.lineTo(x * TILE, (ty1 + 1) * TILE); ctx.stroke(); }
     for (let y = ty0; y <= ty1; y++) { ctx.beginPath(); ctx.moveTo(tx0 * TILE, y * TILE); ctx.lineTo((tx1 + 1) * TILE, y * TILE); ctx.stroke(); }
-    if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') || EDIT.tool === 'unwall' ? '#ff3344' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
+    if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') || EDIT.tool === 'unwall' ? '#ff3344' : EDIT.tool.endsWith('clear') ? '#50dc78' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
   }
   function groundApply(tx, ty) {
-    const o = (EDIT.brush - 1) / 2; let changed = false;
+    const o = (EDIT.brush - 1) / 2; let changed = false, clearTouched = false;
     for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) {
       const x = tx + dx, y = ty + dy; if (x < 0 || y < 0 || x >= W || y >= H) continue; const i = y * W + x, k = x + ',' + y, ref = EDIT.sheet + ':' + EDIT.tile;
       if (EDIT.tool === 'paint' && GFLOOR.get(i) !== ref) { GFLOOR.set(i, ref); gPending.set[k] = ref; dirtyTile(i); changed = true; }
       else if (EDIT.tool === 'erase' && GFLOOR.has(i)) { GFLOOR.delete(i); gPending.set[k] = null; dirtyTile(i); changed = true; }
       else if (EDIT.tool === 'wall' && !GWALL.has(i)) { GWALL.add(i); gPending.walls[k] = 1; changed = true; }
       else if (EDIT.tool === 'unwall' && GWALL.has(i)) { GWALL.delete(i); gPending.walls[k] = 0; changed = true; }
+      else if (EDIT.tool === 'clear' && !GCLEAR.has(i) && (treeAt(x, y) || terrain[i] === T.MOUNTAIN)) { GCLEAR.add(i); gPending.clear[k] = 1; changed = true; clearTouched = true; }
+      else if (EDIT.tool === 'unclear' && GCLEAR.has(i)) { GCLEAR.delete(i); gPending.clear[k] = 0; changed = true; clearTouched = true; }
     }
+    if (clearTouched) { for (let dy = -o - 1; dy <= o + 1; dy++) for (let dx = -o - 1; dx <= o + 1; dx++) dirtyTile((ty + dy) * W + tx + dx); mapSig = ''; applyWorld(); }
     if (!changed) return;
     $('edSave').textContent = '저장 대기…'; clearTimeout(EDIT.timer); EDIT.timer = setTimeout(groundSave, 900);
   }
   async function groundSave(reset) {
-    const body = reset ? { reset: true } : { set: gPending.set, walls: gPending.walls };
-    gPending.set = {}; gPending.walls = {};
-    try { const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: EDIT.key, op: 'groundSave' }, body)) }).then((x) => x.json()); $('edSave').textContent = r.ok ? `저장됨 · 땅 타일 ${r.floor} · 장벽 ${r.walls}` : '저장 실패: ' + r.err; }
+    const body = reset ? { reset: true } : { set: gPending.set, walls: gPending.walls, clear: gPending.clear };
+    gPending.set = {}; gPending.walls = {}; gPending.clear = {};
+    try { const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: EDIT.key, op: 'groundSave' }, body)) }).then((x) => x.json()); $('edSave').textContent = r.ok ? `저장됨 · 땅 타일 ${r.floor} · 장벽 ${r.walls} · 비운 칸 ${r.clear}` : '저장 실패: ' + r.err; }
     catch (e) { $('edSave').textContent = '저장 실패 (연결 확인)'; }
   }
   function editOverlay(R) {
@@ -2596,6 +2603,7 @@
     const E = player.room && ROOM_EDITS[player.room.id]; $('edProps').textContent = E && E.hideProps ? '기본 소품: 숨김' : '기본 소품: 보임';
     $('edRoom').value = player.scene === 'sky' && player.room ? player.room.id : 'ground';
     $('edProps').disabled = player.scene !== 'sky';
+    for (const b of document.querySelectorAll('#editor [data-tool="clear"], #editor [data-tool="unclear"]')) b.disabled = player.scene === 'sky';
     $('edClear').textContent = player.scene === 'sky' ? '이 방 되돌리기' : '땅 지도 전부 되돌리기';
   }
   async function startEditor() {

@@ -91,7 +91,11 @@ const world = new World(MAP, state.world || null);
 const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT } = require('../client/rules.js');
 // ---- 영지: 지형·저장소·설치물
 const TERRAIN = Buffer.from(MAP.terrain_b64, 'base64');
-const tileAt = (x, y) => (x < 0 || y < 0 || x >= MAP.width || y >= MAP.height) ? TT.VOID : TERRAIN[y * MAP.width + x];
+// 관리자가 '나무·산 없애기'로 비운 칸 (산 → 풀밭, 나무 없음)
+let CLEAR_SET = new Set();
+function rebuildClear() { CLEAR_SET = new Set(Object.keys((state.groundEdits || {}).clear || {}).map((k) => { const [x, y] = k.split(',').map(Number); return y * MAP.width + x; })); }
+const tileAt = (x, y) => { if (x < 0 || y < 0 || x >= MAP.width || y >= MAP.height) return TT.VOID; const i = y * MAP.width + x, t = TERRAIN[i]; return t === TT.MOUNTAIN && CLEAR_SET.has(i) ? TT.GRASS : t; };
+const treeHere = (x, y) => !CLEAR_SET.has(y * MAP.width + x) && treeKind(tileAt(x, y), x, y);
 const terrAtTile = (x, y) => terrAtPx(x * 32 + 16, y * 32 + 16);
 const walkableTerrain = (k) => k === TT.GRASS || k === TT.FOREST || k === TT.SAND;
 const tileIdx = (x, y) => y * MAP.width + x;
@@ -151,7 +155,7 @@ fs.watchFile(PUZZLE_FILE, { interval: 5000 }, loadPuzzles); // 문제 파일을 
 state.world = world.s;
 state.settings = state.settings || {};   // 관리자 설정: testMode(true/false/없음=환경변수), founding('auto'|'open'|'closed')
 state.coupons = state.coupons || {};     // 쿠폰 코드 -> { r:{coin|army}, memo, at, used:{name,nation,ts} }
-state.groundEdits = state.groundEdits || { floor: {}, walls: {} }; // 관리자 '맵 고치기': 땅 지도 { floor: {'x,y': '시트:번호'}, walls: {'x,y': 1} }
+state.groundEdits = state.groundEdits || { floor: {}, walls: {} }; state.groundEdits.clear = state.groundEdits.clear || {}; rebuildClear(); // 관리자 '맵 고치기': 땅 지도 { floor: {'x,y': '시트:번호'}, walls: {'x,y': 1} }
 state.roomEdits = state.roomEdits || {}; // 관리자 '맵 고치기': 하늘 방별 { floor: {'x,y': '시트:번호'}, walls: {'x,y': 1}, hideProps }
 state.puzzles = state.puzzles || [];     // 관리자 화면에서 넣은 문제 [{ id, type, question, image, answer:[], on, at }]
 const testMode = () => typeof state.settings.testMode === 'boolean' ? state.settings.testMode : ENV_TEST_MODE;
@@ -457,7 +461,7 @@ wss.on('connection', (ws) => {
       case 'chop': { // 나무 베기 (화면에서 2초 게이지가 찬 뒤 보냄)
         const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y);
         if (now() - (s.lastChop || 0) < NUM.chopSec * 900) return;
-        if (!nextTo(s, x, y) || !treeKind(tileAt(x, y), x, y) || world.s.chopped[i]) return send(ws, { t: 'err', text: '벨 수 있는 나무가 없어요' });
+        if (!nextTo(s, x, y) || !treeHere(x, y) || world.s.chopped[i]) return send(ws, { t: 'err', text: '벨 수 있는 나무가 없어요' });
         const n = world.nationOfPlayer(s.token);
         if (!n || world.ownerOf(terrAtTile(x, y)) !== n.id) return send(ws, { t: 'err', text: '우리 나라 땅의 나무만 벨 수 있어요' });
         s.lastChop = now(); world.s.chopped[i] = 1; dirty = true;
@@ -514,7 +518,7 @@ wss.on('connection', (ws) => {
           }
           if (!k) return;
           if (!(n.items[k] > 0)) { why = '저장소에 남은 게 없어요 (하늘 거래소에서 사요)'; break; }
-          if (!walkableTerrain(tileAt(x, y)) || treeKind(tileAt(x, y), x, y) && !world.s.chopped[i]) { why = '놓을 수 없는 칸이 있어요'; continue; }
+          if (!walkableTerrain(tileAt(x, y)) || treeHere(x, y) && !world.s.chopped[i]) { why = '놓을 수 없는 칸이 있어요'; continue; }
           if (reservedTile(x, y)) { why = '제단·포털·저장소 바로 옆엔 못 놓아요'; continue; }
           const cur = world.s.tiles[i];
           if (world.s.traps[i] || (cur && !(k === 'floor' && cur.k === 'floor' && cur.n === n.id))) { why = '이미 뭔가 놓인 칸이 있어요'; continue; }
@@ -537,7 +541,7 @@ wss.on('connection', (ws) => {
         if (kind === 'mine' && world.ownerOf(tid) !== n.id) return send(ws, { t: 'err', text: '우리 땅의 금광만 옮길 수 있어요' });
         if (!nextTo(s, x, y, 2.2)) return send(ws, { t: 'err', text: '바로 앞 칸에 놓아요' });
         if (world.ownerOf(terrAtTile(x, y)) !== n.id) return send(ws, { t: 'err', text: '우리 나라 땅에만 놓을 수 있어요' });
-        if (!walkableTerrain(tileAt(x, y)) || (treeKind(tileAt(x, y), x, y) && !world.s.chopped[i]) || world.s.tiles[i] && world.s.tiles[i].k === 'wall' || world.s.traps[i]) return send(ws, { t: 'err', text: '여기엔 놓을 수 없어요 (나무·방벽·덫이 있거나 걸을 수 없는 칸)' });
+        if (!walkableTerrain(tileAt(x, y)) || (treeHere(x, y) && !world.s.chopped[i]) || world.s.tiles[i] && world.s.tiles[i].k === 'wall' || world.s.traps[i]) return send(ws, { t: 'err', text: '여기엔 놓을 수 없어요 (나무·방벽·덫이 있거나 걸을 수 없는 칸)' });
         if (reservedTile(x, y)) return send(ws, { t: 'err', text: '제단·포털 바로 옆엔 못 놓아요' });
         if (buildingNear(x, y, kind === 'mine' ? 'mine:' + tid : 'store:' + n.id)) return send(ws, { t: 'err', text: '다른 저장소·금광과 2칸 넘게 떨어져야 해요' });
         if (kind === 'store') n.storePos = [x, y]; else world.s.mines[tid] = [x, y];
@@ -863,14 +867,16 @@ async function adminOp(m) {
     case 'resolve': resolveNight('관리자'); return { ok: true };
     case 'groundSave': { // 맵 고치기: 땅 지도. 바뀐 칸만 받는다 (set: 칸→타일 또는 null, walls: 칸→1 또는 0, reset: 전부 지우기)
       const G = state.groundEdits, okKey = (k) => /^\d{1,3},\d{1,3}$/.test(k) && k.split(',').every((v) => +v < 720);
-      if (m.reset) { state.groundEdits = { floor: {}, walls: {} }; dirty = true; const msg = JSON.stringify({ t: 'groundEdit', reset: true }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return { ok: true, floor: 0, walls: 0 }; }
-      const set = {}, walls = {};
+      if (m.reset) { state.groundEdits = { floor: {}, walls: {}, clear: {} }; rebuildClear(); dirty = true; const msg = JSON.stringify({ t: 'groundEdit', reset: true }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return { ok: true, floor: 0, walls: 0 }; }
+      const set = {}, walls = {}, clear = {}; G.clear = G.clear || {};
+      for (const [k, v] of Object.entries(m.clear || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v) { G.clear[k] = 1; clear[k] = 1; } else { delete G.clear[k]; clear[k] = 0; } }
+      if (Object.keys(clear).length) rebuildClear();
       for (const [k, v] of Object.entries(m.set || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v === null) { delete G.floor[k]; set[k] = null; } else if (/^(town|dungeon|onebit|ninja|winter):\d{1,4}$/.test(String(v))) { G.floor[k] = String(v); set[k] = String(v); } }
       for (const [k, v] of Object.entries(m.walls || {}).slice(0, 5000)) { if (!okKey(k)) continue; if (v) { G.walls[k] = 1; walls[k] = 1; } else { delete G.walls[k]; walls[k] = 0; } }
       if (Object.keys(G.floor).length + Object.keys(G.walls).length > 80000) return { ok: false, err: '땅 지도에 너무 많이 칠했어요' };
       dirty = true;
-      const msg = JSON.stringify({ t: 'groundEdit', set, walls }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
-      return { ok: true, floor: Object.keys(G.floor).length, walls: Object.keys(G.walls).length };
+      const msg = JSON.stringify({ t: 'groundEdit', set, walls, clear }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+      return { ok: true, floor: Object.keys(G.floor).length, walls: Object.keys(G.walls).length, clear: Object.keys(G.clear).length };
     }
     case 'roomSave': { // 맵 고치기: 하늘 방 하나의 바닥 타일·장벽 저장 → 모두에게 바로 반영
       const id = String(m.id || ''); if (!/^[a-z0-9]{2,16}$/.test(id)) return { ok: false, err: '방 이름이 이상해요' };
