@@ -56,6 +56,7 @@
     const t = terrain[y * W + x], o = terr[y * W + x];
     if (o !== 65535 && o > 0 && gone[o]) return true;
     if (t === T.VOID || t === T.HOLY || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1 || treeAt(x, y) !== null) return true;
+    if (GWALL.has(y * W + x)) return true; // 관리자가 칠한 장벽
     const e = TILES[y * W + x]; if (e && e.k === 'wall' && e.n !== MY_NID) return true; // 남의 방벽
     return STORE_AT.has(y * W + x);
   }
@@ -292,7 +293,7 @@
   const ART = {};
   function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('그림 파일을 불러오지 못했어요: ' + src)); i.src = src; }); }
   async function loadArt() {
-    const names = { k_town: 'kenney/town.png', k_dungeon: 'kenney/dungeon.png', k_onebit: 'kenney/onebit.png', water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
+    const names = { k_winter: 'winter/winter.png', k_town: 'kenney/town.png', k_dungeon: 'kenney/dungeon.png', k_onebit: 'kenney/onebit.png', water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
     const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
     const users = fetch('assets/user/users.json').then((r) => r.json()).then((j) => {
       USER.chars = j.chars; USER.animals = j.animals; USER.monsters = j.monsters;
@@ -505,6 +506,7 @@
             if ((x + y) % 2 === 0) { g.fillStyle = '#5a3f9e'; g.fillRect(px + 4, py + 18, TILE - 8, 3); }
             break;
         }
+        { const gf = GFLOOR.get(y * W + x); if (gf) drawSheetTile(g, gf, px, py, TILE); } // 관리자가 깐 타일
         { const e = TILES[y * W + x]; if (e && e.k === 'floor') g.drawImage(floorArt(e.c | 0), px, py, TILE, TILE); }
         // 영토 색 + 국경선: 우리 나라는 진하게, 경계는 우리 나라 색 띠 / 나머지 경계는 흰 선
         const o = terrAt(x, y);
@@ -807,8 +809,16 @@
   function buildRooms() { for (const id of Object.keys(ROOMS)) buildRoom(id); }
   // 관리자 '맵 고치기'로 바꾼 방 (타일·장벽·소품 숨기기). 서버가 보내 준다
   let ROOM_EDITS = {};
-  const SHEETS = { town: { key: 'k_town', cols: 12, name: '타이니 타운' }, dungeon: { key: 'k_dungeon', cols: 12, name: '타이니 던전' }, onebit: { key: 'k_onebit', cols: 49, name: '1비트 팩' }, ninja: { key: 'floor', cols: 22, name: '닌자 바닥' } };
+  const GFLOOR = new Map(), GWALL = new Set(); // 땅 지도에 관리자가 깐 타일·장벽 (칸 번호)
+  const SHEETS = { town: { key: 'k_town', cols: 12, name: '타이니 타운' }, dungeon: { key: 'k_dungeon', cols: 12, name: '타이니 던전' }, onebit: { key: 'k_onebit', cols: 49, name: '1비트 팩' }, ninja: { key: 'floor', cols: 22, name: '닌자 바닥' }, winter: { key: 'k_winter', cols: 10, name: '겨울' } };
   function drawSheetTile(g, ref, x, y, size) { const [sh, n] = ref.split(':'), S = SHEETS[sh], im = S && ART[S.key]; if (!im) return; const k = +n; g.drawImage(im, (k % S.cols) * 16, Math.floor(k / S.cols) * 16, 16, 16, x, y, size, size); }
+  function applyGroundEdit(m) {
+    if (m.reset) { for (const i of [...GFLOOR.keys(), ...GWALL]) dirtyTile(i); GFLOOR.clear(); GWALL.clear(); return; }
+    const touched = [];
+    for (const [k, v] of Object.entries(m.set || {})) { const [x, y] = k.split(',').map(Number), i = y * W + x; if (v) GFLOOR.set(i, v); else GFLOOR.delete(i); touched.push(i); }
+    for (const [k, v] of Object.entries(m.walls || {})) { const [x, y] = k.split(',').map(Number), i = y * W + x; if (v) GWALL.add(i); else GWALL.delete(i); }
+    if (touched.length < 400) for (const i of touched) dirtyTile(i); else invalidateChunks();
+  }
   function applyRoomEdit(id, e) { ROOM_EDITS[id] = e; if (ROOMS[id]) { buildRoom(id); if (player.room === ROOMS[id]) player.room = ROOMS[id]; } }
   function buildRoom(id) {
     {
@@ -1446,7 +1456,9 @@
     }
     return false;
   }
+  const canTp = () => !ONLINE || testMode || EDIT.on; // 지도 눌러 순간이동: 미리보기·테스트 모드·맵 고치기에서만
   mini.addEventListener('click', (e) => {
+    if (!canTp()) return;
     const r = mini.getBoundingClientRect();
     if (player.scene === 'sky') {
       const mx = (e.clientX - r.left) / r.width * mini.width, my = (e.clientY - r.top) / r.height * mini.height;
@@ -1477,7 +1489,7 @@
   }
   big.addEventListener('click', (e) => {
     const r = big.getBoundingClientRect();
-    if (teleportTo((e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H)) toggleMap(false);
+    if (canTp() && teleportTo((e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H)) toggleMap(false);
   });
   $('btnMap').addEventListener('click', () => toggleMap());
   $('btnMapClose').addEventListener('click', () => toggleMap(false));
@@ -1581,6 +1593,7 @@
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
         player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
         if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
+        if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls }); invalidateChunks(); }
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         if (!m.view) openFound('who'); else $('found').hidden = true;
@@ -1636,6 +1649,7 @@
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
       case 'clock': setClock(m); break;
       case 'roomEdit': applyRoomEdit(m.id, m.edit); break;
+      case 'groundEdit': applyGroundEdit(m); break;
       case 'rift': toast(m.text); break;
       case 'hitn': HITN.set(m.terr, { n: m.n, at: performance.now() }); near = null; break;
       case 'scout': HITN.delete(m.terr); toast(m.text); break;
@@ -2228,6 +2242,7 @@
       $('skyTimer').hidden = !sky || EDIT.on;
       if (sky && player.room.id === 'jail') { const l = Math.max(0, Math.ceil((jailUntil - Date.now()) / 1000)); $('skyTimer').firstChild.textContent = '감옥 '; $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.remove('warn'); }
       else if (sky) { $('skyTimer').firstChild.textContent = '하늘 체류 '; const l = Math.max(0, Math.ceil(player.skyLeft)); $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.toggle('warn', l <= 60); }
+      $('miniCap').textContent = canTp() ? (EDIT.on ? '누르면 순간이동 (맵 고치기)' : '누르면 순간이동 (테스트용)') : '미니맵';
       updateWhere(); updatePrompt(); drawMini(); if (!$('bigmap').hidden) drawBig();
     }
     requestAnimationFrame(frame);
@@ -2326,6 +2341,7 @@
     const camX = player.x - vw / 2 / zoom, camY = player.y - 40 - vh / 2 / zoom;
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -camX * dpr * zoom, -camY * dpr * zoom);
     ctx.imageSmoothingEnabled = false;
+    groundCam.x = camX; groundCam.y = camY;
 
     chunkBudget = 3;
     const ci0 = Math.floor(camX / CPX), cj0 = Math.floor(camY / CPX);
@@ -2397,6 +2413,7 @@
       const k = Math.min(1, (performance.now() - hold.t0) / hold.ms);
       ctx.fillStyle = '#2b2340'; ctx.fillRect(player.x - 26, player.y - 96, 52, 10); ctx.fillStyle = '#ffd34d'; ctx.fillRect(player.x - 24, player.y - 94, 48 * k, 6);
     }
+    if (EDIT.on) groundEditOverlay(tx0, tx1, ty0, ty1);
     nightTint(); // 낮·밤
     if (performance.now() < stunUntil) { ctx.font = `700 13px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd34d'; ctx.fillText('✦ 꼼짝 못 함 ✦', player.x, player.y - 100); }
   }
@@ -2503,7 +2520,36 @@
   // ------------------------------------------------------------ 관리자 '맵 고치기' (주소 끝 ?edit=1, 관리자 비밀번호 필요)
   // ZEP 처럼: 타일 깔기 / 지우개 / 빨간 장벽 칠하기·지우기, 장벽 보이기 on/off, 기본 소품 숨기기, 시간대 미리보기
   const EDIT = { on: false, key: '', tool: 'paint', brush: 1, sheet: 'town', tile: 0, showWalls: true, slot: null, room: 'temple', dirty: false, timer: 0, painting: false };
-  const skyCam = { x: 0, y: 0 };
+  const skyCam = { x: 0, y: 0 }, groundCam = { x: 0, y: 0 };
+  const gPending = { set: {}, walls: {} };
+  function groundEditOverlay(tx0, tx1, ty0, ty1) {
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      const i = ty * W + tx;
+      if (EDIT.showWalls) { if (GWALL.has(i)) { ctx.fillStyle = 'rgba(255,30,50,0.5)'; ctx.fillRect(tx * TILE, ty * TILE, TILE, TILE); ctx.strokeStyle = 'rgba(200,0,30,0.8)'; ctx.strokeRect(tx * TILE + 0.5, ty * TILE + 0.5, TILE - 1, TILE - 1); } else if (blocked(tx, ty)) { ctx.fillStyle = 'rgba(255,90,90,0.2)'; ctx.fillRect(tx * TILE, ty * TILE, TILE, TILE); } }
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1;
+    for (let x = tx0; x <= tx1; x++) { ctx.beginPath(); ctx.moveTo(x * TILE, ty0 * TILE); ctx.lineTo(x * TILE, (ty1 + 1) * TILE); ctx.stroke(); }
+    for (let y = ty0; y <= ty1; y++) { ctx.beginPath(); ctx.moveTo(tx0 * TILE, y * TILE); ctx.lineTo((tx1 + 1) * TILE, y * TILE); ctx.stroke(); }
+    if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') || EDIT.tool === 'unwall' ? '#ff3344' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
+  }
+  function groundApply(tx, ty) {
+    const o = (EDIT.brush - 1) / 2; let changed = false;
+    for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) {
+      const x = tx + dx, y = ty + dy; if (x < 0 || y < 0 || x >= W || y >= H) continue; const i = y * W + x, k = x + ',' + y, ref = EDIT.sheet + ':' + EDIT.tile;
+      if (EDIT.tool === 'paint' && GFLOOR.get(i) !== ref) { GFLOOR.set(i, ref); gPending.set[k] = ref; dirtyTile(i); changed = true; }
+      else if (EDIT.tool === 'erase' && GFLOOR.has(i)) { GFLOOR.delete(i); gPending.set[k] = null; dirtyTile(i); changed = true; }
+      else if (EDIT.tool === 'wall' && !GWALL.has(i)) { GWALL.add(i); gPending.walls[k] = 1; changed = true; }
+      else if (EDIT.tool === 'unwall' && GWALL.has(i)) { GWALL.delete(i); gPending.walls[k] = 0; changed = true; }
+    }
+    if (!changed) return;
+    $('edSave').textContent = '저장 대기…'; clearTimeout(EDIT.timer); EDIT.timer = setTimeout(groundSave, 900);
+  }
+  async function groundSave(reset) {
+    const body = reset ? { reset: true } : { set: gPending.set, walls: gPending.walls };
+    gPending.set = {}; gPending.walls = {};
+    try { const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key: EDIT.key, op: 'groundSave' }, body)) }).then((x) => x.json()); $('edSave').textContent = r.ok ? `저장됨 · 땅 타일 ${r.floor} · 장벽 ${r.walls}` : '저장 실패: ' + r.err; }
+    catch (e) { $('edSave').textContent = '저장 실패 (연결 확인)'; }
+  }
   function editOverlay(R) {
     const E = ROOM_EDITS[R.id] || {};
     if (EDIT.showWalls) for (let y = 0; y < R.h; y++) for (let x = 0; x < R.w; x++) { const v = R.grid[y * R.w + x]; if (v === 1) { const custom = E.walls && E.walls[x + ',' + y]; ctx.fillStyle = custom ? 'rgba(255,30,50,0.5)' : 'rgba(255,90,90,0.22)'; ctx.fillRect(x * TILE, y * TILE, TILE, TILE); if (custom) { ctx.strokeStyle = 'rgba(200,0,30,0.8)'; ctx.lineWidth = 1; ctx.strokeRect(x * TILE + 0.5, y * TILE + 0.5, TILE - 1, TILE - 1); } } }
@@ -2512,7 +2558,7 @@
     for (let y = 0; y <= R.h; y++) { ctx.beginPath(); ctx.moveTo(0, y * TILE); ctx.lineTo(R.w * TILE, y * TILE); ctx.stroke(); }
     if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') ? '#ff3344' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
   }
-  function editTileAt(e) { const r = canvas.getBoundingClientRect(); const wx = (e.clientX - r.left) / zoom + skyCam.x, wy = (e.clientY - r.top) / zoom + skyCam.y; return [Math.floor(wx / TILE), Math.floor(wy / TILE)]; }
+  function editTileAt(e) { const r = canvas.getBoundingClientRect(), cam = player.scene === 'sky' ? skyCam : groundCam; const wx = (e.clientX - r.left) / zoom + cam.x, wy = (e.clientY - r.top) / zoom + cam.y; return [Math.floor(wx / TILE), Math.floor(wy / TILE)]; }
   function editApply(tx, ty) {
     const R = player.room; if (!R) return;
     const E = ROOM_EDITS[R.id] = ROOM_EDITS[R.id] || { floor: {}, walls: {}, hideProps: false }; E.floor = E.floor || {}; E.walls = E.walls || {};
@@ -2548,7 +2594,9 @@
     for (const b of document.querySelectorAll('#editor [data-slot]')) b.setAttribute('aria-pressed', String(b.dataset.slot === SLOT));
     $('edWalls').textContent = EDIT.showWalls ? '장벽 보기: 켜짐' : '장벽 보기: 꺼짐';
     const E = player.room && ROOM_EDITS[player.room.id]; $('edProps').textContent = E && E.hideProps ? '기본 소품: 숨김' : '기본 소품: 보임';
-    if (player.room) $('edRoom').value = player.room.id;
+    $('edRoom').value = player.scene === 'sky' && player.room ? player.room.id : 'ground';
+    $('edProps').disabled = player.scene !== 'sky';
+    $('edClear').textContent = player.scene === 'sky' ? '이 방 되돌리기' : '땅 지도 전부 되돌리기';
   }
   async function startEditor() {
     let key = ''; try { key = sessionStorage.getItem('mpAdminKey') || ''; } catch (e) {}
@@ -2557,22 +2605,23 @@
     if (!r.ok) { alert('관리자 비밀번호가 맞지 않아요'); return; }
     try { sessionStorage.setItem('mpAdminKey', key); } catch (e) {}
     EDIT.on = true; EDIT.key = key; $('editor').hidden = false; $('found').hidden = true; if (build.on) setBuild(false);
-    $('edRoom').innerHTML = Object.entries(ROOMS).map(([id, R]) => `<option value="${id}">${R.name} (${R.w}×${R.h})</option>`).join('');
+    $('edRoom').innerHTML = '<option value="ground">🌍 땅 지도 (720×720)</option>' + Object.entries(ROOMS).filter(([, R]) => !R.hidden || true).map(([id, R]) => `<option value="${id}">☁ ${R.name} (${R.w}×${R.h})</option>`).join('');
     $('edSheets').innerHTML = Object.entries(SHEETS).map(([id, S]) => `<button type="button" data-sheet="${id}">${S.name}</button>`).join('');
     for (const b of document.querySelectorAll('#editor [data-sheet]')) b.onclick = () => { EDIT.sheet = b.dataset.sheet; EDIT.tile = 0; editPalette(); };
-    enterRoom(EDIT.room, null); editPalette(); editUI();
+    editPalette(); editUI();
   }
-  $('edRoom').addEventListener('change', () => { enterRoom($('edRoom').value, null); player.skyLeft = 9999; editUI(); });
+  $('edRoom').addEventListener('change', () => { const v = $('edRoom').value; if (v === 'ground') { if (player.scene === 'sky') descend(); } else { enterRoom(v, null); player.skyLeft = 9999; } editUI(); });
   for (const b of document.querySelectorAll('#editor [data-tool]')) b.addEventListener('click', () => { EDIT.tool = b.dataset.tool; editUI(); });
   for (const b of document.querySelectorAll('#editor [data-brush]')) b.addEventListener('click', () => { EDIT.brush = +b.dataset.brush; editUI(); });
   for (const b of document.querySelectorAll('#editor [data-slot]')) b.addEventListener('click', () => { EDIT.slot = b.dataset.slot; SLOT = EDIT.slot; drawSunMoon(); editUI(); });
   $('edWalls').addEventListener('click', () => { EDIT.showWalls = !EDIT.showWalls; editUI(); });
   $('edProps').addEventListener('click', () => { const R = player.room; const E = ROOM_EDITS[R.id] = ROOM_EDITS[R.id] || { floor: {}, walls: {} }; E.hideProps = !E.hideProps; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); clearTimeout(EDIT.timer); EDIT.timer = setTimeout(editSave, 300); });
-  $('edClear').addEventListener('click', () => { const R = player.room; if (!confirm(`${R.name}에 깐 타일과 장벽을 모두 지울까요?`)) return; ROOM_EDITS[R.id] = { floor: {}, walls: {}, hideProps: false }; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); editSave(); });
+  $('edClear').addEventListener('click', () => { if (player.scene !== 'sky') { if (confirm('땅 지도에 깐 타일과 장벽을 전부 지울까요? 되돌릴 수 없어요.')) { applyGroundEdit({ reset: true }); groundSave(true); } return; } const R = player.room; if (!confirm(`${R.name}에 깐 타일과 장벽을 모두 지울까요?`)) return; ROOM_EDITS[R.id] = { floor: {}, walls: {}, hideProps: false }; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); editSave(); });
   $('edExit').addEventListener('click', () => { location.href = '/'; });
   $('edPal').addEventListener('click', (e) => { const S = SHEETS[EDIT.sheet], r = $('edPal').getBoundingClientRect(), k = $('edPal').width / r.width; const tx = Math.floor((e.clientX - r.left) * k / 32), ty = Math.floor((e.clientY - r.top) * k / 32); const n = ty * S.cols + tx; if (tx < S.cols) { EDIT.tile = n; EDIT.tool = 'paint'; editPalette(); editUI(); } });
-  canvas.addEventListener('mousedown', (e) => { if (!EDIT.on || player.scene !== 'sky') return; EDIT.painting = true; const [x, y] = editTileAt(e); editApply(x, y); });
-  canvas.addEventListener('mousemove', (e) => { if (!EDIT.on || player.scene !== 'sky') return; EDIT.hover = editTileAt(e); if (EDIT.painting) editApply(...EDIT.hover); });
+  const editAt = (x, y) => (player.scene === 'sky' ? editApply(x, y) : groundApply(x, y));
+  canvas.addEventListener('mousedown', (e) => { if (!EDIT.on) return; EDIT.painting = true; const [x, y] = editTileAt(e); editAt(x, y); });
+  canvas.addEventListener('mousemove', (e) => { if (!EDIT.on) return; EDIT.hover = editTileAt(e); if (EDIT.painting) editAt(...EDIT.hover); });
   addEventListener('mouseup', () => { EDIT.painting = false; });
   canvas.addEventListener('mouseleave', () => { EDIT.hover = null; });
 

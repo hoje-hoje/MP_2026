@@ -283,7 +283,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 <div id="zoomBox" class="hud"><button id="zoomIn" type="button" aria-label="지도 크게">＋</button><button id="zoomOut" type="button" aria-label="지도 작게">－</button></div>
 <div id="mini" class="hud card">
   <canvas id="miniCanvas" width="336" height="336" aria-label="미니맵, 누르면 그 위치로 이동(테스트)"></canvas>
-  <div class="cap">누르면 순간이동 (테스트용)</div>
+  <div class="cap" id="miniCap">누르면 순간이동 (테스트용)</div>
 </div>
 
 <div id="chat" class="hud card" hidden>
@@ -306,7 +306,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
   <div class="r"><span>시간</span><button type="button" data-slot="morning">아침</button><button type="button" data-slot="lunch">점심</button><button type="button" data-slot="night">밤</button></div>
   <div class="r" id="edSheets"></div>
   <div class="pal"><canvas id="edPal"></canvas></div>
-  <p class="msg">타일을 고르고 지도 위를 마우스로 누르거나 끌어서 칠해요. 방향키로 이동해서 방을 둘러봐요. 빨간 칸은 못 지나가는 장벽(진한 빨강=직접 칠한 것). 바뀐 건 1초 뒤 자동 저장되고 모두에게 바로 보여요.</p>
+  <p class="msg">타일을 고르고 지도 위를 마우스로 누르거나 끌어서 칠해요. 방향키(Shift 누르면 빠르게)로 둘러보고, 땅에선 미니맵을 눌러 순간이동해요. 빨간 칸은 못 지나가는 장벽(진한 빨강=직접 칠한 것). 바뀐 건 1초 뒤 자동 저장되고 모두에게 바로 보여요.</p>
   <div class="r"><span id="edSave">-</span></div>
   <div class="r"><button type="button" id="edClear">이 방 되돌리기</button><button type="button" id="edExit">편집 끝내기</button></div>
 </div>
