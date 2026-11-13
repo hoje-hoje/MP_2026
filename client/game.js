@@ -684,6 +684,11 @@
     papers.forEach(([a, b, c], i) => { const px = x - 52 + i * 38; g.fillStyle = c; g.fillRect(px, y - 90, 32, 38); g.fillStyle = '#c0392b'; g.fillRect(px + 14, y - 92, 4, 4); g.fillStyle = '#2b2340'; g.font = `700 11px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(a, px + 16, y - 77); g.fillText(b, px + 16, y - 63); });
     sign(g, x, y - 112, '모집 게시판');
   }
+  // 감옥 창살: 가로 줄(y=8)과 방 사이 세로 줄(x=5,10,15,20,25), 방 이름표
+  const drawBars = (g, x, y) => { g.fillStyle = '#3b3b4a'; g.fillRect(x - 16, y - 30, 32, 4); for (let k = -12; k <= 12; k += 8) { g.fillStyle = '#6d6d82'; g.fillRect(x + k - 1, y - 30, 3, 34); g.fillStyle = '#a3a3b8'; g.fillRect(x + k - 1, y - 30, 1, 34); } };
+  const JAIL_BARS = [];
+  for (let x = 1; x <= 29; x++) JAIL_BARS.push({ x, y: 8, w: 1, h: 1, draw: x % 5 === 3 ? (g, X, Y) => { drawBars(g, X, Y); sign(g, X, Y - 40, `감옥 ${Math.floor(x / 5) + 1}`); } : drawBars });
+  for (let k = 1; k <= 5; k++) for (let y = 9; y <= 14; y++) JAIL_BARS.push({ x: 5 * k, y, w: 1, h: 1, draw: drawBars });
   const ROOMS = {
     temple: {
       name: '하늘 신전', desc: '신들의 공지 · 신탁 제단 · 멸망의 탑', w: 30, h: 18, pos: [1, 1], crowd: 10,
@@ -725,7 +730,7 @@
       name: '회담장', desc: '나라끼리 조약을 맺는 곳 · 밀실 2개', w: 26, h: 16, pos: [2, 1], crowd: 7,
       floor: 'floor_palace', wall: true, carpets: [[8, 4, 10, 8], [0, 7, 8, 3]], trim: '#5b7fd6',
       emotes: ['불가침 조약 ㄱ?', '동맹 맺자', '조건이 뭔데', '배신하면 알지?', '왕끼리 얘기하자'],
-      doors: [{ side: 'W', at: 8, to: 'temple' }, { side: 'E', at: 4, to: 'secret1' }, { side: 'E', at: 12, to: 'secret2' }],
+      doors: [{ side: 'W', at: 8, to: 'temple' }, { side: 'E', at: 4, to: 'secret1' }, { side: 'E', at: 12, to: 'secret2' }, { side: 'S', at: 13, to: 'jail' }],
       props: [
         { x: 11, y: 6, w: 4, h: 2, draw: (g, x, y) => { pix(g, 'altar', x, y + 6, 3); pix(g, 'book', x - 20, y - 70); pix(g, 'chalice', x + 22, y - 72); sign(g, x, y - 110, '조약 제단'); } },
         { x: 9, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 16, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
@@ -771,14 +776,15 @@
         { x: 2, y: 31, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'cloud', x + 20, y + 10, 0, 56, 0.9) }, { x: 53, y: 31, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'cloud', x - 10, y + 10, 0, 56, 0.9) },
       ],
     },
-    jail: { // 체포 3번이면 1시간. 문이 없어서 시간이 끝나야 나갈 수 있다
-      name: '감옥', desc: '오늘 3번 잡힌 사람이 갇히는 곳', w: 15, h: 10, pos: [0, -1], crowd: 0, hidden: true,
+    jail: { // 감옥: 위쪽은 면회실(회담장과 이어짐), 아래는 나라별 감옥 방 6칸 (창살). 3스택이면 갇힘, 보석금으로 바로 나감
+      name: '감옥', desc: '체포 3스택이면 갇히는 곳 · 면회실에서 보석금', w: 31, h: 16, pos: [2, 2], crowd: 0,
       floor: 'stonefloor', dark: true, wall: true, trim: '#5a5a6e',
-      emotes: ['억울해', '꺼내 줘', '...', '다음엔 안 잡혀'],
-      doors: [],
+      emotes: ['억울해', '꺼내 줘', '...', '다음엔 안 잡혀', '보석금 좀'],
+      doors: [{ side: 'N', at: 15, to: 'council' }],
       props: [
-        { x: 3, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candles', x, y + 2) }, { x: 11, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candles', x, y + 2) },
-        { x: 7, y: 2, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'tomb', x, y + 2); sign(g, x, y - 70, '감옥 · 시간이 끝나면 풀려나요'); } },
+        { x: 15, y: 4, w: 2, h: 1, bail: true, draw: (g, x, y) => { pix(g, 'altar', x, y + 6, 2); pix(g, 'book', x - 10, y - 46); sign(g, x, y - 90, '면회실 · 보석금 내기'); } },
+        { x: 4, y: 3, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candles', x, y + 2) }, { x: 26, y: 3, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candles', x, y + 2) },
+        ...JAIL_BARS,
       ],
     },
     wander: { // 유랑민 캠프: 등록 창구, 모집 게시판, 천막과 모닥불
@@ -981,6 +987,7 @@
     if (build.on) setBuild(false); // 하늘에 가면 설치 모드 자동으로 끄기
   }
   function ascend(portalTerr) {
+    if (player.carry) { toast('훔친 걸 들고 있으면 포털을 쓸 수 없어요 · 걸어서 우리 저장소로!'); return; }
     player.entry = portalTerr;
     player.skyLeft = SKY_LIMIT;
     enterRoom('temple', 'ground');
@@ -1160,13 +1167,13 @@
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
     if (k === 'm') toggleMap();
     if (k === 'b') toggleWar();
-    if (k === 't') goHome();
+    if (k === 't') { if (player.carry) toast('훔친 걸 들고 있으면 순간이동할 수 없어요'); else goHome(); }
     if (k === 'e' && !e.repeat) pressE();
     if (k === 'g' && ONLINE) setBuild(!build.on);
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
     if ((k === '[' || k === ']') && !ONLINE) { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
+    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
   });
   addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); });
   // 패드·폰: 화면 아래 안내를 누르면 E (꾹 누르기도 됨)
@@ -1256,6 +1263,7 @@
     if (player.scene === 'sky') {
       for (const sp of player.room.sprites) {
         if (sp.board && Math.hypot(sp.x - player.x, sp.y + 16 - player.y) < 90) best = sp.prop && sp.prop.desk === 'wander' ? { kind: 'desk', text: '등록 창구 이용하기' } : { kind: 'board', text: '게시판 읽기' };
+        if (sp.prop && sp.prop.bail && ONLINE && MY_NID && Math.hypot(sp.x - player.x, sp.y + 20 - player.y) < 100) best = { kind: 'bail', text: '면회실 · 우리 팀원 보석금 내기' };
         if (sp.prop && sp.prop.shop && Math.hypot(sp.x - player.x, sp.y + 20 - player.y) < 100) best = ONLINE ? { kind: 'shop', text: sp.prop.shop === 'build' ? '바닥·방벽·덫 사기' : '백신 사기' } : sp.prop.shop === 'vaccine' ? { kind: 'vaccine', text: `백신 사기 · 코인 ${vaccinePrice().toLocaleString()}` } : null;
       }
     } else {
@@ -1404,6 +1412,7 @@
     if (!near) return;
     if (near.kind === 'store') { openStore(); return; }
     if (near.kind === 'shop') { openShop(); return; }
+    if (near.kind === 'bail') { if (netOn) ws.send(JSON.stringify({ t: 'bailList' })); return; }
     if (near.kind === 'hit') { HITFX.set(near.t.id, performance.now() + 120); if (netOn) ws.send(JSON.stringify({ t: 'hit', terr: near.t.id })); return; }
     if (near.kind === 'pickB') { build.moving = near.what; near = null; toast('옮길 자리 바로 앞에서 E를 누르세요 (우리 땅, 다른 건물과 2칸 이상)'); return; }
     if (near.kind === 'dropB') { if (netOn) ws.send(JSON.stringify(Object.assign({ t: 'moveB', x: near.x, y: near.y }, build.moving))); build.moving = null; near = null; return; }
@@ -1688,12 +1697,12 @@
       }
       case 'meta': {
         const q = m.p;
-        if (q.id === myId) { player.carry = q.carry ? (player.carry || {}) : null; player.look.red = q.red | 0; break; }
+        if (q.id === myId) { player.carry = q.carry ? (player.carry || {}) : null; player.look.red = q.red | 0; player.badge = q.badge || ''; break; }
         let r = remotes.get(q.id);
         if (!r) { r = { x: null, y: null, tx: null, ty: null, dir: 1, moving: false, emote: null, emoteT: 0 }; remotes.set(q.id, r); }
         r.name = q.name; r.team = q.team; r.tag = teamColor(q.team);
         r.look = Object.assign({ seed: (q.id * 0.37) % 3 }, q.look, { red: q.red | 0 });
-        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed;
+        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || '';
         break;
       }
       case 'leave': remotes.delete(m.id); break;
@@ -1735,7 +1744,12 @@
       case 'hitn': HITN.set(m.terr, { n: m.n, at: performance.now() }); near = null; break;
       case 'scout': HITN.delete(m.terr); toast(m.text); break;
       case 'stun': stunUntil = performance.now() + m.ms; step.on = false; toast(m.text); break;
-      case 'pos': player.x = m.x; player.y = m.y; step.on = false; netTp = true; break;
+      case 'pos': player.x = m.x; player.y = m.y; step.on = false; netTp = true; if (m.text) toast(m.text); break;
+      case 'bailList': {
+        $('bailBody').innerHTML = m.list.length ? `<p class="msg">나라 코인 ${m.coin}</p>` + m.list.map((p) => `<div class="row"><span>${esc(p.name)} · 남은 ${p.left}분 · 악명 ${p.bad}</span><button data-bail="${p.idx}">보석금 ${p.bail}</button></div>`).join('') : '<p class="msg">감옥에 있는 우리 팀원이 없어요.</p>';
+        for (const b of $('bailBody').querySelectorAll('[data-bail]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'bail', idx: +b.dataset.bail })); $('bailBox').hidden = true; };
+        $('bailBox').hidden = false; break;
+      }
       case 'mined': mined.add(m.terr); toast(m.text); break;
       case 'warp': { const p = m.pos; if (p.scene === 'sky' && ROOMS[p.room]) { player.scene = 'sky'; player.room = ROOMS[p.room]; if (build.on) setBuild(false); } else { player.scene = 'ground'; player.room = null; } player.x = p.x; player.y = p.y; step.on = false; hold.on = false; fadeT = 0.35; lastTerr = null; break; }
       case 'carry': player.carry = m.carry; toast(m.text); break;
@@ -2181,6 +2195,7 @@
     $('reinBox').hidden = false;
   }
   $('reinClose').addEventListener('click', () => { $('reinBox').hidden = true; });
+  $('bailClose').addEventListener('click', () => { $('bailBox').hidden = true; });
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   function toggleWar(force) {
     const el = $('war'); el.hidden = force !== undefined ? !force : !el.hidden;
@@ -2393,7 +2408,7 @@
 
     // 플레이어 이동
     stepPlayer(dt); tickHold();
-    if (player.scene === 'sky' && player.room.id !== 'jail' && !EDIT.on) {
+    if (player.scene === 'sky' && !(player.room.id === 'jail' && jailUntil > Date.now()) && !EDIT.on) {
       player.skyLeft -= dt;
       if (player.skyLeft <= 0) { descend(); toast('하늘에 머물 수 있는 5분이 끝나 땅으로 내려왔어요'); }
     }
@@ -2407,7 +2422,7 @@
       hudT = 0.15;
       const sky = player.scene === 'sky';
       $('skyTimer').hidden = !sky || EDIT.on;
-      if (sky && player.room.id === 'jail') { const l = Math.max(0, Math.ceil((jailUntil - Date.now()) / 1000)); $('skyTimer').firstChild.textContent = '감옥 '; $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.remove('warn'); }
+      if (sky && player.room.id === 'jail' && jailUntil > Date.now()) { const l = Math.max(0, Math.ceil((jailUntil - Date.now()) / 1000)); $('skyTimer').firstChild.textContent = '감옥 '; $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.remove('warn'); }
       else if (sky) { $('skyTimer').firstChild.textContent = '하늘 체류 '; const l = Math.max(0, Math.ceil(player.skyLeft)); $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.toggle('warn', l <= 60); }
       $('miniCap').textContent = canTp() ? (EDIT.on ? '누르면 순간이동 (맵 고치기)' : '누르면 순간이동 (테스트용)') : '미니맵';
       updateWhere(); updatePrompt(); drawMini(); if (!$('bigmap').hidden) drawBig();
@@ -2422,7 +2437,7 @@
   addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; const k = e.key.toLowerCase(); if (DIRS[k]) { lastDirKey = k; if (!e.repeat) queuedDir = DIRS[k]; } });
   const DIRS = { arrowleft: [-1, 0], a: [-1, 0], arrowright: [1, 0], d: [1, 0], arrowup: [0, -1], w: [0, -1], arrowdown: [0, 1], s: [0, 1] };
   // 시작 화면·로딩·건국 창·퍼즐·옷장 같은 창이 열려 있으면 캐릭터가 움직이지 않음
-  const BLOCK_MOVE = ['loading', 'found', 'puzzle', 'closet', 'coupon', 'doomPop', 'battle', 'reinBox'];
+  const BLOCK_MOVE = ['loading', 'found', 'puzzle', 'closet', 'coupon', 'doomPop', 'battle', 'reinBox', 'bailBox'];
   const moveLocked = () => BLOCK_MOVE.some((id) => { const el = $(id); return el && !el.hidden; });
   function wantDir() {
     if (moveLocked()) { queuedDir = null; return null; }
@@ -2467,7 +2482,7 @@
     }
     for (const o of list) {
       if (o.draw) continue;
-      nameTag(ctx, o.x, o.y - 56, o === player ? player.name : o.name, o === player ? player.tag : o.tag);
+      nameTag(ctx, o.x, o.y - 56, (o === player ? player.name : o.name) + (o.badge ? ' ' + o.badge : ''), o === player ? player.tag : o.tag); // 이름 옆 악명 (💀 / 체포왕 👮)
       if (o.carry) { // 훔친 가방: 머리 옆에 큰 자루
         const b = Math.sin(performance.now() / 150) * 2, bx = o.x + 24, by = o.y - 40 + b;
         ctx.fillStyle = '#2b2340'; ctx.fillRect(bx - 12, by - 14, 24, 22); ctx.fillStyle = '#9a6a35'; ctx.fillRect(bx - 10, by - 12, 20, 18); ctx.fillStyle = '#c98c4a'; ctx.fillRect(bx - 10, by - 12, 20, 5);

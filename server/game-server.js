@@ -247,7 +247,7 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function meta(s) {
   const n = world.nationOfPlayer(s.token);
-  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, carry: !!s.acc.carry, red: arrestsToday(s.acc), jailed: jailed(s.acc) };
+  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
 }
 // 체포 횟수 (하루 단위), 감옥
 function arrestsToday(acc) { return acc.arrests && acc.arrests.day === gameDayKey() ? acc.arrests.n : 0; }
@@ -258,7 +258,15 @@ function capitalPos(acc, token) { // 그 사람 나라 수도 포털 앞 (나라
   const pt = t && MPRulesPortal(t);
   return t ? { x: pt[0] * 32 + 16, y: (pt[1] + 1) * 32 + 16, scene: 'ground', room: null } : null;
 }
-const JAIL_POS = { x: 7 * 32 + 16, y: 5 * 32 + 16, scene: 'sky', room: 'jail' };
+// 감옥: 나라별 방 6칸 (위쪽), 아래는 면회실. 방 자리는 나라 번호로 고정
+const JAIL_CELLS = 6, JAIL_CELL_W = 5; // 방 k: x = 1+5k .. 4+5k, y = 9..14 (위쪽은 면회실)
+const jailCell = (acc, token) => { const n = world.nationOfPlayer(token); return ((n ? n.team : 0) % JAIL_CELLS + JAIL_CELLS) % JAIL_CELLS; };
+const jailPos = (acc, token) => { const k = jailCell(acc, token); return { x: (2 + k * JAIL_CELL_W) * 32 + 16, y: 11 * 32 + 16, scene: 'sky', room: 'jail' }; };
+const inCell = (acc, token, x, y) => { const k = jailCell(acc, token), tx = Math.floor(x / 32), ty = Math.floor(y / 32); return tx >= 1 + k * JAIL_CELL_W && tx <= 4 + k * JAIL_CELL_W && ty >= 9 && ty <= 14; };
+const JAIL_POS = { x: 3 * 32 + 16, y: 5 * 32 + 16, scene: 'sky', room: 'jail' };
+// 개인 기록 (칭호용): 최고 악명, 체포 수, 털기 수, 정찰 수, 감옥 수, 퍼즐 수
+function stat(acc, k, d = 1) { acc.stats = acc.stats || {}; acc.stats[k] = (acc.stats[k] || 0) + d; }
+function addNotoriety(acc, d) { acc.notoriety = Math.round((acc.notoriety || 0) + d); acc.stats = acc.stats || {}; acc.stats.maxNotoriety = Math.max(acc.stats.maxNotoriety || 0, acc.notoriety); acc.stats.minNotoriety = Math.min(acc.stats.minNotoriety || 0, acc.notoriety); }
 function placeAt(s, pos) { if (!pos) return; Object.assign(s, { x: pos.x, y: pos.y, scene: pos.scene, room: pos.room, moved: true }); Object.assign(s.acc, pos); dirty = true; send(s.ws, { t: 'warp', pos }); }
 
 wss.on('connection', (ws) => {
@@ -291,7 +299,7 @@ wss.on('connection', (ws) => {
       const nat = world.nationOfPlayer(token); // 나라는 건국 화면에서 세우거나 초대 코드로 들어간다
       if (nat) { world.refreshActions(nat, actionDayKey()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       send(ws, {
-        t: 'welcome', id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? JAIL_POS : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: arrestsToday(acc), jailUntil: jailed(acc) ? acc.jailUntil : 0,
+        t: 'welcome', id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
         roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
@@ -304,10 +312,12 @@ wss.on('connection', (ws) => {
         const now = Date.now();
         const x = +m.x, y = +m.y;
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-        if (jailed(s.acc) && (m.scene !== 'sky' || m.room !== 'jail')) { send(ws, { t: 'warp', pos: JAIL_POS }); return; }
+        if (jailed(s.acc) && (m.scene !== 'sky' || m.room !== 'jail' || !inCell(s.acc, s.token, x, y))) { send(ws, { t: 'warp', pos: jailPos(s.acc, s.token) }); return; }
         const scene = m.scene === 'sky' ? 'sky' : 'ground';
         const room = scene === 'sky' ? clean(m.room, 16) : null;
         const sameArea = scene === s.scene && room === s.room;
+        // 훔친 걸 들고 있으면 포털·워프·순간이동 불가 (걸어서 가져가야 함)
+        if (s.acc.carry && s.x != null && (scene !== s.scene || room !== s.room || Math.hypot(x - s.x, y - s.y) > 160)) { send(ws, { t: 'pos', x: s.x, y: s.y, text: '훔친 걸 들고 있으면 포털·순간이동을 쓸 수 없어요 · 걸어서 우리 저장소로!' }); return; }
         const dt = Math.max(0.05, (now - s.lastMove) / 1000);
         // 같은 장소에서 너무 빨리 움직이면 무시 (순간이동 테스트 기능 m.tp 는 프로토타입 기간에만 허용)
         if (sameArea && s.x != null && !m.tp && Math.hypot(x - s.x, y - s.y) > MAX_SPEED * dt + 64) return;
@@ -661,9 +671,10 @@ wss.on('connection', (ws) => {
         }
         if (!s.stealing || s.stealing.nid !== V.id || now() - s.stealing.at < NUM.stealSec * 1000 - 300) return;
         s.stealing = null;
-        const coin = Math.min(NUM.carry.coin, V.coin), wood = Math.min(NUM.carry.wood, V.wood || 0);
+        const coin = Math.min(NUM.stealMax.coin, Math.floor(V.coin * NUM.stealPct)), wood = Math.min(NUM.stealMax.wood, Math.floor((V.wood || 0) * NUM.stealPct));
         if (!coin && !wood) return send(ws, { t: 'err', text: '저장소가 텅 비었어요' });
         V.coin -= coin; V.wood = (V.wood || 0) - wood; s.acc.carry = { coin, wood, from: V.id }; s.acc.stoleAt[V.id] = Date.now(); dirty = true;
+        addNotoriety(s.acc, NUM.notoriety.steal); stat(s.acc, 'steals');
         sendViews([V.id]); sendMeta(s);
         notifyNation(V.id, `💰 저장소를 털렸어요! 코인 −${coin}${wood ? `, 목재 −${wood}` : ''} · ${s.acc.name}을(를) 우리 땅에서 잡으면 돌려받아요`);
         send(ws, { t: 'carry', carry: s.acc.carry, text: `훔쳤어요! 코인 ${coin}${wood ? ` · 목재 ${wood}` : ''} · 우리 저장소까지 가져가세요 (잡히면 다 뺏겨요)` });
@@ -687,33 +698,59 @@ wss.on('connection', (ws) => {
         s.lastArrest = now();
         const c = o.acc.carry; let back = '';
         if (c) { const V = world.nation(c.from); const to = V && !V.dead ? V : n; to.coin += c.coin; to.wood = (to.wood || 0) + c.wood; o.acc.carry = null; back = ` · 훔친 코인 ${c.coin}${c.wood ? `, 목재 ${c.wood}` : ''}을(를) ${to === n ? '되찾았어요' : to.name + '에 돌려줬어요'}`; sendViews([to.id]); }
-        const day = gameDayKey(); o.acc.arrests = o.acc.arrests && o.acc.arrests.day === day ? o.acc.arrests : { day, n: 0 }; o.acc.arrests.n++;
+        // 보상금: 일정 악명 이상을 잡으면 (잡힌 사람 나라 저장소에서)
+        const tier = MPRules.notorietyTier(o.acc.notoriety | 0), bounty = Math.min(NUM.notorietyTiers[tier].bounty, on.coin | 0);
+        if (bounty > 0) { on.coin -= bounty; n.coin += bounty; back += ` · 보상금 ${bounty}`; }
+        addNotoriety(o.acc, (o.acc.notoriety | 0) * (NUM.notoriety.arrestedMul - 1)); addNotoriety(s.acc, NUM.notoriety.arrest);
+        stat(s.acc, 'arrests'); stat(o.acc, 'arrested');
+        // 영지의 신의 가호: 잡힐 때마다 스택 1, 3스택이면 감옥 (날마다 초기화 안 됨, 감옥에 가면 0)
+        o.acc.arrestStack = (o.acc.arrestStack | 0) + 1;
         let jail = false;
-        if (o.acc.arrests.n >= NUM.arrestJail) { jail = true; o.acc.jailUntil = Date.now() + NUM.jailMin * 60e3; o.acc.arrests.n = 0; }
-        dirty = true;
-        placeAt(o, jail ? JAIL_POS : capitalPos(o.acc, o.token));
-        send(o.ws, { t: 'arrested', jailUntil: jail ? o.acc.jailUntil : 0, carry: null, text: jail ? `⛓ ${n.name}에게 오늘 ${NUM.arrestJail}번째로 잡혔어요. 감옥 ${NUM.jailMin}분!` : `🚨 ${n.name}의 ${s.acc.name}에게 잡혀서 수도로 쫓겨났어요 (오늘 ${o.acc.arrests.n}번 · ${NUM.arrestJail}번이면 감옥)` });
+        if (o.acc.arrestStack >= NUM.arrestJail) { jail = true; o.acc.jailTier = tier; o.acc.jailUntil = Date.now() + NUM.notorietyTiers[tier].jailMin * 60e3; o.acc.arrestStack = 0; stat(o.acc, 'jails'); }
+        dirty = true; sendViews([n.id, on.id]); sendMeta(s);
+        placeAt(o, jail ? jailPos(o.acc, o.token) : capitalPos(o.acc, o.token));
+        const jm = NUM.notorietyTiers[tier].jailMin;
+        send(o.ws, { t: 'arrested', jailUntil: jail ? o.acc.jailUntil : 0, carry: null, text: jail ? `⛓ 3번째로 잡혔어요. 감옥 ${jm}분! (팀원이 면회실에서 보석금을 내면 바로 나가요)` : `🚔 ${n.name}의 ${s.acc.name}에게 잡혀서 수도로 돌아왔어요 (스택 ${o.acc.arrestStack}/${NUM.arrestJail})` });
         sendMeta(o);
         notifyNation(n.id, `🚔 ${s.acc.name}님이 ${on.name}의 ${o.acc.name}을(를) 체포했어요${jail ? ' · 감옥행!' : ''}${back}`);
-        notifyNation(on.id, `🚔 ${o.acc.name}님이 ${n.name}에게 잡혔어요${jail ? ' · 감옥 ' + NUM.jailMin + '분' : ''}`);
+        notifyNation(on.id, `🚔 ${o.acc.name}님이 ${n.name}에게 잡혔어요${jail ? ` · 감옥 ${jm}분 (면회실에서 보석금으로 꺼낼 수 있어요)` : ''}${bounty ? ` · 보상금 ${bounty} 빠져나감` : ''}`);
         break;
       }
-      case 'hit': { // 적 수정 때리기 → 10번이면 그 나라 병력이 보임
+      case 'hit': { // 적 수정 때리기 → 개인별 10번이면 그 나라 병력이 보임 (10분 동안 안 때리면 처음부터)
         const t = world.t[m.terr | 0]; if (!t) return;
         const own = world.ownerOf(t.id), n = world.nationOfPlayer(s.token);
         if (!own || (n && n.id === own) || !nextTo(s, t.altar[0], t.altar[1], 2.6) || now() - (s.lastHit || 0) < 250) return;
         s.lastHit = now();
-        // 개인별로 센다 (1분 안에 10번). 주변 사람에게는 보내지 않음 (사람이 많아도 가볍게)
-        s.hits = s.hits && s.hits.terr === t.id && now() - s.hits.at < 60000 ? s.hits : { terr: t.id, n: 0 };
-        s.hits.n++; s.hits.at = now();
-        send(ws, { t: 'hitn', terr: t.id, n: s.hits.n, need: NUM.scoutHits });
-        if (s.hits.n >= NUM.scoutHits) {
-          s.hits = null; const D = world.nation(own);
+        s.acc.hits = s.acc.hits && s.acc.hits.terr === t.id && now() - s.acc.hits.at < NUM.scoutResetMin * 60e3 ? s.acc.hits : { terr: t.id, n: 0 };
+        s.acc.hits.n++; s.acc.hits.at = now(); addNotoriety(s.acc, NUM.notoriety.hit); dirty = true;
+        send(ws, { t: 'hitn', terr: t.id, n: s.acc.hits.n, need: NUM.scoutHits });
+        if (s.acc.hits.n % 5 === 0) sendMeta(s); // 악명 표시 갱신
+        if (s.acc.hits.n >= NUM.scoutHits) {
+          s.acc.hits = null; const D = world.nation(own); stat(s.acc, 'scouts'); sendMeta(s);
+          notifyNation(D.id, `🔍 누군가 우리 병력을 엿봤어요 (${t.name} 수정)`);
           // 첩보 카드: 이 나라가 우리를 공격할 때 전선 하나를 볼 수 있음 (사람마다 이 나라에서 2시간에 1장)
           s.acc.scoutAt = s.acc.scoutAt || {}; let card = '';
-          if (n && Date.now() - (s.acc.scoutAt[D.id] || 0) > 2 * 3600e3) { s.acc.scoutAt[D.id] = Date.now(); n.intel = n.intel || {}; n.intel[D.id] = (n.intel[D.id] || 0) + 1; dirty = true; sendViews([n.id]); card = ` · ${D.name} 전용 첩보 +1장`; }
+          if (n && Date.now() - (s.acc.scoutAt[D.id] || 0) > 2 * 3600e3) { s.acc.scoutAt[D.id] = Date.now(); n.intel = n.intel || {}; n.intel[D.id] = (n.intel[D.id] || 0) + 1; sendViews([n.id]); card = ` · ${D.name} 첩보 카드 +1 (그 나라가 우리를 공격할 때 써요)`; }
           send(ws, { t: 'scout', terr: t.id, text: `🔍 ${D.name}의 병력: ${D.army}명 (영토 ${world.territoriesOf(D.id).length}곳)${card}` });
         }
+        break;
+      }
+      case 'bailList': { // 감옥 면회실: 우리 나라 죄수 목록
+        const n = world.nationOfPlayer(s.token); if (!n || s.scene !== 'sky' || s.room !== 'jail') return;
+        const list = n.members.map((k) => [k, state.accounts[k]]).filter(([, a]) => a && jailed(a)).map(([k, a]) => { const tr = NUM.notorietyTiers[a.jailTier | 0]; return { idx: n.members.indexOf(k), name: a.name, left: Math.ceil((a.jailUntil - Date.now()) / 60e3), bail: tr.bail, bad: a.notoriety | 0 }; });
+        send(ws, { t: 'bailList', list, coin: n.coin });
+        break;
+      }
+      case 'bail': { // 보석금 내기 (같은 나라 팀원 누구나, 면회실에서, 나라 저장소 코인)
+        const n = world.nationOfPlayer(s.token); if (!n || s.scene !== 'sky' || s.room !== 'jail' || jailed(s.acc)) return;
+        const key = n.members[m.idx | 0], a = key && state.accounts[key];
+        if (!a || !jailed(a)) return send(ws, { t: 'err', text: '감옥에 있는 우리 팀원이 아니에요' });
+        const bail = NUM.notorietyTiers[a.jailTier | 0].bail;
+        if (n.coin < bail) return send(ws, { t: 'err', text: `나라 코인이 모자라요 (보석금 ${bail})` });
+        n.coin -= bail; a.jailUntil = Date.now() - 1; dirty = true; sendViews([n.id]);
+        const o = [...online.values()].find((x) => x.token === key);
+        if (o) { placeAt(o, capitalPos(o.acc, o.token) || { x: 20 * 32, y: 20 * 32, scene: 'ground', room: null }); a.jailUntil = 0; send(o.ws, { t: 'released', text: `🔓 ${s.acc.name}님이 보석금 ${bail}을 내 줘서 풀려났어요` }); sendMeta(o); }
+        notifyNation(n.id, `🔓 ${s.acc.name}님이 보석금 ${bail}을 내고 ${a.name}님을 꺼냈어요`);
         break;
       }
       case 'wander': { // 유랑민 등록소: 귀화 신청 / 용병 등록 / 건국 대기
@@ -734,6 +771,10 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     clearInterval(refill);
     if (!s) return;
+    if (s.acc.carry) { // 훔친 걸 들고 접속이 끊기면 원래 나라로 돌아감
+      const c = s.acc.carry, V = world.nation(c.from); if (V && !V.dead) { V.coin += c.coin; V.wood = (V.wood || 0) + c.wood; notifyNation(V.id, `💰 도둑 ${s.acc.name}의 접속이 끊겨서 훔쳐 간 코인 ${c.coin}${c.wood ? `, 목재 ${c.wood}` : ''}을(를) 돌려받았어요`); }
+      s.acc.carry = null; dirty = true;
+    }
     online.delete(s.id);
     for (const o of online.values()) if (o.known.has(s.id)) { o.known.delete(s.id); send(o.ws, { t: 'leave', id: s.id }); }
   });
@@ -826,7 +867,7 @@ function resolveNight(why, slot) {
 }
 // 감옥에서 풀어 주기
 setInterval(() => {
-  for (const o of online.values()) if (o.acc.jailUntil && !jailed(o.acc)) { o.acc.jailUntil = 0; dirty = true; placeAt(o, capitalPos(o.acc, o.token)); send(o.ws, { t: 'released', text: '감옥에서 풀려났어요. 수도로 돌아왔어요' }); sendMeta(o); }
+  for (const o of online.values()) if (o.acc.jailUntil && !jailed(o.acc)) { o.acc.jailUntil = 0; dirty = true; placeAt(o, capitalPos(o.acc, o.token) || { x: 20 * 32, y: 20 * 32, scene: 'ground', room: null }); send(o.ws, { t: 'released', text: '감옥에서 풀려났어요. 수도로 돌아왔어요' }); sendMeta(o); }
 }, 5000);
 // 시계가 다음 시간대로 넘어갈 때: 점심·밤 → 전투 처리, 아침 → 멸망 선포·균열 예고·균열 웨이브
 const doomDay = () => state.doomDay || 5;

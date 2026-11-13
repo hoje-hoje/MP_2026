@@ -38,8 +38,13 @@
     floorSpeed: 1.5,               // 우리 나라 바닥 위에서 빨라지는 배수
     wallBreakSec: 5, chopSec: 2,   // 방벽 부수기·나무 베기 시간
     scoutHits: 10,                 // 적 수정을 이만큼 때리면 그 나라 병력이 보임
-    carry: { coin: 150, wood: 10 }, // 한 번에 훔쳐 들 수 있는 양
-    stealSec: 3, arrestJail: 3, jailMin: 60, // 훔치기 시간, 체포 몇 번이면 감옥, 감옥 시간(분)
+    scoutResetMin: 10,             // 10분 동안 다시 안 때리면 횟수 처음부터
+    stealPct: 0.03, stealMax: { coin: 300, wood: 30 }, // 털기: 저장소 각 재료의 3%, 최대치 (숫자는 영지에서 다시)
+    // 악명: 수정 1번 +10 (10번 = +100), 털기 +50, 체포하면 −20, 체포당하면 75%로
+    notoriety: { hit: 10, steal: 50, arrest: -20, arrestedMul: 0.75 },
+    // 악명 단계: 감옥 시간(분)·보석금·체포 보상금 (임시, 나중에 다시)
+    notorietyTiers: [{ min: -1e9, jailMin: 60, bail: 500, bounty: 0 }, { min: 200, jailMin: 90, bail: 1000, bounty: 200 }, { min: 500, jailMin: 120, bail: 2000, bounty: 500 }],
+    stealSec: 3, arrestJail: 3, jailMin: 60, // 훔치기 시간, 체포 스택 몇이면 감옥, 기본 감옥 시간(분)
     reinforce: 10, frontRange: 3.5, // 전선 근처(칸)에서 E 한 번에 충원하는 병력
   };
   // 저장소 모습 단계: 목재 500개 이상 → 2단계, 1000개 이상 → 3단계
@@ -574,5 +579,8 @@
     }
     return null;
   }
-  return { World, NUM, FRONTS, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  const notorietyTier = (v) => { const T2 = NUM.notorietyTiers; let k = 0; for (let i = 0; i < T2.length; i++) if ((v || 0) >= T2[i].min) k = i; return k; };
+  // 이름 옆 표시: 마이너스 = 체포왕 👮, 1~199 💀, 200~499 💀💀, 500 이상 💀💀💀
+  const notorietyBadge = (v) => (v < 0 ? '👮' : v <= 0 ? '' : v < 200 ? '💀' : v < 500 ? '💀💀' : '💀💀💀');
+  return { World, NUM, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
