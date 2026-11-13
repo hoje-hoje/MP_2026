@@ -2340,7 +2340,11 @@
   let lastDirKey = null, queuedDir = null;
   addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; const k = e.key.toLowerCase(); if (DIRS[k]) { lastDirKey = k; if (!e.repeat) queuedDir = DIRS[k]; } });
   const DIRS = { arrowleft: [-1, 0], a: [-1, 0], arrowright: [1, 0], d: [1, 0], arrowup: [0, -1], w: [0, -1], arrowdown: [0, 1], s: [0, 1] };
+  // 시작 화면·로딩·건국 창·퍼즐·옷장 같은 창이 열려 있으면 캐릭터가 움직이지 않음
+  const BLOCK_MOVE = ['loading', 'found', 'puzzle', 'closet', 'coupon', 'doomPop', 'battle'];
+  const moveLocked = () => BLOCK_MOVE.some((id) => { const el = $(id); return el && !el.hidden; });
   function wantDir() {
+    if (moveLocked()) { queuedDir = null; return null; }
     if (stick.on && Math.hypot(stick.vx, stick.vy) > 0.35) return Math.abs(stick.vx) > Math.abs(stick.vy) ? [Math.sign(stick.vx), 0] : [0, Math.sign(stick.vy)];
     if (queuedDir) { const d = queuedDir; queuedDir = null; return d; } // 아주 짧게 눌러도 한 칸
     if (lastDirKey && keys.has(lastDirKey)) return DIRS[lastDirKey];
