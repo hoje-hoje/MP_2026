@@ -1672,7 +1672,7 @@
       if (r.x == null || Math.hypot(x - r.x, y - r.y) > 400) { r.x = x; r.y = y; }
       r.tx = x; r.ty = y; r.dir = f & 1 ? -1 : 1; r.moving = !!(f & 2); r.face = (f >> 2) & 3;
     }
-    setNet(`접속 중 ${onlineCount}명 · ${player.team}팀 채팅`);
+    setNet(`접속 중 ${onlineCount}명`);
   }
   function onNet(m) {
     switch (m.t) {
@@ -1713,9 +1713,14 @@
           if (r.x == null || Math.hypot(x - r.x, y - r.y) > 400) { r.x = x; r.y = y; }
           r.tx = x; r.ty = y; r.dir = dir; r.moving = !!mv; r.face = f | 0;
         }
-        setNet(`접속 중 ${onlineCount}명 · ${player.team}팀 채팅`);
+        setNet(`접속 중 ${onlineCount}명`);
         break;
-      case 'chat': chatLog.push(m); if (chatLog.length > 60) chatLog.shift(); renderChat(); break;
+      case 'chat': {
+        chatLog.push(m); if (chatLog.length > 80) chatLog.shift(); renderChat();
+        if (m.ch !== 'team') { const r = m.from === myId ? player : remotes.get(m.from); if (r) { r.emote = m.text.length > 26 ? m.text.slice(0, 25) + '…' : m.text; r.emoteT = 4.5; } } // 말풍선 (팀 채팅은 말풍선 없음)
+        break;
+      }
+      case 'chatErr': toast(m.text); break;
       case 'emote': { const r = m.id === myId ? player : remotes.get(m.id); if (r) { r.emote = m.text; r.emoteT = 3; } break; }
       case 'wander': wanderList = m.list || []; renderWander(); break;
       case 'owners': if ('riftNext' in m) { RIFT_NEXT = m.riftNext; RIFT_SET = new Set(RIFT_NEXT ? RIFT_NEXT.terrs : []); } if (m.gone) setGone(m.gone); if (m.battles) BATTLES = m.battles; if (m.mines) applyMines(m.mines); applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
@@ -1795,11 +1800,20 @@
   }
 
   // 나라 채팅
+  const CH_NAME = { team: '팀', near: '주변', sky: '하늘', jail: '감옥' };
+  let chatCh = 'auto'; // auto = 땅이면 주변, 하늘이면 하늘
+  const curCh = () => (chatCh === 'team' ? 'team' : jailUntil > Date.now() ? 'jail' : player.scene === 'sky' ? 'sky' : 'near');
+  function renderChatTabs() {
+    for (const b of document.querySelectorAll('#chatTabs [data-ch]')) b.setAttribute('aria-pressed', String((b.dataset.ch === 'team') === (chatCh === 'team')));
+    const c = curCh(); const auto = $('chatTabs').querySelector('[data-ch="auto"]'); if (auto) auto.textContent = CH_NAME[c === 'team' ? (player.scene === 'sky' ? 'sky' : 'near') : c];
+    $('chatIn').placeholder = `${CH_NAME[c]} 채팅 (Enter · Tab으로 바꾸기)`;
+  }
   function renderChat() {
     const box = $('chatLog');
     box.textContent = '';
-    for (const m of chatLog.slice(-8)) {
-      const line = document.createElement('div');
+    for (const m of chatLog.slice(-30)) {
+      const line = document.createElement('div'); line.className = 'ch-' + (m.ch && m.ch.startsWith('nation:') ? 'team' : m.ch || 'team');
+      const tag = document.createElement('i'); tag.textContent = `[${CH_NAME[m.ch && m.ch.startsWith('nation:') ? 'team' : m.ch] || '팀'}] `; line.appendChild(tag);
       const who = document.createElement('b'); who.textContent = m.name + ' '; line.appendChild(who);
       line.appendChild(document.createTextNode(m.text));
       box.appendChild(line);
@@ -1809,8 +1823,9 @@
   function sendChat() {
     const el = $('chatIn'); const text = el.value.trim();
     if (!text || !netOn) return;
-    ws.send(JSON.stringify({ t: 'chat', text })); el.value = '';
+    ws.send(JSON.stringify({ t: 'chat', text, ch: curCh() === 'jail' ? 'near' : curCh() })); el.value = '';
   }
+  for (const b of document.querySelectorAll('#chatTabs [data-ch]')) b.addEventListener('click', () => { chatCh = b.dataset.ch; renderChatTabs(); $('chatIn').focus(); });
 
   // 유랑민 등록소
   const WANDER_KIND = { naturalize: '귀화 신청', mercenary: '용병 등록', found: '건국 대기' };
@@ -1847,7 +1862,8 @@
     setNet('서버에 연결하는 중…');
     connect();
   }
-  $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { sendChat(); } if (e.key === 'Escape') e.target.blur(); });
+  $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { sendChat(); } if (e.key === 'Escape') e.target.blur(); if (e.key === 'Tab') { e.preventDefault(); chatCh = chatCh === 'team' ? 'auto' : 'team'; renderChatTabs(); } });
+  $('chatIn').addEventListener('focus', renderChatTabs);
   $('chatIn').addEventListener('focus', () => keys.clear());
   $('btnChatSend').addEventListener('click', sendChat);
 

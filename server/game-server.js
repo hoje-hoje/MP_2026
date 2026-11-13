@@ -340,18 +340,30 @@ wss.on('connection', (ws) => {
         Object.assign(s.acc, { x, y, scene, room }); dirty = true;
         break;
       }
-      case 'chat': {
+      case 'chat': { // 채팅 3종: 팀(우리 나라) · 주변(땅에서 가까운 사람) · 하늘(하늘에 있는 모두). 감옥 안은 감옥 채팅
         const text = filterBad(clean(m.text, CHAT_MAX));
-        if (!text || now() - (s.lastChat || 0) < 800) return;
-        s.lastChat = now();
+        if (!text) return;
+        // 도배 방지: 0.8초 간격, 10초에 5번까지, 같은 말 3번 연속 금지 → 어기면 30초 동안 채팅 금지
+        const t0 = now();
+        if (t0 < (s.muteUntil || 0)) return send(ws, { t: 'chatErr', text: `도배 방지: ${Math.ceil((s.muteUntil - t0) / 1000)}초 뒤에 채팅할 수 있어요` });
+        if (t0 - (s.lastChat || 0) < 800) return;
+        s.chatTimes = (s.chatTimes || []).filter((x) => t0 - x < 10000); s.chatTimes.push(t0);
+        s.sameN = text === s.lastText ? (s.sameN || 1) + 1 : 1; s.lastText = text;
+        if (s.chatTimes.length > 5 || s.sameN >= 3) { s.muteUntil = t0 + 30000; s.chatTimes = []; s.sameN = 0; return send(ws, { t: 'chatErr', text: '도배 방지: 30초 동안 채팅할 수 없어요' }); }
+        s.lastChat = t0;
         const myNat = world.nationOfPlayer(s.token);
-        if (!myNat) return;
-        const ch = 'nation:' + myNat.id; // 나라 채팅 (병합되면 자동으로 제국 채팅이 된다)
-        const msg = { t: 'chat', ch, from: s.id, name: s.acc.name, text, ts: Date.now() };
-        const list = state.chats[ch] || (state.chats[ch] = []);
-        list.push(msg); if (list.length > CHAT_KEEP) list.splice(0, list.length - CHAT_KEEP);
-        dirty = true;
-        for (const o of online.values()) if (myNat.members.includes(o.token)) send(o.ws, msg);
+        let ch = ['team', 'near', 'sky'].includes(m.ch) ? m.ch : (s.scene === 'sky' ? 'sky' : 'near');
+        if (jailed(s.acc) && ch !== 'team') ch = 'jail';
+        if (ch === 'team' && !myNat) return send(ws, { t: 'chatErr', text: '나라가 없어서 팀 채팅을 쓸 수 없어요' });
+        if (ch === 'sky' && s.scene !== 'sky') ch = 'near';
+        if (ch === 'near' && s.scene === 'sky') ch = 'sky';
+        const msg = { t: 'chat', ch, from: s.id, name: s.acc.name, nat: myNat ? myNat.name : null, text, ts: Date.now() };
+        let to;
+        if (ch === 'team') { to = (o) => myNat.members.includes(o.token); const key = 'nation:' + myNat.id; const list = state.chats[key] || (state.chats[key] = []); list.push(msg); if (list.length > CHAT_KEEP) list.splice(0, list.length - CHAT_KEEP); dirty = true; }
+        else if (ch === 'near') to = (o) => o === s || near(o, s);
+        else if (ch === 'sky') to = (o) => o.scene === 'sky';
+        else to = (o) => o.scene === 'sky' && o.room === 'jail';
+        for (const o of online.values()) if (to(o)) send(o.ws, msg);
         break;
       }
       case 'emote': {

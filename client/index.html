@@ -273,6 +273,11 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #pzBoard.slide button { font: 400 34px var(--font-display); min-height: 0; }
 #pzBoard.slide button.empty { visibility: hidden; }
 .pztime { font-family: var(--font-display); font-size: 22px; margin-left: auto; margin-right: 8px; } .pztime.warn { color: #c22f53; }
+
+.chattabs { display: flex; gap: 4px; } .chattabs button { min-height: 26px; font-size: 12px; padding: 0 10px; }
+.chattabs button[aria-pressed="true"] { outline: 3px solid #ffd34d; }
+.chatlog i { font-style: normal; font-size: 11px; font-weight: 700; }
+.chatlog .ch-team i { color: #277a58; } .chatlog .ch-near i { color: #6b6280; } .chatlog .ch-sky i { color: #3d5fb8; } .chatlog .ch-jail i { color: #c22f53; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -314,7 +319,8 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 <div id="chat" class="hud card" hidden>
   <div class="chathead" id="netText">오프라인</div>
   <div id="chatLog" class="chatlog" aria-live="polite"></div>
-  <div class="chatrow"><input id="chatIn" type="text" maxlength="120" placeholder="우리 나라 채팅 (Enter)" autocomplete="off"><button id="btnChatSend" type="button">보내기</button></div>
+  <div class="chattabs" id="chatTabs"><button type="button" data-ch="auto" aria-pressed="true">주변</button><button type="button" data-ch="team" aria-pressed="false">팀</button></div>
+  <div class="chatrow"><input id="chatIn" type="text" maxlength="120" placeholder="주변 채팅 (Enter · Tab으로 바꾸기)" autocomplete="off"><button id="btnChatSend" type="button">보내기</button></div>
 </div>
 
 <div id="help" class="hud card">WASD·방향키 이동 · E 포털·금광·제단 · Shift 빨리 걷기 · 휠 확대/축소 · 1~8 감정표현 · [ ] 날짜 바꾸기 (테스트)</div>
