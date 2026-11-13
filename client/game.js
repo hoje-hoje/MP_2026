@@ -2534,22 +2534,76 @@
     ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1;
     for (let x = tx0; x <= tx1; x++) { ctx.beginPath(); ctx.moveTo(x * TILE, ty0 * TILE); ctx.lineTo(x * TILE, (ty1 + 1) * TILE); ctx.stroke(); }
     for (let y = ty0; y <= ty1; y++) { ctx.beginPath(); ctx.moveTo(tx0 * TILE, y * TILE); ctx.lineTo((tx1 + 1) * TILE, y * TILE); ctx.stroke(); }
-    if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') || EDIT.tool === 'unwall' ? '#ff3344' : EDIT.tool.endsWith('clear') ? '#50dc78' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
+    if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.tool === 'fill' ? 1 : EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') || EDIT.tool === 'unwall' ? '#ff3344' : EDIT.tool.endsWith('clear') ? '#50dc78' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint' || EDIT.tool === 'fill') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
   }
-  function groundApply(tx, ty) {
-    const o = (EDIT.brush - 1) / 2; let changed = false, clearTouched = false;
-    for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) {
-      const x = tx + dx, y = ty + dy; if (x < 0 || y < 0 || x >= W || y >= H) continue; const i = y * W + x, k = x + ',' + y, ref = EDIT.sheet + ':' + EDIT.tile;
-      if (EDIT.tool === 'paint' && GFLOOR.get(i) !== ref) { GFLOOR.set(i, ref); gPending.set[k] = ref; dirtyTile(i); changed = true; }
-      else if (EDIT.tool === 'erase' && GFLOOR.has(i)) { GFLOOR.delete(i); gPending.set[k] = null; dirtyTile(i); changed = true; }
-      else if (EDIT.tool === 'wall' && !GWALL.has(i)) { GWALL.add(i); gPending.walls[k] = 1; changed = true; }
-      else if (EDIT.tool === 'unwall' && GWALL.has(i)) { GWALL.delete(i); gPending.walls[k] = 0; changed = true; }
-      else if (EDIT.tool === 'clear' && !GCLEAR.has(i) && (treeAt(x, y) || terrain[i] === T.MOUNTAIN)) { GCLEAR.add(i); gPending.clear[k] = 1; changed = true; clearTouched = true; }
-      else if (EDIT.tool === 'unclear' && GCLEAR.has(i)) { GCLEAR.delete(i); gPending.clear[k] = 0; changed = true; clearTouched = true; }
+  // ---- 칸 하나 읽기/바꾸기 (땅 지도 'ground' 또는 하늘 방 id). 모든 변경은 획(stroke)에 기록 → Ctrl+Z
+  const undoStack = [], redoStack = []; let stroke = null;
+  const touched = { ground: false, groundClear: false, rooms: new Set() };
+  function cellGet(sc, kind, x, y) {
+    if (sc === 'ground') { const i = y * W + x; return kind === 'floor' ? (GFLOOR.get(i) || null) : kind === 'wall' ? (GWALL.has(i) ? 1 : 0) : (GCLEAR.has(i) ? 1 : 0); }
+    const E = ROOM_EDITS[sc] || {}, k = x + ',' + y; return kind === 'floor' ? ((E.floor || {})[k] || null) : ((E.walls || {})[k] ? 1 : 0);
+  }
+  function cellSet(sc, kind, x, y, v) {
+    const k = x + ',' + y;
+    if (sc === 'ground') {
+      const i = y * W + x;
+      if (kind === 'floor') { if (v) GFLOOR.set(i, v); else GFLOOR.delete(i); gPending.set[k] = v || null; dirtyTile(i); }
+      else if (kind === 'wall') { if (v) GWALL.add(i); else GWALL.delete(i); gPending.walls[k] = v ? 1 : 0; }
+      else { if (v) GCLEAR.add(i); else GCLEAR.delete(i); gPending.clear[k] = v ? 1 : 0; touched.groundClear = true; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) dirtyTile((y + dy) * W + x + dx); }
+      touched.ground = true; return;
     }
-    if (clearTouched) { for (let dy = -o - 1; dy <= o + 1; dy++) for (let dx = -o - 1; dx <= o + 1; dx++) dirtyTile((ty + dy) * W + tx + dx); mapSig = ''; applyWorld(); }
-    if (!changed) return;
-    $('edSave').textContent = '저장 대기…'; clearTimeout(EDIT.timer); EDIT.timer = setTimeout(groundSave, 900);
+    const E = ROOM_EDITS[sc] = ROOM_EDITS[sc] || { floor: {}, walls: {}, hideProps: false }; E.floor = E.floor || {}; E.walls = E.walls || {};
+    if (kind === 'floor') { if (v) E.floor[k] = v; else delete E.floor[k]; } else { if (v) E.walls[k] = 1; else delete E.walls[k]; }
+    touched.rooms.add(sc);
+  }
+  function change(sc, kind, x, y, v) { const b = cellGet(sc, kind, x, y); if (b === v) return false; cellSet(sc, kind, x, y, v); if (stroke) stroke.push([sc, kind, x, y, b, v]); return true; }
+  // 바뀐 것 화면에 반영하고 잠시 뒤 저장
+  function flushEdits() {
+    if (touched.groundClear) { mapSig = ''; applyWorld(); }
+    if (touched.ground) { $('edSave').textContent = '저장 대기…'; clearTimeout(EDIT.timer); EDIT.timer = setTimeout(groundSave, 900); }
+    for (const id of touched.rooms) { buildRoom(id); if (player.room && player.room.id === id) player.room = ROOMS[id]; $('edSave').textContent = '저장 대기…'; clearTimeout(EDIT.rtimer); EDIT.rtimer = setTimeout(() => editSave(id), 900); }
+    touched.ground = touched.groundClear = false; touched.rooms = new Set();
+  }
+  const scope = () => (player.scene === 'sky' && player.room ? player.room.id : 'ground');
+  const scopeSize = (sc) => (sc === 'ground' ? [W, H] : [ROOMS[sc].w, ROOMS[sc].h]);
+  function brushApply(tx, ty) {
+    const sc = scope(), [SW, SH] = scopeSize(sc), o = (EDIT.brush - 1) / 2, ref = EDIT.sheet + ':' + EDIT.tile;
+    for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) {
+      const x = tx + dx, y = ty + dy; if (x < 0 || y < 0 || x >= SW || y >= SH) continue;
+      if (EDIT.tool === 'paint') change(sc, 'floor', x, y, ref);
+      else if (EDIT.tool === 'erase') change(sc, 'floor', x, y, null);
+      else if (EDIT.tool === 'wall') change(sc, 'wall', x, y, 1);
+      else if (EDIT.tool === 'unwall') change(sc, 'wall', x, y, 0);
+      else if (EDIT.tool === 'clear' && sc === 'ground' && (treeAt(x, y) || terrain[y * W + x] === T.MOUNTAIN)) change(sc, 'clear', x, y, 1);
+      else if (EDIT.tool === 'unclear' && sc === 'ground') change(sc, 'clear', x, y, 0);
+    }
+    flushEdits();
+  }
+  // 채우기: 붙어 있는 같은 타일(빈 칸이면 같은 지형)을 고른 타일로 한 번에 바꾸기
+  function floodFill(tx, ty) {
+    const sc = scope(), [SW, SH] = scopeSize(sc), ref = EDIT.sheet + ':' + EDIT.tile, LIMIT = sc === 'ground' ? 3000 : SW * SH;
+    if (tx < 0 || ty < 0 || tx >= SW || ty >= SH) return;
+    const want = cellGet(sc, 'floor', tx, ty), base = sc === 'ground' ? tileAt(tx, ty) : 0;
+    if (want === ref) return;
+    const same = (x, y) => cellGet(sc, 'floor', x, y) === want && (want || sc !== 'ground' || tileAt(x, y) === base);
+    const seen = new Set([ty * SW + tx]), q = [[tx, ty]], cells = [];
+    while (q.length) {
+      const [x, y] = q.pop(); cells.push([x, y]);
+      if (cells.length > LIMIT) { $('edSave').textContent = `채우기 취소: ${LIMIT}칸이 넘어요. 테두리를 먼저 칠해서 막아 주세요`; return; }
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Y = y + dy, k = Y * SW + X; if (X < 0 || Y < 0 || X >= SW || Y >= SH || seen.has(k)) continue; seen.add(k); if (same(X, Y)) q.push([X, Y]); }
+    }
+    for (const [x, y] of cells) change(sc, 'floor', x, y, ref);
+    if (cells.length > 400 && sc === 'ground') invalidateChunks();
+    flushEdits(); $('edSave').textContent = `${cells.length}칸 채움 · 저장 대기…`;
+  }
+  function endStroke() { if (stroke && stroke.length) { undoStack.push(stroke); if (undoStack.length > 100) undoStack.shift(); redoStack.length = 0; } stroke = null; }
+  function undoRedo(redo) {
+    const st = (redo ? redoStack : undoStack).pop(); if (!st) { $('edSave').textContent = redo ? '다시 할 게 없어요' : '되돌릴 게 없어요'; return; }
+    const list = redo ? st : st.slice().reverse();
+    for (const [sc, kind, x, y, b, a] of list) cellSet(sc, kind, x, y, redo ? a : b);
+    if (st.length > 400) invalidateChunks();
+    (redo ? undoStack : redoStack).push(st); flushEdits();
+    $('edSave').textContent = `${redo ? '다시 함' : '되돌림'} (${st.length}칸) · 저장 대기…`;
   }
   async function groundSave(reset) {
     const body = reset ? { reset: true } : { set: gPending.set, walls: gPending.walls, clear: gPending.clear };
@@ -2563,26 +2617,11 @@
     ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; // 칸 선
     for (let x = 0; x <= R.w; x++) { ctx.beginPath(); ctx.moveTo(x * TILE, 0); ctx.lineTo(x * TILE, R.h * TILE); ctx.stroke(); }
     for (let y = 0; y <= R.h; y++) { ctx.beginPath(); ctx.moveTo(0, y * TILE); ctx.lineTo(R.w * TILE, y * TILE); ctx.stroke(); }
-    if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') ? '#ff3344' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
+    if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.tool === 'fill' ? 1 : EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') || EDIT.tool === 'unwall' ? '#ff3344' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint' || EDIT.tool === 'fill') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
   }
   function editTileAt(e) { const r = canvas.getBoundingClientRect(), cam = player.scene === 'sky' ? skyCam : groundCam; const wx = (e.clientX - r.left) / zoom + cam.x, wy = (e.clientY - r.top) / zoom + cam.y; return [Math.floor(wx / TILE), Math.floor(wy / TILE)]; }
-  function editApply(tx, ty) {
-    const R = player.room; if (!R) return;
-    const E = ROOM_EDITS[R.id] = ROOM_EDITS[R.id] || { floor: {}, walls: {}, hideProps: false }; E.floor = E.floor || {}; E.walls = E.walls || {};
-    const o = (EDIT.brush - 1) / 2; let changed = false;
-    for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) {
-      const x = tx + dx, y = ty + dy; if (x < 0 || y < 0 || x >= R.w || y >= R.h) continue; const k = x + ',' + y;
-      if (EDIT.tool === 'paint' && E.floor[k] !== EDIT.sheet + ':' + EDIT.tile) { E.floor[k] = EDIT.sheet + ':' + EDIT.tile; changed = true; }
-      else if (EDIT.tool === 'erase' && E.floor[k]) { delete E.floor[k]; changed = true; }
-      else if (EDIT.tool === 'wall' && !E.walls[k]) { E.walls[k] = 1; changed = true; }
-      else if (EDIT.tool === 'unwall' && E.walls[k]) { delete E.walls[k]; changed = true; }
-    }
-    if (!changed) return;
-    buildRoom(R.id); player.room = ROOMS[R.id];
-    EDIT.dirty = true; $('edSave').textContent = '저장 대기…'; clearTimeout(EDIT.timer); EDIT.timer = setTimeout(editSave, 900);
-  }
-  async function editSave() {
-    const id = player.room.id;
+  async function editSave(id) {
+    id = id || player.room.id;
     try {
       const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: EDIT.key, op: 'roomSave', id, edit: ROOM_EDITS[id] }) }).then((x) => x.json());
       $('edSave').textContent = r.ok ? `저장됨 · 타일 ${r.floor} · 장벽 ${r.walls}` : '저장 실패: ' + r.err; EDIT.dirty = !r.ok;
@@ -2626,11 +2665,14 @@
   $('edProps').addEventListener('click', () => { const R = player.room; const E = ROOM_EDITS[R.id] = ROOM_EDITS[R.id] || { floor: {}, walls: {} }; E.hideProps = !E.hideProps; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); clearTimeout(EDIT.timer); EDIT.timer = setTimeout(editSave, 300); });
   $('edClear').addEventListener('click', () => { if (player.scene !== 'sky') { if (confirm('땅 지도에 깐 타일과 장벽을 전부 지울까요? 되돌릴 수 없어요.')) { applyGroundEdit({ reset: true }); groundSave(true); } return; } const R = player.room; if (!confirm(`${R.name}에 깐 타일과 장벽을 모두 지울까요?`)) return; ROOM_EDITS[R.id] = { floor: {}, walls: {}, hideProps: false }; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); editSave(); });
   $('edExit').addEventListener('click', () => { location.href = '/'; });
-  $('edPal').addEventListener('click', (e) => { const S = SHEETS[EDIT.sheet], r = $('edPal').getBoundingClientRect(), k = $('edPal').width / r.width; const tx = Math.floor((e.clientX - r.left) * k / 32), ty = Math.floor((e.clientY - r.top) * k / 32); const n = ty * S.cols + tx; if (tx < S.cols) { EDIT.tile = n; EDIT.tool = 'paint'; editPalette(); editUI(); } });
-  const editAt = (x, y) => (player.scene === 'sky' ? editApply(x, y) : groundApply(x, y));
-  canvas.addEventListener('mousedown', (e) => { if (!EDIT.on) return; EDIT.painting = true; const [x, y] = editTileAt(e); editAt(x, y); });
-  canvas.addEventListener('mousemove', (e) => { if (!EDIT.on) return; EDIT.hover = editTileAt(e); if (EDIT.painting) editAt(...EDIT.hover); });
-  addEventListener('mouseup', () => { EDIT.painting = false; });
+  $('edPal').addEventListener('click', (e) => { const S = SHEETS[EDIT.sheet], r = $('edPal').getBoundingClientRect(), k = $('edPal').width / r.width; const tx = Math.floor((e.clientX - r.left) * k / 32), ty = Math.floor((e.clientY - r.top) * k / 32); const n = ty * S.cols + tx; if (tx < S.cols) { EDIT.tile = n; if (EDIT.tool !== 'fill') EDIT.tool = 'paint'; editPalette(); editUI(); } });
+  canvas.addEventListener('mousedown', (e) => { if (!EDIT.on) return; stroke = []; const [x, y] = editTileAt(e); if (EDIT.tool === 'fill') { floodFill(x, y); endStroke(); return; } EDIT.painting = true; brushApply(x, y); });
+  canvas.addEventListener('mousemove', (e) => { if (!EDIT.on) return; EDIT.hover = editTileAt(e); if (EDIT.painting) brushApply(...EDIT.hover); });
+  addEventListener('mouseup', () => { if (EDIT.painting) endStroke(); EDIT.painting = false; });
+  addEventListener('keydown', (e) => { // Ctrl+Z 되돌리기, Ctrl+Y / Ctrl+Shift+Z 다시 하기
+    if (!EDIT.on || !(e.ctrlKey || e.metaKey) || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
+    const k = e.key.toLowerCase(); if (k === 'z' || k === 'y') { e.preventDefault(); undoRedo(k === 'y' || e.shiftKey); }
+  });
   canvas.addEventListener('mouseleave', () => { EDIT.hover = null; });
 
   // ------------------------------------------------------------ 시작
