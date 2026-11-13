@@ -78,6 +78,16 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #doomPop[hidden] { display: none; }
 #doomPop canvas { width: min(600px, 96vw); height: auto; image-rendering: pixelated; }
 #doomPop p { color: #b9a6e6; font-size: 13px; margin: 10px 0 0; }
+#editor { right: 12px; top: 120px; width: 340px; max-height: calc(100vh - 140px); overflow: auto; padding: 10px 12px; z-index: 12; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+#editor[hidden] { display: none; }
+#editor h3 { margin: 0; font-family: var(--font-display); font-size: 18px; }
+#editor .r { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+#editor button { min-height: 32px; font-size: 12px; padding: 0 6px; }
+#editor button[aria-pressed="true"] { filter: brightness(1.25); outline: 3px solid #ffd34d; }
+#editor select { flex: 1; font: inherit; padding: 4px; }
+#editor .pal { max-height: 300px; overflow: auto; border: 3px solid #2b2340; background: #2b2340; }
+#editor .pal canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
+#editor .msg { margin: 0; font-size: 11px; color: #6b6280; line-height: 1.5; }
 #warAlert { position: fixed; inset: 0; z-index: 30; background: rgba(43,10,30,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #warAlert[hidden] { display: none; }
 #warAlert .box { background: #fff6d6; color: #2b2340; border: 4px solid #2b2340; outline: 4px solid #c22f53; max-width: 440px; width: 100%; padding: 18px 20px; box-shadow: 0 8px 0 rgba(0,0,0,.35); animation: warShake .5s; }
@@ -286,6 +296,20 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 
 <div id="prompt" class="hud card" hidden><span id="promptText">제단</span><kbd>E</kbd></div>
 <div id="toast" class="hud" hidden></div>
+<div id="editor" class="hud card" hidden>
+  <h3>🗺 맵 고치기 <small>(관리자)</small></h3>
+  <label>방 <select id="edRoom"></select></label>
+  <div class="r"><button type="button" data-tool="paint">🖌 타일 깔기</button><button type="button" data-tool="erase">🧽 타일 지우기</button></div>
+  <div class="r"><button type="button" data-tool="wall">🟥 장벽 칠하기</button><button type="button" data-tool="unwall">⬜ 장벽 지우기</button></div>
+  <div class="r"><span>붓</span><button type="button" data-brush="1">1칸</button><button type="button" data-brush="3">3×3</button></div>
+  <div class="r"><button type="button" id="edWalls">장벽 보기: 켜짐</button><button type="button" id="edProps">기본 소품: 보임</button></div>
+  <div class="r"><span>시간</span><button type="button" data-slot="morning">아침</button><button type="button" data-slot="lunch">점심</button><button type="button" data-slot="night">밤</button></div>
+  <div class="r" id="edSheets"></div>
+  <div class="pal"><canvas id="edPal"></canvas></div>
+  <p class="msg">타일을 고르고 지도 위를 마우스로 누르거나 끌어서 칠해요. 방향키로 이동해서 방을 둘러봐요. 빨간 칸은 못 지나가는 장벽(진한 빨강=직접 칠한 것). 바뀐 건 1초 뒤 자동 저장되고 모두에게 바로 보여요.</p>
+  <div class="r"><span id="edSave">-</span></div>
+  <div class="r"><button type="button" id="edClear">이 방 되돌리기</button><button type="button" id="edExit">편집 끝내기</button></div>
+</div>
 <div id="doomPop" hidden><canvas id="doomPopCanvas" width="600" height="300"></canvas><p>화면을 누르면 닫혀요 · 하늘 신전 게시판에서 다시 볼 수 있어요</p></div>
 <div id="battle" hidden><div class="frame"><aside id="btSide"></aside><canvas id="btCanvas"></canvas></div><p class="skip">화면을 누르면 결과로 건너뛰어요</p></div>
 <div id="warAlert" hidden role="alertdialog" aria-labelledby="warAlertTitle"><div class="box"><h2 id="warAlertTitle">⚔ 선전포고가 왔습니다!</h2><ul id="warAlertList"></ul><p id="warAlertNote"></p><div class="row"><button id="warAlertGo">방어 배치하러 가기</button><button id="warAlertClose" class="ghost">닫기</button></div></div></div>

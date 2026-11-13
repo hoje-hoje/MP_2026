@@ -151,6 +151,7 @@ fs.watchFile(PUZZLE_FILE, { interval: 5000 }, loadPuzzles); // 문제 파일을 
 state.world = world.s;
 state.settings = state.settings || {};   // 관리자 설정: testMode(true/false/없음=환경변수), founding('auto'|'open'|'closed')
 state.coupons = state.coupons || {};     // 쿠폰 코드 -> { r:{coin|army}, memo, at, used:{name,nation,ts} }
+state.roomEdits = state.roomEdits || {}; // 관리자 '맵 고치기': 하늘 방별 { floor: {'x,y': '시트:번호'}, walls: {'x,y': 1}, hideProps }
 state.puzzles = state.puzzles || [];     // 관리자 화면에서 넣은 문제 [{ id, type, question, image, answer:[], on, at }]
 const testMode = () => typeof state.settings.testMode === 'boolean' ? state.settings.testMode : ENV_TEST_MODE;
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -252,7 +253,7 @@ wss.on('connection', (ws) => {
         t: 'welcome', id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? JAIL_POS : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: arrestsToday(acc), jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: world.publicNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        roomEdits: state.roomEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat) broadcastOwners();
       return;
@@ -859,6 +860,17 @@ async function adminOp(m) {
       return { ok: true, sent: online.size };
     }
     case 'resolve': resolveNight('관리자'); return { ok: true };
+    case 'roomSave': { // 맵 고치기: 하늘 방 하나의 바닥 타일·장벽 저장 → 모두에게 바로 반영
+      const id = String(m.id || ''); if (!/^[a-z0-9]{2,16}$/.test(id)) return { ok: false, err: '방 이름이 이상해요' };
+      const e = m.edit || {}, out = { floor: {}, walls: {}, hideProps: !!e.hideProps };
+      const okKey = (k) => /^\d{1,3},\d{1,3}$/.test(k);
+      for (const [k, v] of Object.entries(e.floor || {})) if (okKey(k) && /^(town|dungeon|onebit|ninja):\d{1,4}$/.test(String(v))) out.floor[k] = String(v);
+      for (const k of Object.keys(e.walls || {})) if (okKey(k)) out.walls[k] = 1;
+      if (Object.keys(out.floor).length + Object.keys(out.walls).length > 12000) return { ok: false, err: '너무 많아요' };
+      state.roomEdits[id] = out; dirty = true;
+      const msg = JSON.stringify({ t: 'roomEdit', id, edit: out }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+      return { ok: true, floor: Object.keys(out.floor).length, walls: Object.keys(out.walls).length };
+    }
     case 'clock': { // 게임 시계: auto(실제 시간) / manual(일차·시간대). 앞으로 가면 그 사이 전투·균열이 차례로 일어남
       if (m.mode === 'auto') state.clock = { mode: 'auto' };
       else { const day = Math.max(1, Math.min(LAST_DAY, m.day | 0)); const slot = SLOTS.includes(m.slot) ? m.slot : 'morning'; state.clock = { mode: 'manual', day, slot }; }

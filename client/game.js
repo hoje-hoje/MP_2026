@@ -292,7 +292,7 @@
   const ART = {};
   function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('그림 파일을 불러오지 못했어요: ' + src)); i.src = src; }); }
   async function loadArt() {
-    const names = { water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
+    const names = { k_town: 'kenney/town.png', k_dungeon: 'kenney/dungeon.png', k_onebit: 'kenney/onebit.png', water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
     const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
     const users = fetch('assets/user/users.json').then((r) => r.json()).then((j) => {
       USER.chars = j.chars; USER.animals = j.animals; USER.monsters = j.monsters;
@@ -452,15 +452,16 @@
         const x = x0 + tx, y = y0 + ty, px = tx * TILE, py = ty * TILE;
         const t = tileAt(x, y), h = hash(x, y);
         const og = terrAt(x, y);
-        if (og > 0 && gone[og]) {
-          g.fillStyle = '#1b1430'; g.fillRect(px, py, TILE, TILE);
-          if (h < 0.05) { g.fillStyle = h < 0.015 ? '#f3dcff' : '#8d7ab8'; g.fillRect(px + (h * 997 % 28), py + (h * 577 % 28), 2, 2); }
+        if (og > 0 && gone[og]) { // 균열에 삼켜진 땅: 보라색으로 오염된 바닥 + 빛나는 금 + 독웅덩이
+          g.fillStyle = ['#2a1040', '#321450', '#26103c', '#2e1248'][(h * 4) | 0]; g.fillRect(px, py, TILE, TILE);
+          for (let k = 0; k < 6; k++) { const hh = hash(x * 7 + k, y * 3, 51); g.fillStyle = hh > 0.5 ? '#3d1860' : '#1e0b30'; g.fillRect(px + ((hh * 16) | 0) * 2, py + ((hash(x, y * 5 + k, 52) * 16) | 0) * 2, 4, 2); }
+          if (h < 0.22) { // 갈라진 금 (자홍색으로 빛남)
+            let cx = px + 4 + ((h * 97) % 1) * 24 | 0, cy = py + 2; g.fillStyle = '#c040ff';
+            for (let k = 0; k < 7; k++) { g.fillRect(cx, cy, 2, 4); cx += ((hash(x, y, 60 + k) * 3) | 0) * 2 - 2; cy += 4; }
+            g.fillStyle = 'rgba(255,140,255,0.6)'; g.fillRect(px + 4 + ((h * 97) % 1) * 24 | 0, py + 2, 1, 4);
+          } else if (h < 0.32) { g.fillStyle = '#16061f'; g.fillRect(px + 6, py + 12, 20, 10); g.fillRect(px + 9, py + 10, 14, 14); g.fillStyle = '#7a2bb8'; g.fillRect(px + 10, py + 13, 6, 2); } // 독웅덩이
           const alive = (a, b) => { const q = terrAt(a, b); return q >= 0 && !gone[q] && tileAt(a, b) !== T.VOID; };
-          g.fillStyle = '#b06fd8';
-          if (alive(x, y - 1)) g.fillRect(px, py, TILE, 4);
-          if (alive(x, y + 1)) g.fillRect(px, py + TILE - 4, TILE, 4);
-          if (alive(x - 1, y)) g.fillRect(px, py, 4, TILE);
-          if (alive(x + 1, y)) g.fillRect(px + TILE - 4, py, 4, TILE);
+          for (const [ax, ay, rx, ry, rw, rh] of [[x, y - 1, 0, 0, TILE, 6], [x, y + 1, 0, TILE - 6, TILE, 6], [x - 1, y, 0, 0, 6, TILE], [x + 1, y, TILE - 6, 0, 6, TILE]]) if (alive(ax, ay)) { g.fillStyle = '#9b3fd8'; g.fillRect(px + rx, py + ry, rw, rh); g.fillStyle = '#e48cff'; g.fillRect(px + rx + (rw === 6 && rx ? 4 : 0), py + ry + (rh === 6 && ry ? 4 : 0), rw === 6 ? 2 : rw, rh === 6 ? 2 : rh); }
           continue;
         }
         switch (t) {
@@ -803,8 +804,15 @@
   };
 
   const SKY_M = 90;
-  function buildRooms() {
-    for (const [id, R] of Object.entries(ROOMS)) {
+  function buildRooms() { for (const id of Object.keys(ROOMS)) buildRoom(id); }
+  // 관리자 '맵 고치기'로 바꾼 방 (타일·장벽·소품 숨기기). 서버가 보내 준다
+  let ROOM_EDITS = {};
+  const SHEETS = { town: { key: 'k_town', cols: 12, name: '타이니 타운' }, dungeon: { key: 'k_dungeon', cols: 12, name: '타이니 던전' }, onebit: { key: 'k_onebit', cols: 49, name: '1비트 팩' }, ninja: { key: 'floor', cols: 22, name: '닌자 바닥' } };
+  function drawSheetTile(g, ref, x, y, size) { const [sh, n] = ref.split(':'), S = SHEETS[sh], im = S && ART[S.key]; if (!im) return; const k = +n; g.drawImage(im, (k % S.cols) * 16, Math.floor(k / S.cols) * 16, 16, 16, x, y, size, size); }
+  function applyRoomEdit(id, e) { ROOM_EDITS[id] = e; if (ROOMS[id]) { buildRoom(id); if (player.room === ROOMS[id]) player.room = ROOMS[id]; } }
+  function buildRoom(id) {
+    {
+      const R = ROOMS[id], E = ROOM_EDITS[id] || {};
       R.id = id;
       R.grid = new Uint8Array(R.w * R.h);
       for (let y = 0; y < R.h; y++) for (let x = 0; x < R.w; x++) if (x === 0 || y === 0 || x === R.w - 1 || y === R.h - 1) R.grid[y * R.w + x] = 1;
@@ -815,8 +823,9 @@
         }
       });
       if (R.wall) for (let x = 1; x < R.w - 1; x++) if (R.grid[R.w + x] === 0 && !R.doors.some((d) => d.side === 'N' && Math.abs(d.at - x) <= 1)) R.grid[R.w + x] = 1;
-      for (const p of R.props) if (!p.walk) for (let y = p.y; y < p.y + p.h; y++) for (let x = p.x; x < p.x + p.w; x++) if (R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; // walk: 밟고 지나가는 장식(꽃·동물)
-      R.sprites = R.props.map((p) => ({ x: (p.x + p.w / 2) * TILE, y: (p.y + p.h) * TILE, draw: p.draw, board: p.board, prop: p }));
+      for (const p of (E.hideProps ? [] : R.props)) if (!p.walk) for (let y = p.y; y < p.y + p.h; y++) for (let x = p.x; x < p.x + p.w; x++) if (R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; // walk: 밟고 지나가는 장식(꽃·동물)
+      for (const k of Object.keys(E.walls || {})) { const [x, y] = k.split(',').map(Number); if (x < R.w && y < R.h && R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; } // 관리자가 칠한 빨간 장벽
+      R.sprites = (E.hideProps ? [] : R.props).map((p) => ({ x: (p.x + p.w / 2) * TILE, y: (p.y + p.h) * TILE, draw: p.draw, board: p.board, prop: p }));
       R.doors.forEach((d) => {
         const label = d.to === 'ground' ? '땅으로 내려가기' : ROOMS[d.to].name;
         const [x, y] = d.side === 'N' ? [(d.at + 0.5) * TILE, TILE] : d.side === 'S' ? [(d.at + 0.5) * TILE, R.h * TILE] : d.side === 'W' ? [TILE, (d.at + 1) * TILE] : [(R.w - 1) * TILE, (d.at + 1) * TILE];
@@ -867,6 +876,8 @@
       if (d.side === 'W') g.fillRect(0, (d.at - 1) * TILE, TILE + 20, TILE * 3);
       if (d.side === 'E') g.fillRect(w - TILE - 20, (d.at - 1) * TILE, TILE + 20, TILE * 3);
     }
+    const E = ROOM_EDITS[R.id]; // 관리자가 깐 타일 (16px → 32px)
+    if (E && E.floor) { g.imageSmoothingEnabled = false; for (const [k, ref] of Object.entries(E.floor)) { const [x, y] = k.split(',').map(Number); if (x < R.w && y < R.h) drawSheetTile(g, ref, x * TILE, y * TILE, TILE); } }
     return c;
   }
 
@@ -1569,6 +1580,7 @@
         myId = m.id; netOn = true; store('mp2026.token', m.token);
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
         player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
+        if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         if (!m.view) openFound('who'); else $('found').hidden = true;
@@ -1623,6 +1635,7 @@
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
       case 'clock': setClock(m); break;
+      case 'roomEdit': applyRoomEdit(m.id, m.edit); break;
       case 'rift': toast(m.text); break;
       case 'hitn': HITN.set(m.terr, { n: m.n, at: performance.now() }); near = null; break;
       case 'scout': HITN.delete(m.terr); toast(m.text); break;
@@ -2199,7 +2212,7 @@
 
     // 플레이어 이동
     stepPlayer(dt); tickHold();
-    if (player.scene === 'sky' && player.room.id !== 'jail') {
+    if (player.scene === 'sky' && player.room.id !== 'jail' && !EDIT.on) {
       player.skyLeft -= dt;
       if (player.skyLeft <= 0) { descend(); toast('하늘에 머물 수 있는 5분이 끝나 땅으로 내려왔어요'); }
     }
@@ -2212,7 +2225,7 @@
     if (hudT <= 0) {
       hudT = 0.15;
       const sky = player.scene === 'sky';
-      $('skyTimer').hidden = !sky;
+      $('skyTimer').hidden = !sky || EDIT.on;
       if (sky && player.room.id === 'jail') { const l = Math.max(0, Math.ceil((jailUntil - Date.now()) / 1000)); $('skyTimer').firstChild.textContent = '감옥 '; $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.remove('warn'); }
       else if (sky) { $('skyTimer').firstChild.textContent = '하늘 체류 '; const l = Math.max(0, Math.ceil(player.skyLeft)); $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.toggle('warn', l <= 60); }
       updateWhere(); updatePrompt(); drawMini(); if (!$('bigmap').hidden) drawBig();
@@ -2287,7 +2300,9 @@
     const camX = RW + 160 <= sw ? RW / 2 - sw / 2 : Math.max(-80, Math.min(RW + 80 - sw, player.x - sw / 2));
     const camY = RH + 260 <= sh ? RH / 2 - sh / 2 - 40 : Math.max(-200, Math.min(RH + 80 - sh, player.y - 40 - sh / 2));
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -camX * dpr * zoom, -camY * dpr * zoom);
+    skyCam.x = camX; skyCam.y = camY;
     ctx.drawImage(R.canvas, -SKY_M, -SKY_M);
+    if (EDIT.on) editOverlay(R);
     const list = R.sprites.slice();
     for (const b of others('sky', R)) list.push(b);
     list.push(player);
@@ -2344,6 +2359,11 @@
     }
     for (const n of nodes) if (!gone[n.id] && n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1 && !(build.moving && build.moving.kind === 'mine' && build.moving.terr === n.id)) list.push({ x: n.x, y: n.y, draw: (g, X, Y) => drawOre(g, X, Y, mined.has(n.id)) });
     for (const [i, nid] of STORE_AT) { if (build.moving && build.moving.kind === 'store' && nid === MY_NID) continue; const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); }
+    { // 무너진 땅 위로 피어오르는 보라 기운
+      const now2 = performance.now() / 1000;
+      for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) { const q = terrAt(tx, ty); if (!(q > 0 && gone[q])) continue; const hh = hash(tx, ty, 77); if (hh > 0.14) continue; const k = (now2 * (0.3 + hh * 2) + hh * 9) % 1; ctx.globalAlpha = 0.8 * (1 - k); ctx.fillStyle = hh < 0.05 ? '#ff9cff' : '#b45cf0'; ctx.fillRect(tx * TILE + 8 + Math.sin(now2 * 2 + hh * 20) * 6, ty * TILE + 28 - k * 46, 4, 4); }
+      ctx.globalAlpha = 1;
+    }
     if (RIFT_SET.size) { // 다음 균열 예고 땅: 보라색으로 일렁임
       const a = 0.16 + Math.sin(performance.now() / 300) * 0.06;
       for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) if (RIFT_SET.has(terrAt(tx, ty))) { ctx.fillStyle = `rgba(150,60,230,${a})`; ctx.fillRect(tx * TILE, ty * TILE, TILE, TILE); if ((tx * 7 + ty * 3) % 11 === 0) { ctx.fillStyle = 'rgba(40,10,80,0.55)'; ctx.fillRect(tx * TILE + 6, ty * TILE + 14, 18, 3); ctx.fillRect(tx * TILE + 14, ty * TILE + 8, 3, 14); } }
@@ -2386,7 +2406,7 @@
   function setClock(c) {
     if (!c) return;
     const dayChanged = c.day !== DAY;
-    DAY = c.day; SLOT = c.slot; DOOM_DAY = c.doomDay || 5; LAST_DAY = c.lastDay || 15; PHASE = phaseOf(DAY);
+    DAY = c.day; SLOT = EDIT.on && EDIT.slot ? EDIT.slot : c.slot; DOOM_DAY = c.doomDay || 5; LAST_DAY = c.lastDay || 15; PHASE = phaseOf(DAY);
     DOOM = DAY > DOOM_DAY || (DAY === DOOM_DAY && SLOT !== 'morning'); // 선포일 점심부터
     if ('riftNext' in c) { RIFT_NEXT = c.riftNext; RIFT_SET = new Set(RIFT_NEXT ? RIFT_NEXT.terrs : []); }
     if (c.gone) setGone(c.gone);
@@ -2418,8 +2438,15 @@
   function doomFrames(big) {
     if (doomArt.has(big)) return doomArt.get(big);
     const W2 = 200, H2 = 84, frames = [];
-    const mask = (txt, size, oy) => { const c = document.createElement('canvas'); c.width = W2; c.height = H2; const g = c.getContext('2d'); g.font = `700 ${size}px Galmuri11`; g.textAlign = 'center'; g.textBaseline = 'top'; g.fillStyle = '#fff'; g.fillText(txt, W2 / 2 + (size > 30 ? 8 : 0), oy); const d = g.getImageData(0, 0, W2, H2).data; const m = new Uint8Array(W2 * H2); for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] > 110 ? 1 : 0; return m; };
-    const T = mask('세계 멸망', 24, 4), B = mask(big, 36, 28); const M = new Uint8Array(W2 * H2); for (let i = 0; i < M.length; i++) M[i] = T[i] | B[i];
+    const mask = (txt, size, oy) => { const c = document.createElement('canvas'); c.width = W2; c.height = H2; const g = c.getContext('2d'); g.font = `700 ${size}px Galmuri11`; g.textAlign = 'center'; g.textBaseline = 'top'; g.fillStyle = '#fff'; g.fillText(txt, W2 / 2, oy); const d = g.getImageData(0, 0, W2, H2).data; const m = new Uint8Array(W2 * H2); for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] > 110 ? 1 : 0; return m; };
+    let T = mask('세계 멸망', 24, 4), B = mask(big, 36, 28);
+    { // 두 줄 글자를 가로·세로 모두 가운데로 (빨간 눈 자리 오프셋 없이)
+      let x0 = W2, x1 = 0, y0 = H2, y1 = 0; for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) if (T[y * W2 + x] || B[y * W2 + x]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      const dx = Math.round((W2 - 1 - x1 - x0) / 2), dy = Math.round((H2 - 1 - y1 - y0) / 2);
+      const sh = (m) => { const o = new Uint8Array(m.length); for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) if (m[y * W2 + x]) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < W2 && Y < H2) o[Y * W2 + X] = 1; } return o; };
+      T = sh(T); B = sh(B);
+    }
+    const M = new Uint8Array(W2 * H2); for (let i = 0; i < M.length; i++) M[i] = T[i] | B[i];
     const dil = (m, r) => { const o = new Uint8Array(m.length); for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) { if (!m[y * W2 + x]) continue; for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { if (dx * dx + dy * dy > r * r + 1) continue; const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < W2 && Y < H2) o[Y * W2 + X] = 1; } } return o; };
     const g5 = dil(M, 5), g4 = dil(M, 4), cy = dil(M, 3), bk = dil(M, 2);
     let bx0 = W2, bx1 = 0, by0 = H2, by1 = 0; for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) if (B[y * W2 + x]) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y); }
@@ -2435,7 +2462,7 @@
       for (let k = 0; k < 10; k++) { let x = bx0 + ((rnd() * (bx1 - bx0)) | 0), y = by0 + ((rnd() * (by1 - by0)) | 0); for (let s = 0; s < 4; s++) { if (B[y * W2 + x]) set(x, y, 120, 110, 170); x += ((rnd() * 3) | 0) - 1; y++; } }
       const bolt = (x, y, an, n) => { for (let s = 0; s < n; s++) { const xi = Math.round(x), yi = Math.round(y); set(xi + 1, yi, 70, 200, 255); set(xi - 1, yi, 70, 200, 255); set(xi, yi + 1, 70, 200, 255); set(xi, yi, 235, 250, 255); an += (rnd() - 0.5) * 1.8; x += Math.cos(an) * 1.6; y += Math.sin(an) * 1.6; if (rnd() < 0.1) bolt(x, y, an + (rnd() - 0.5) * 2.4, n / 3); } };
       for (let k = 0; k < 4; k++) { const left = rnd() < 0.5; bolt(left ? bx0 - 6 : bx1 + 6, by0 + rnd() * (by1 - by0), left ? Math.PI : 0, 14 + rnd() * 10); }
-      const ex = bx0 - 20, ey = ((by0 + by1) / 2) | 0; // 빨간 눈
+      const ex = Math.max(12, bx0 - 20), ey = ((by0 + by1) / 2) | 0; // 빨간 눈
       for (let dy = -6; dy <= 6; dy++) for (let dx = -10; dx <= 10; dx++) { const e = (dx / 9) ** 2 + (dy / 5) ** 2; if (e <= 1) set(ex + dx, ey + dy, e > 0.55 ? 250 : 215, e > 0.55 ? 240 : 15, e > 0.55 ? 240 : 35); if (e > 0.85 && e <= 1.15) set(ex + dx, ey + dy, 12, 6, 24); }
       for (let dy = -4; dy <= 4; dy++) set(ex, ey + dy, 20, 0, 0); set(ex - 1, ey, 20, 0, 0); set(ex + 1, ey, 20, 0, 0); set(ex + 3, ey - 3, 255, 200, 200);
       for (let x = 0; x < W2; x++) { set(x, 0, 12, 6, 24); set(x, H2 - 1, 12, 6, 24); set(x, 1, 140, 60, 255); set(x, H2 - 2, 140, 60, 255); }
@@ -2473,6 +2500,82 @@
   }
   $('doomPop').addEventListener('click', () => { $('doomPop').hidden = true; });
 
+  // ------------------------------------------------------------ 관리자 '맵 고치기' (주소 끝 ?edit=1, 관리자 비밀번호 필요)
+  // ZEP 처럼: 타일 깔기 / 지우개 / 빨간 장벽 칠하기·지우기, 장벽 보이기 on/off, 기본 소품 숨기기, 시간대 미리보기
+  const EDIT = { on: false, key: '', tool: 'paint', brush: 1, sheet: 'town', tile: 0, showWalls: true, slot: null, room: 'temple', dirty: false, timer: 0, painting: false };
+  const skyCam = { x: 0, y: 0 };
+  function editOverlay(R) {
+    const E = ROOM_EDITS[R.id] || {};
+    if (EDIT.showWalls) for (let y = 0; y < R.h; y++) for (let x = 0; x < R.w; x++) { const v = R.grid[y * R.w + x]; if (v === 1) { const custom = E.walls && E.walls[x + ',' + y]; ctx.fillStyle = custom ? 'rgba(255,30,50,0.5)' : 'rgba(255,90,90,0.22)'; ctx.fillRect(x * TILE, y * TILE, TILE, TILE); if (custom) { ctx.strokeStyle = 'rgba(200,0,30,0.8)'; ctx.lineWidth = 1; ctx.strokeRect(x * TILE + 0.5, y * TILE + 0.5, TILE - 1, TILE - 1); } } }
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; // 칸 선
+    for (let x = 0; x <= R.w; x++) { ctx.beginPath(); ctx.moveTo(x * TILE, 0); ctx.lineTo(x * TILE, R.h * TILE); ctx.stroke(); }
+    for (let y = 0; y <= R.h; y++) { ctx.beginPath(); ctx.moveTo(0, y * TILE); ctx.lineTo(R.w * TILE, y * TILE); ctx.stroke(); }
+    if (EDIT.hover) { const [hx, hy] = EDIT.hover, b = EDIT.brush, o = (b - 1) / 2; ctx.strokeStyle = EDIT.tool.startsWith('wall') ? '#ff3344' : '#ffd34d'; ctx.lineWidth = 2; ctx.strokeRect((hx - o) * TILE, (hy - o) * TILE, b * TILE, b * TILE); if (EDIT.tool === 'paint') { ctx.globalAlpha = 0.6; for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) drawSheetTile(ctx, EDIT.sheet + ':' + EDIT.tile, (hx + dx) * TILE, (hy + dy) * TILE, TILE); ctx.globalAlpha = 1; } }
+  }
+  function editTileAt(e) { const r = canvas.getBoundingClientRect(); const wx = (e.clientX - r.left) / zoom + skyCam.x, wy = (e.clientY - r.top) / zoom + skyCam.y; return [Math.floor(wx / TILE), Math.floor(wy / TILE)]; }
+  function editApply(tx, ty) {
+    const R = player.room; if (!R) return;
+    const E = ROOM_EDITS[R.id] = ROOM_EDITS[R.id] || { floor: {}, walls: {}, hideProps: false }; E.floor = E.floor || {}; E.walls = E.walls || {};
+    const o = (EDIT.brush - 1) / 2; let changed = false;
+    for (let dy = -o; dy <= o; dy++) for (let dx = -o; dx <= o; dx++) {
+      const x = tx + dx, y = ty + dy; if (x < 0 || y < 0 || x >= R.w || y >= R.h) continue; const k = x + ',' + y;
+      if (EDIT.tool === 'paint' && E.floor[k] !== EDIT.sheet + ':' + EDIT.tile) { E.floor[k] = EDIT.sheet + ':' + EDIT.tile; changed = true; }
+      else if (EDIT.tool === 'erase' && E.floor[k]) { delete E.floor[k]; changed = true; }
+      else if (EDIT.tool === 'wall' && !E.walls[k]) { E.walls[k] = 1; changed = true; }
+      else if (EDIT.tool === 'unwall' && E.walls[k]) { delete E.walls[k]; changed = true; }
+    }
+    if (!changed) return;
+    buildRoom(R.id); player.room = ROOMS[R.id];
+    EDIT.dirty = true; $('edSave').textContent = '저장 대기…'; clearTimeout(EDIT.timer); EDIT.timer = setTimeout(editSave, 900);
+  }
+  async function editSave() {
+    const id = player.room.id;
+    try {
+      const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: EDIT.key, op: 'roomSave', id, edit: ROOM_EDITS[id] }) }).then((x) => x.json());
+      $('edSave').textContent = r.ok ? `저장됨 · 타일 ${r.floor} · 장벽 ${r.walls}` : '저장 실패: ' + r.err; EDIT.dirty = !r.ok;
+    } catch (e) { $('edSave').textContent = '저장 실패 (연결 확인)'; }
+  }
+  function editPalette() {
+    const S = SHEETS[EDIT.sheet], im = ART[S.key], cv = $('edPal'), k = 2;
+    cv.width = im.width * k; cv.height = im.height * k; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.fillStyle = '#2b2340'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(im, 0, 0, cv.width, cv.height);
+    const sx = (EDIT.tile % S.cols) * 16 * k, sy = Math.floor(EDIT.tile / S.cols) * 16 * k; g.strokeStyle = '#ffd34d'; g.lineWidth = 3; g.strokeRect(sx + 1.5, sy + 1.5, 16 * k - 3, 16 * k - 3);
+    for (const b of document.querySelectorAll('#editor [data-sheet]')) b.setAttribute('aria-pressed', String(b.dataset.sheet === EDIT.sheet));
+  }
+  function editUI() {
+    for (const b of document.querySelectorAll('#editor [data-tool]')) b.setAttribute('aria-pressed', String(b.dataset.tool === EDIT.tool));
+    for (const b of document.querySelectorAll('#editor [data-brush]')) b.setAttribute('aria-pressed', String(+b.dataset.brush === EDIT.brush));
+    for (const b of document.querySelectorAll('#editor [data-slot]')) b.setAttribute('aria-pressed', String(b.dataset.slot === SLOT));
+    $('edWalls').textContent = EDIT.showWalls ? '장벽 보기: 켜짐' : '장벽 보기: 꺼짐';
+    const E = player.room && ROOM_EDITS[player.room.id]; $('edProps').textContent = E && E.hideProps ? '기본 소품: 숨김' : '기본 소품: 보임';
+    if (player.room) $('edRoom').value = player.room.id;
+  }
+  async function startEditor() {
+    let key = ''; try { key = sessionStorage.getItem('mpAdminKey') || ''; } catch (e) {}
+    if (!key) key = prompt('맵 고치기는 관리자만 할 수 있어요. 관리자 비밀번호:') || '';
+    const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, op: 'status' }) }).then((x) => x.json()).catch(() => ({ ok: false }));
+    if (!r.ok) { alert('관리자 비밀번호가 맞지 않아요'); return; }
+    try { sessionStorage.setItem('mpAdminKey', key); } catch (e) {}
+    EDIT.on = true; EDIT.key = key; $('editor').hidden = false; $('found').hidden = true; if (build.on) setBuild(false);
+    $('edRoom').innerHTML = Object.entries(ROOMS).map(([id, R]) => `<option value="${id}">${R.name} (${R.w}×${R.h})</option>`).join('');
+    $('edSheets').innerHTML = Object.entries(SHEETS).map(([id, S]) => `<button type="button" data-sheet="${id}">${S.name}</button>`).join('');
+    for (const b of document.querySelectorAll('#editor [data-sheet]')) b.onclick = () => { EDIT.sheet = b.dataset.sheet; EDIT.tile = 0; editPalette(); };
+    enterRoom(EDIT.room, null); editPalette(); editUI();
+  }
+  $('edRoom').addEventListener('change', () => { enterRoom($('edRoom').value, null); player.skyLeft = 9999; editUI(); });
+  for (const b of document.querySelectorAll('#editor [data-tool]')) b.addEventListener('click', () => { EDIT.tool = b.dataset.tool; editUI(); });
+  for (const b of document.querySelectorAll('#editor [data-brush]')) b.addEventListener('click', () => { EDIT.brush = +b.dataset.brush; editUI(); });
+  for (const b of document.querySelectorAll('#editor [data-slot]')) b.addEventListener('click', () => { EDIT.slot = b.dataset.slot; SLOT = EDIT.slot; drawSunMoon(); editUI(); });
+  $('edWalls').addEventListener('click', () => { EDIT.showWalls = !EDIT.showWalls; editUI(); });
+  $('edProps').addEventListener('click', () => { const R = player.room; const E = ROOM_EDITS[R.id] = ROOM_EDITS[R.id] || { floor: {}, walls: {} }; E.hideProps = !E.hideProps; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); clearTimeout(EDIT.timer); EDIT.timer = setTimeout(editSave, 300); });
+  $('edClear').addEventListener('click', () => { const R = player.room; if (!confirm(`${R.name}에 깐 타일과 장벽을 모두 지울까요?`)) return; ROOM_EDITS[R.id] = { floor: {}, walls: {}, hideProps: false }; buildRoom(R.id); player.room = ROOMS[R.id]; editUI(); editSave(); });
+  $('edExit').addEventListener('click', () => { location.href = '/'; });
+  $('edPal').addEventListener('click', (e) => { const S = SHEETS[EDIT.sheet], r = $('edPal').getBoundingClientRect(), k = $('edPal').width / r.width; const tx = Math.floor((e.clientX - r.left) * k / 32), ty = Math.floor((e.clientY - r.top) * k / 32); const n = ty * S.cols + tx; if (tx < S.cols) { EDIT.tile = n; EDIT.tool = 'paint'; editPalette(); editUI(); } });
+  canvas.addEventListener('mousedown', (e) => { if (!EDIT.on || player.scene !== 'sky') return; EDIT.painting = true; const [x, y] = editTileAt(e); editApply(x, y); });
+  canvas.addEventListener('mousemove', (e) => { if (!EDIT.on || player.scene !== 'sky') return; EDIT.hover = editTileAt(e); if (EDIT.painting) editApply(...EDIT.hover); });
+  addEventListener('mouseup', () => { EDIT.painting = false; });
+  canvas.addEventListener('mouseleave', () => { EDIT.hover = null; });
+
   // ------------------------------------------------------------ 시작
   function setupDoomCard() {
     const date = 13 + DAY;
@@ -2502,6 +2605,7 @@
     renderInv();
     $('loading').hidden = true;
     if (ONLINE) startOnline(); else openFound('who');
+    if (ONLINE && /[?&]edit=1/.test(location.search)) setTimeout(startEditor, 1200);
     if (DAY === 5) setTimeout(() => toast('신들이 선포했다: 12월 28일, 이 세계는 끝난다.'), 600);
     else if (DOOM) { const n = terrs.filter((t) => t && gone[t.id]).length; if (n) setTimeout(() => toast(`균열이 영토 ${n}곳을 삼켰다`), 600); }
     requestAnimationFrame((n) => { last = n; frame(n); });
