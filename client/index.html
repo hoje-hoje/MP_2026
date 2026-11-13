@@ -239,6 +239,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #loading small { font-family: var(--font-body); font-size: 11px; color: #5f5877; }
 #loading .dots { width: 160px; height: 14px; border: 3px solid #2b2340; background: #fffdf8; position: relative; overflow: hidden; }
 #loading .dots::after { content: ""; position: absolute; inset: 0; width: 40%; background: repeating-linear-gradient(90deg, #6b4fb3 0 8px, #8a6fd0 8px 12px); animation: load 1.2s steps(10) infinite; }
+#loading { transition: opacity .25s; } #loading.out { opacity: 0; pointer-events: none; }
 @keyframes load { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { #loading .dots::after { animation: none; } }
 #stick { position: fixed; z-index: 6; width: 110px; height: 110px; border-radius: 0; image-rendering: pixelated; border: 3px solid rgba(255,255,255,0.8); background: rgba(43,35,64,0.25); pointer-events: none; }

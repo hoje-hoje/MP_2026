@@ -1624,6 +1624,7 @@
         else if (p && p.x != null && free(p.x, p.y, null)) { player.scene = 'ground'; player.room = null; player.x = p.x; player.y = p.y; }
         else goHome();
         lastTerr = null; netTp = true;
+        requestAnimationFrame(() => requestAnimationFrame(hideLoading)); // 새 자리 화면을 한 번 그린 뒤 로딩 끄기
         break;
       }
       case 'meta': {
@@ -1766,6 +1767,7 @@
   $('btnWanderClose').addEventListener('click', () => { $('wanderBox').hidden = true; });
 
   // 접속 화면
+  function hideLoading() { const L = $('loading'); if (L.hidden) return; L.classList.add('out'); setTimeout(() => { L.hidden = true; L.classList.remove('out'); }, 250); }
   function startOnline() {
     $('help').hidden = true; $('chat').hidden = false;
     setNet('서버에 연결하는 중…');
@@ -2741,8 +2743,9 @@
     $('toast').hidden = true;
     setupDoomCard();
     renderInv();
-    $('loading').hidden = true;
-    if (ONLINE) startOnline(); else openFound('who');
+    // 온라인: 서버가 내 자리를 알려줄 때까지 로딩 화면을 유지 → 자리로 옮긴 뒤 끔 (수도에 잠깐 보였다가 순간이동하는 것 방지)
+    if (ONLINE) { $('loadingText').textContent = '내 자리로 가는 중…'; $('loadingSub').textContent = '서버에 접속하고 있어요'; setTimeout(hideLoading, 12000); startOnline(); }
+    else { hideLoading(); openFound('who'); }
     if (ONLINE && /[?&]edit=1/.test(location.search)) setTimeout(startEditor, 1200);
     if (DAY === 5) setTimeout(() => toast('신들이 선포했다: 12월 28일, 이 세계는 끝난다.'), 600);
     else if (DOOM) { const n = terrs.filter((t) => t && gone[t.id]).length; if (n) setTimeout(() => toast(`균열이 영토 ${n}곳을 삼켰다`), 600); }
