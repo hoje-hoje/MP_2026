@@ -75,6 +75,7 @@
   }
   const COLORS = ['#3d5fb8', '#c94a3c', '#277a58', '#8a4fc0', '#9a5f10', '#1f7f8f', '#b03a78', '#4f6b1f', '#5a4fc0', '#a0522d', '#2b6f9e', '#7a3fa0'];
   const teamColor = (n) => COLORS[((n | 0) - 1 + COLORS.length * 10) % COLORS.length];
+  const RACES = ['human', 'elf', 'dwarf']; // 병력 종족 (지금은 모습만: 인간=검, 엘프=활, 드워프=도끼)
   const FRONTS = ['A', 'B', 'C']; // 예전 3전선 (지금은 전선 수가 2k+1로 바뀜)
   const frontName = (i) => (i < 26 ? String.fromCharCode(65 + i) : 'Z' + (i - 25));
 
@@ -468,6 +469,7 @@
       for (const b of this.s.battles.filter((x) => x.att === D.id || x.def === D.id)) this.refund(b);
       this.s.battles = this.s.battles.filter((x) => x.att !== D.id && x.def !== D.id);
     }
+    setRace(nid, race) { const n = this.nation(nid); if (!n || !RACES.includes(race)) return { ok: false, err: '그런 종족이 없어요' }; n.race = race; return { ok: true }; }
     // 천도 (왕만 — 서버에서 확인): 비용, 우리 영역, 전투 대기 중 불가, 하루에 한 번
     moveCapital(nid, tid, now) {
       const n = this.nation(nid);
@@ -485,7 +487,7 @@
     // ---------------------------------------------------------- 참가자에게 보낼 화면 정보
     publicNations() {
       const out = {};
-      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null, storeLv: storeLevel(n) };
+      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null, storeLv: storeLevel(n), race: n.race || RACES[(n.team | 0) % 3] };
       return out;
     }
     view(nid, key) {
@@ -601,5 +603,5 @@
   const notorietyTier = (v) => { const T2 = NUM.notorietyTiers; let k = 0; for (let i = 0; i < T2.length; i++) if ((v || 0) >= T2[i].min) k = i; return k; };
   // 이름 옆 표시: 마이너스 = 체포왕 👮, 1~199 💀, 200~499 💀💀, 500 이상 💀💀💀
   const notorietyBadge = (v) => (v < 0 ? '👮' : v <= 0 ? '' : v < 200 ? '💀' : v < 500 ? '💀💀' : '💀💀💀');
-  return { World, NUM, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

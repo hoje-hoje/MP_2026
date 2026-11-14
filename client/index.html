@@ -309,6 +309,32 @@ body.titling .hud, body.titling #chat, body.titling #prompt, body.titling #stick
 body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 안내 등) */
 .logoCv { width: clamp(280px, 42vw, 560px); image-rendering: pixelated; filter: drop-shadow(0 0 18px rgba(190,140,255,0.85)); }
 .tlogo.big .logoCv { width: clamp(320px, 56vw, 720px); }
+
+#battle .frame { flex-direction: column; width: min(1200px, 100%); height: min(760px, calc(100vh - 50px)); }
+#btHead { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #1b1430; color: #fff6d6; padding: 10px 14px; border-bottom: 4px solid #fff6d6; }
+#btHead .bside { display: flex; align-items: center; gap: 10px; min-width: 0; } #btHead .bside.d { text-align: right; }
+#btHead .bside b { display: block; font-family: var(--font-display); font-size: clamp(18px, 2.6vw, 30px); font-weight: 400; color: var(--c); text-shadow: 0 2px 0 #000; }
+#btHead .bside small { color: #d9cfee; font-size: 13px; }
+#btHead .ricon { font-size: clamp(26px, 3.4vw, 40px); width: 1.4em; height: 1.4em; display: grid; place-items: center; background: var(--c); border: 3px solid #fff6d6; }
+#btHead .bmid { text-align: center; } #btHead .bmid h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(22px, 3.2vw, 40px); color: #ffd34d; text-shadow: 0 3px 0 #c22f53; }
+#btHead .bmid small { color: #d9cfee; font-size: 13px; }
+#btCanvas { flex: 1; width: 100%; min-height: 0; }
+#btFoot { flex: none; display: flex; align-items: center; gap: 10px; background: #fff6d6; color: #2b2340; padding: 8px 12px; }
+#btSum { flex: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-size: 15px; }
+#btSum b { font-family: var(--font-display); font-weight: 400; font-size: 24px; } #btSum b.att { color: #3d5fb8; } #btSum b.def { color: #c94a3c; }
+#btSum small { color: #6b6280; width: 100%; } #btSum em { font-style: normal; font-weight: 700; } #btSum em.w { color: #277a58; } #btSum em.l { color: #c22f53; }
+#btFoot #btNext { margin-left: auto; min-width: 140px; }
+@media (max-width: 640px) { #btHead { flex-wrap: wrap; } #btHead .bmid { order: -1; width: 100%; } }
+#warBanner { position: fixed; left: 0; right: 0; top: 34%; z-index: 55; pointer-events: none; display: flex; flex-direction: column; align-items: stretch; }
+#warBanner[hidden] { display: none; }
+#warBanner .stripe { height: 30px; background: repeating-linear-gradient(-60deg, #ff2a3a 0 18px, #2a0008 18px 36px); box-shadow: 0 0 24px #ff2a3a; animation: wbslide 0.6s linear infinite; opacity: 0.95; }
+#warBanner .stripe.r { animation-direction: reverse; }
+#warBannerText { background: linear-gradient(90deg, rgba(40,0,10,0), rgba(40,0,10,0.92) 15%, rgba(40,0,10,0.92) 85%, rgba(40,0,10,0)); color: #fff; text-align: center; font-family: var(--font-display); font-size: clamp(34px, 7vw, 76px); letter-spacing: 6px; padding: 6px 0; text-shadow: 0 0 18px #ff2a3a, 0 4px 0 #8a0010; }
+#warBanner.go { animation: wbin 3.4s ease-out forwards; }
+@keyframes wbslide { from { background-position: 0 0; } to { background-position: 72px 0; } }
+@keyframes wbin { 0% { transform: scaleY(0); opacity: 0; } 8% { transform: scaleY(1.15); opacity: 1; } 14% { transform: scaleY(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: scaleY(0.6); } }
+.row.cast small { color: #6b6280; }
+#tools { max-width: 52vw; gap: 6px; } #tools button { padding: 0 9px; font-size: 13px; min-height: 34px; } /* 버튼 6개가 한 줄에 */
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -325,9 +351,9 @@ body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 
 </div>
 
 <div id="tools" class="hud">
-  <button id="btnWar" type="button">나라 (B)</button>
+  <button id="btnWar" type="button">나라 (B)</button><button id="btnCast" type="button">⚔ 영역전</button>
   <button id="btnMap" type="button">지도 (M)</button>
-  <button id="btnHome" type="button">우리 수도 (T)</button>
+  <button id="btnHome" type="button">수도 (T)</button>
   <button id="btnCoupon" type="button">쿠폰</button>
   <button id="btnCloset" type="button">꾸미기</button>
 </div>
@@ -377,7 +403,9 @@ body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 
   <div class="r"><button type="button" id="edClear">이 방 되돌리기</button><button type="button" id="edExit">편집 끝내기</button></div>
 </div>
 <div id="doomPop" hidden><canvas id="doomPopCanvas" width="600" height="300"></canvas><p>화면을 누르면 닫혀요 · 하늘 신전 게시판에서 다시 볼 수 있어요</p></div>
-<div id="battle" hidden><div class="frame"><aside id="btSide"></aside><canvas id="btCanvas"></canvas></div><p class="skip">화면을 누르면 결과로 건너뛰어요</p></div>
+<div id="battle" hidden><div class="frame"><div id="btHead"></div><canvas id="btCanvas"></canvas><div id="btFoot"><div id="btSum" hidden></div><button id="btNext" type="button">닫기</button></div></div><p class="skip">화면을 누르면 결과로 건너뛰어요</p></div>
+<div id="warBanner" hidden><div class="stripe"></div><div id="warBannerText">⚔ 영역전 시작 ⚔</div><div class="stripe r"></div></div>
+<div id="warCast" class="modalbox" hidden><div class="panel card"><h2>⚔ 영역전 중계</h2><div id="castBody"></div><div class="seg"><button id="castClose" type="button">닫기</button></div></div></div>
 <div id="warAlert" hidden role="alertdialog" aria-labelledby="warAlertTitle"><div class="box"><h2 id="warAlertTitle">⚔ 선전포고가 왔습니다!</h2><ul id="warAlertList"></ul><p id="warAlertNote"></p><div class="row"><button id="warAlertGo">방어 배치하러 가기</button><button id="warAlertClose" class="ghost">닫기</button></div></div></div>
 <div id="notice" class="hud" hidden><b>📜 신의 공지</b><span id="noticeText"></span><button id="noticeClose" aria-label="공지 닫기">✕</button></div>
 

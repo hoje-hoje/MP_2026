@@ -1177,7 +1177,7 @@
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
     if ((k === '[' || k === ']') && !ONLINE) { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
+    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
   });
   addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); });
   // 패드·폰: 화면 아래 안내를 누르면 E (꾹 누르기도 됨)
@@ -1726,6 +1726,8 @@
         break;
       }
       case 'chatErr': toast(m.text); break;
+      case 'warStart': warBanner(`⚔ 영역전 시작 ⚔`); break;
+      case 'warCast': WAR = m.war; if (m.live && WAR && !WAR.reports.some((r) => MY_NID && (r.att === MY_NID || r.def === MY_NID))) setTimeout(() => toast(`⚔ 영역전 ${WAR.reports.length}건이 끝났어요 · 위의 [⚔ 영역전]에서 중계를 볼 수 있어요`), 3600); if (!$('warCast').hidden) openWarCast(); break;
       case 'bgm': SND.setFiles(m.files); BGM_CUR = m.cur && m.cur.startsWith('f:') ? 'f:/bgm/' + m.cur.slice(2) : (m.cur || 'peace'); if (titleDone && !TITLE.on && !OP.on) SND.bgm(BGM_CUR); break;
       case 'emote': { const r = m.id === myId ? player : remotes.get(m.id); if (r) { r.emote = m.text; r.emoteT = 3; } break; }
       case 'wander': wanderList = m.list || []; renderWander(); break;
@@ -1976,6 +1978,7 @@
     else if (t === 'defend') r = OFF.defend(OFF_ME, payload.battle, payload.troops);
     else if (t === 'reinforce') r = OFF.reinforce(OFF_ME, payload.battle, payload.front, payload.amount);
     else if (t === 'moveCapital') r = OFF.moveCapital(OFF_ME, payload.terr, Date.now());
+    else if (t === 'setRace') r = OFF.setRace(OFF_ME, payload.race);
     else if (t === 'defaultDef') r = OFF.setDefault(OFF_ME, payload.ratio);
     else if (t === 'intel') r = OFF.useIntel(OFF_ME, payload.battle);
     else if (t === 'resolveNow') return offNight();
@@ -1991,23 +1994,26 @@
     showNight(reps.filter((r) => r.att === OFF_ME || r.def === OFF_ME));
   }
   function showNight(reps) {
-    if (!reps.length) { toast('이번 전투: 우리 나라는 전투가 없었어요'); return; }
-    playBattles(reps, () => {
+    if (!reps.length) return;
+    setTimeout(() => playBattles(reps, () => {
       warTab = 'report'; $('war').hidden = false; renderWar();
       const w = reps.filter((r) => (r.winner === 'att') === (r.att === myView.me.id)).length; toast(`전투 결과: ${reps.length}전 ${w}승`);
-    });
+    }), ONLINE ? 3200 : 0);
   }
   // 다음 전투 시각 (13시·22시, 한국 시간)
   function nextFight() { if (ONLINE) return SLOT === 'morning' ? '오늘 점심 1시' : SLOT === 'lunch' ? '오늘 밤 10시' : '내일 점심 1시'; const h = new Date(Date.now() + 9 * 3600e3).getUTCHours(); return h < 13 ? '오늘 13시' : h < 22 ? '오늘 22시' : '내일 13시'; }
-  // ---- 전투 장면: 전투마다 약 3.5초 연출 + 왼쪽 요약. 화면을 누르면 결과로 건너뛴다
-  const BT = { list: [], i: 0, t0: 0, done: null, raf: 0 };
+  // ---- 전투 장면 (웅장하게, 큼직하게): 위에 두 나라·종족, 가운데 전선마다 싸움, 아래 결과
+  // 전선이 많으면 줄을 두 칸(세 칸)으로 나눠서 보여 줌. 화면을 누르면 결과로 건너뜀
+  const BT = { list: [], i: 0, t0: 0, done: null, raf: 0, shake: 0 };
+  const RACE_INFO = { human: { name: '인간', weapon: '검', icon: '⚔' }, elf: { name: '엘프', weapon: '활', icon: '🏹' }, dwarf: { name: '드워프', weapon: '도끼', icon: '🪓' } };
+  const raceOf = (nid) => (nationsPub[nid] && nationsPub[nid].race) || 'human';
   function playBattles(reps, done) {
     const seen = new Set(store('mp2026.battleSeen') || []);
     BT.list = reps.slice(); BT.i = 0; BT.done = done; SND.play('war');
     store('mp2026.battleSeen', [...seen, ...reps.map((r) => r.id)].slice(-80));
     $('battle').hidden = false; startBattle();
   }
-  // 접속했을 때 아직 못 본 지난밤 전투가 있으면 보여 준다
+  // 접속했을 때 아직 못 본 지난 전투가 있으면 보여 준다
   function unseenBattles() {
     if (!myView || !myView.reports || !myView.reports.length) return;
     const seen = new Set(store('mp2026.battleSeen') || []);
@@ -2015,15 +2021,21 @@
     const reps = myView.reports.filter((r) => r.night === last && !seen.has(r.id));
     if (reps.length) setTimeout(() => playBattles(reps, () => {}), 600);
   }
+  const btEnd = (r) => 0.9 + 1.9 + 1.0; // 마지막 전선 결과까지
   function startBattle() {
     const r = BT.list[BT.i]; BT.t0 = performance.now();
-    const meAtt = myView && r.att === myView.me.id;
-    const won = (r.winner === 'att') === meAtt;
-    $('btSide').innerHTML = `<h3>⚔ ${r.night}번째 전투</h3><div class="where">${esc(terrLabel(r.target))}${r.capital ? ' · <b>수도</b>' : ''}</div>
-      <div class="vs"><b style="color:${natColor(r.att)}">${esc(r.attName)}</b> 공격<br><b style="color:${natColor(r.def)}">${esc(r.defName)}</b> 방어 ×1.1${r.autoDef ? ' (자동 배치)' : ''}</div>
-      <table>${r.fronts.map((f, i) => `<tr data-lane="${i}"><th>${MPRules.frontName(i)}</th><td>${r.effA[i]}</td><td>vs</td><td>${r.effD[i]}</td><td class="res"></td></tr>`).join('')}</table>
-      <div class="sum" hidden>${won ? '🎉 승리' : '패배'} · 전선 ${r.fronts.filter((x) => x === 'att').length}:${r.fronts.filter((x) => x === 'def').length}<br>${r.winner === 'att' ? (meAtt ? `영역 ${(r.lost || []).length || 1}곳을 점령했어요` : `영역 ${(r.lost || []).length || 1}곳을 빼앗겼어요`) : (meAtt ? '공격이 막혔어요' : `방어 성공!${r.prisoners ? ` 포로 ${r.prisoners}명` : ''}`)}${r.newCapital ? '<br><b>수도 함락 · 강제 천도</b>' : ''}${r.destroyed ? '<br><b>나라 멸망</b>' : ''}<br><small>잃은 병력 ${esc(r.attName)} −${r.lossA} · ${esc(r.defName)} −${r.lossD}</small></div>
-      <div class="btns"><button id="btNext">${BT.i < BT.list.length - 1 ? `다음 전투 (${BT.i + 2}/${BT.list.length})` : '닫기'}</button></div>`;
+    const me = myView && myView.me ? myView.me.id : null, side = r.att === me ? 'att' : r.def === me ? 'def' : null;
+    const ra = RACE_INFO[raceOf(r.att)], rd = RACE_INFO[raceOf(r.def)];
+    const won = side ? (r.winner === side) : null;
+    $('btHead').innerHTML = `<div class="bside a" style="--c:${natColor(r.att)}"><span class="ricon">${ra.icon}</span><div><b>${esc(r.attName)}</b><small>공격 · ${ra.name}(${ra.weapon})</small></div></div>
+      <div class="bmid"><h2>⚔ 영역전 ⚔</h2><small>${esc(terrLabel(r.target))}${r.capital ? ' · 수도' : ''} · 전선 ${r.F || r.fronts.length}곳 · 절반 넘게 이기면 승리</small></div>
+      <div class="bside d" style="--c:${natColor(r.def)}"><div><b>${esc(r.defName)}</b><small>방어 ×1.1 · ${rd.name}(${rd.weapon})</small></div><span class="ricon">${rd.icon}</span></div>`;
+    const lost = (r.lost || []).length;
+    $('btSum').hidden = true;
+    $('btSum').innerHTML = `<b class="${r.winner}">${r.winner === 'att' ? '⚔ 공격 승리!' : '🛡 방어 승리!'}</b> <span>전선 ${r.attWon != null ? r.attWon : r.fronts.filter((x) => x === 'att').length} : ${r.defWon != null ? r.defWon : r.fronts.filter((x) => x === 'def').length}</span>
+      <span>${r.winner === 'att' ? `영역 ${lost || 1}곳이 ${esc(r.attName)}에게 넘어갔어요` : `${esc(r.defName)}이(가) 지켜 냈어요${r.prisoners ? ` · 포로 ${r.prisoners}명` : ''}`}${r.newCapital ? ' · 수도 함락, 강제 천도' : ''}${r.destroyed ? ' · <b>나라 멸망</b>' : ''}</span>
+      <small>잃은 병력: ${esc(r.attName)} −${r.lossA} · ${esc(r.defName)} −${r.lossD}</small>${won === null ? '' : `<em class="${won ? 'w' : 'l'}">${won ? '우리 나라 승리!' : '우리 나라 패배'}</em>`}`;
+    $('btNext').textContent = BT.i < BT.list.length - 1 ? `다음 전투 (${BT.i + 2}/${BT.list.length})` : '닫기';
     $('btNext').onclick = (e) => { e.stopPropagation(); nextBattle(); };
     cancelAnimationFrame(BT.raf); const loop = () => { drawBattle(r, (performance.now() - BT.t0) / 1000); BT.raf = requestAnimationFrame(loop); }; loop();
   }
@@ -2031,59 +2043,125 @@
     if (++BT.i < BT.list.length) return startBattle();
     cancelAnimationFrame(BT.raf); $('battle').hidden = true; if (BT.done) BT.done();
   }
-  $('battle').addEventListener('click', () => { if (performance.now() - BT.t0 < BT_END * 1000) BT.t0 = performance.now() - BT_END * 1000; });
-  const BT_LANE = (i) => 0.9 + i * 0.55, BT_END = 2.9; // 전선별 충돌 시작 시각, 결과 시각
+  $('battle').addEventListener('click', (e) => { if (e.target.closest('button')) return; const r = BT.list[BT.i]; if (r && performance.now() - BT.t0 < btEnd(r) * 1000) BT.t0 = performance.now() - btEnd(r) * 1000; });
+  // 도트 병사: 종족마다 모습·무기가 다름. dir 1 = 오른쪽을 봄, pose 0/1 걷기, 2 공격
+  function drawSoldier(g, x, y, s, race, col, dir, pose, alpha) {
+    g.save(); g.globalAlpha = alpha; g.translate(Math.round(x), Math.round(y)); if (dir < 0) g.scale(-1, 1);
+    const P = (px, py, w, h, c) => { g.fillStyle = c; g.fillRect(px * s, py * s, w * s, h * s); };
+    const short = race === 'dwarf', top = short ? -9 : -12;
+    // 다리
+    const lg = pose === 1 ? 1 : 0;
+    P(-2, -3, 1, 3 - lg, '#3a2a20'); P(1, -3, 1, 3 - (1 - lg), '#3a2a20');
+    // 몸 (나라 색)
+    P(-3, top + 5, 6, short ? 3 : 4, col); P(-3, top + 5, 6, 1, 'rgba(255,255,255,0.35)'); P(-3, -4, 6, 1, '#2b2340');
+    // 머리
+    const skin = race === 'elf' ? '#f6dcc0' : race === 'dwarf' ? '#e8b48a' : '#f0c8a0';
+    P(-2, top + 1, 4, 4, skin); P(1, top + 2, 1, 1, '#2b2340');
+    if (race === 'human') { P(-3, top, 6, 2, '#9aa3b8'); P(-3, top + 2, 1, 2, '#9aa3b8'); P(-1, top - 1, 2, 1, '#c22f53'); }
+    if (race === 'elf') { P(-3, top, 6, 2, '#2f7a46'); P(-3, top + 2, 1, 3, '#2f7a46'); P(2, top + 2, 2, 1, skin); }
+    if (race === 'dwarf') { P(-3, top, 6, 2, '#8a8f9e'); P(-4, top - 1, 1, 2, '#f1ecff'); P(3, top - 1, 1, 2, '#f1ecff'); P(-2, top + 4, 5, 3, '#b5651d'); P(-1, top + 7, 3, 1, '#b5651d'); }
+    // 무기
+    const sw = pose === 2;
+    if (race === 'human') { if (sw) { P(3, top + 3, 4, 1, '#e6ecf5'); P(7, top + 3, 1, 1, '#ffffff'); P(2, top + 3, 1, 2, '#7a5a30'); } else { P(3, top + 1, 1, 6, '#e6ecf5'); P(2, top + 6, 3, 1, '#7a5a30'); } }
+    if (race === 'elf') { P(3, top + 1, 1, 7, '#8a5a2b'); P(4, top, 1, 1, '#8a5a2b'); P(4, top + 8, 1, 1, '#8a5a2b'); P(3, top + 4, sw ? 3 : 1, 1, '#f1ecff'); }
+    if (race === 'dwarf') { if (sw) { P(3, top + 3, 5, 1, '#7a5a30'); P(7, top + 1, 2, 4, '#c9ced8'); } else { P(3, top, 1, 8, '#7a5a30'); P(3, top - 1, 3, 3, '#c9ced8'); } }
+    g.restore();
+  }
   function drawBattle(r, t) {
     const cv = $('btCanvas'), W2 = cv.clientWidth, H2 = cv.clientHeight;
     if (cv.width !== W2 || cv.height !== H2) { cv.width = W2; cv.height = H2; }
     const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
     const ease = (x) => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x), lerp = (a, b, k) => a + (b - a) * k;
-    const sc = Math.max(1, Math.min(4, Math.floor(H2 / (Math.min(7, r.fronts.length) * 52))));
-    g.fillStyle = '#4f7a3a'; g.fillRect(0, 0, W2, H2);
-    for (let i = 0; i < 140; i++) { g.fillStyle = i % 3 ? '#5c8a44' : '#456b32'; g.fillRect((i * 97) % W2, (i * 53) % H2, 6, 3); }
-    // 전선이 많으면 병력이 큰 전선 7곳만 그림 (표에는 전부)
-    const F = r.fronts.length, show = F <= 7 ? r.fronts.map((_, i) => i) : r.fronts.map((_, i) => i).sort((x, y) => (r.a[y] + r.d[y]) - (r.a[x] + r.d[x])).slice(0, 7).sort((x, y) => x - y);
-    const lanes = show.map((_, k) => H2 * (k + 1) / (show.length + 1)), mid = W2 / 2;
-    const cA = natColor(r.att), cD = natColor(r.def);
-    g.fillStyle = cA; g.fillRect(0, 0, 8, H2); g.fillStyle = cD; g.fillRect(W2 - 8, 0, 8, H2);
-    const march = ease(t / 0.8), walk = Math.floor(t * 8) % 4;
-    const spr = (name, col, row, x, y, a) => { const k = Math.max(0, CHARS.names.indexOf(name)); g.globalAlpha = a; g.drawImage(ART.chars, (k % CHARS.cols) * 64 + col * 16, Math.floor(k / CHARS.cols) * 112 + row * 16, 16, 16, Math.round(x - 8 * sc), Math.round(y - 16 * sc), 16 * sc, 16 * sc); g.globalAlpha = 1; };
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (let li = 0; li < show.length; li++) {
-      const i = show[li], y = lanes[li], local = t - (0.9 + li * 1.65 / show.length), win = r.fronts[i];
-      g.fillStyle = 'rgba(60,40,30,.35)'; g.fillRect(20, y - 4, W2 - 40, 10);
-      const nA = Math.max(1, Math.min(5, Math.round(r.a[i] / 5))), nD = Math.max(1, Math.min(5, Math.round(r.d[i] / 5)));
-      const fight = local > 0 && local < 0.45, done = local >= 0.45;
-      let ax = lerp(30 + 16 * sc, mid - 18 * sc, march), dx = lerp(W2 - 30 - 16 * sc, mid + 18 * sc, march);
-      if (fight) { const sh = Math.sin(local * 70) * 3; ax += sh; dx -= sh; }
-      if (done) { const k = ease((local - 0.45) / 0.3) * 14 * sc; ax += win === 'att' ? k : -k; dx += win === 'att' ? k : -k; }
-      for (let k = 0; k < nA; k++) spr('SamuraiBlue', 3, fight ? 4 : march < 1 ? walk : 0, ax - (k % 3) * 11 * sc, y + 6 + Math.floor(k / 3) * 7 * sc - 4, done && win !== 'att' && k >= Math.floor(nA / 2) ? 0.25 : 1);
-      for (let k = 0; k < nD; k++) spr('CamouflageRed', 2, fight ? 4 : march < 1 ? walk : 0, dx + (k % 3) * 11 * sc, y + 6 + Math.floor(k / 3) * 7 * sc - 4, done && win === 'att' && k >= Math.floor(nD / 2) ? 0.25 : 1);
-      g.font = `700 ${6 * sc}px ${PFONT}`; g.lineWidth = 4; g.lineJoin = 'round';
-      for (const [v, x, col] of [[r.effA[i], ax - 10 * sc, cA], [r.effD[i], dx + 10 * sc, cD]]) { g.strokeStyle = col; g.strokeText(v, x, y - 19 * sc); g.fillStyle = '#fff'; g.fillText(v, x, y - 19 * sc); }
-      if (local > 0 && local < 0.55) { const s2 = (1 + local * 3) * sc * 9, a = 1 - local / 0.55; g.globalAlpha = a; g.drawImage(ART.x_burst, mid - s2 / 2, y - s2 * 0.65, s2, s2); g.globalAlpha = 1; }
-      if (local > 0.4) {
-        const p = ease((local - 0.4) / 0.2), col = win === 'att' ? cA : cD;
-        g.save(); g.translate(mid, y - 2); g.scale(lerp(2, 1, p), lerp(2, 1, p)); g.rotate(-0.08); g.globalAlpha = p;
-        g.fillStyle = col; g.fillRect(-23 * sc, -7 * sc, 46 * sc, 14 * sc); g.fillStyle = '#fff6d6'; g.fillRect(-22 * sc, -6 * sc, 44 * sc, 12 * sc);
-        g.fillStyle = col; g.font = `700 ${7 * sc}px ${PFONT}`; g.fillText(win === 'att' ? '공격 승' : '방어 승', 0, 1);
-        g.restore(); g.globalAlpha = 1;
-        const row = document.querySelector(`#btSide tr[data-lane="${i}"]`);
-        if (row && !row.dataset.done) { row.dataset.done = 1; row.querySelector('.res').textContent = win === 'att' ? '공격 승' : '방어 승'; row.className = win; }
+    const F = r.fronts.length, cols = F <= 7 ? 1 : F <= 16 ? 2 : 3, rows = Math.ceil(F / cols);
+    const cA = natColor(r.att), cD = natColor(r.def), raceA = raceOf(r.att), raceD = raceOf(r.def);
+    // 흔들림
+    let sh = 0; if (BT.shake > 0) { sh = (Math.random() - 0.5) * BT.shake * 10; BT.shake = Math.max(0, BT.shake - 0.05); }
+    g.save(); g.translate(sh, sh * 0.5);
+    // 전장 바닥
+    g.fillStyle = '#4c7a38'; g.fillRect(-10, -10, W2 + 20, H2 + 20);
+    for (let i = 0; i < 260; i++) { g.fillStyle = i % 3 ? '#578a40' : '#41692f'; g.fillRect((hash(i, 1, 9) * W2) | 0, (hash(i, 2, 9) * H2) | 0, 6, 3); }
+    g.fillStyle = cA; g.globalAlpha = 0.25; g.fillRect(0, 0, W2 * 0.12, H2); g.fillStyle = cD; g.fillRect(W2 * 0.88, 0, W2 * 0.12, H2); g.globalAlpha = 1;
+    const maxT = Math.max(1, ...r.a, ...r.d);
+    const cellW = W2 / cols, cellH = H2 / rows, s = Math.max(2, Math.min(7, Math.floor(Math.min(cellH / 16, cellW / 58)))); // 병사 크게 (줄 사이가 겹치지 않을 만큼)
+    for (let i = 0; i < F; i++) {
+      const col = Math.floor(i / rows), row = i % rows, x0 = col * cellW, y0 = row * cellH, mid = x0 + cellW / 2, gy = y0 + cellH * 0.72;
+      const start = 0.9 + i * (1.9 / F), clash = start + 0.45, res = start + 0.85, local = t - start, win = r.fronts[i];
+      // 줄 (흙길)
+      g.fillStyle = 'rgba(70,45,25,0.45)'; g.fillRect(x0 + 10, gy - 4, cellW - 20, 8);
+      if (cols > 1 && col > 0 && row === 0) { g.fillStyle = 'rgba(27,20,48,0.6)'; g.fillRect(x0 - 2, 0, 4, H2); }
+      // 전선 이름 + 숫자 + 힘 막대 (큼직하게)
+      const fs = Math.max(14, Math.min(30, cellH * 0.28));
+      g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `400 ${fs}px ${PFONT}`;
+      const outline = (txt, x, y, c, w = 5) => { g.lineWidth = w; g.lineJoin = 'round'; g.strokeStyle = '#1b1430'; g.strokeText(txt, x, y); g.fillStyle = c; g.fillText(txt, x, y); };
+      outline(MPRules.frontName(i), mid, y0 + fs * 0.75, '#fff6d6');
+      const aN = r.a[i], dN = r.effD[i];
+      g.font = `400 ${fs * 0.95}px ${PFONT}`; outline(String(aN), x0 + cellW * 0.2, y0 + fs * 0.75, '#bcd4ff'); outline(String(dN), x0 + cellW * 0.8, y0 + fs * 0.75, '#ffc4c4');
+      const bw = cellW * 0.36, bx = mid - bw / 2, by = y0 + fs * 1.45, k = aN / Math.max(0.1, aN + dN);
+      g.fillStyle = '#1b1430'; g.fillRect(bx - 2, by - 2, bw + 4, 10); g.fillStyle = cA; g.fillRect(bx, by, bw * k, 6); g.fillStyle = cD; g.fillRect(bx + bw * k, by, bw * (1 - k), 6);
+      // 병사 수 (병력에 따라 1~6명)
+      const nA = Math.max(1, Math.min(6, Math.round(aN / maxT * 6))), nD = Math.max(1, Math.min(6, Math.round(r.d[i] / maxT * 6)));
+      const march = ease(t / 0.8), walk = Math.floor(t * 8) % 2;
+      let ax = lerp(x0 + 18, mid - 14 * s, march), dx = lerp(x0 + cellW - 18, mid + 14 * s, march);
+      if (local > 0 && local < 0.45) { ax = lerp(mid - 14 * s, mid - 6 * s, ease(local / 0.45)); dx = lerp(mid + 14 * s, mid + 6 * s, ease(local / 0.45)); }
+      const fighting = t >= clash && t < res;
+      if (fighting) { const j = Math.sin(t * 80) * s; ax += j; dx -= j; }
+      const after = t >= res, push = after ? ease((t - res) / 0.4) * cellW * 0.18 : 0;
+      if (after) { ax += win === 'att' ? push : -push * 0.6; dx += win === 'att' ? push * 0.6 : -push; }
+      for (let kk = 0; kk < nA; kk++) { const fall = after && win !== 'att' && kk >= Math.ceil(nA / 3); drawSoldier(g, ax - (kk % 3) * 7 * s - (kk >= 3 ? 3 * s : 0), gy + (kk >= 3 ? -3 * s : 0) + (kk % 3 === 1 ? 2 * s : 0), s, raceA, cA, 1, fighting ? 2 : march < 1 ? walk : 0, fall ? 0.25 : 1); }
+      for (let kk = 0; kk < nD; kk++) { const fall = after && win === 'att' && kk >= Math.ceil(nD / 3); drawSoldier(g, dx + (kk % 3) * 7 * s + (kk >= 3 ? 3 * s : 0), gy + (kk >= 3 ? -3 * s : 0) + (kk % 3 === 1 ? 2 * s : 0), s, raceD, cD, -1, fighting ? 2 : march < 1 ? walk : 0, fall ? 0.25 : 1); }
+      // 이펙트: 엘프는 화살, 인간은 베기, 드워프는 땅 울림 + 불꽃
+      if (local > -0.1 && local < 0.5) for (const [race, fromX, toX, c] of [[raceA, ax, dx, '#fff6d6'], [raceD, dx, ax, '#fff6d6']]) if (race === 'elf') for (let q = 0; q < 3; q++) { const pr = ((local + 0.1) / 0.6 + q * 0.18) % 1, xx = lerp(fromX, toX, pr), yy = gy - 10 * s - Math.sin(pr * Math.PI) * 10 * s; g.fillStyle = c; g.fillRect(xx, yy, 5 * s * Math.sign(toX - fromX), s); g.fillStyle = '#c9ced8'; g.fillRect(xx + 5 * s * Math.sign(toX - fromX), yy - s * 0.5, s, s * 2); }
+      if (t >= clash && t < clash + 0.05 && !r['_c' + i]) { r['_c' + i] = 1; BT.shake = Math.max(BT.shake, 0.6); SND.play('hit'); }
+      if (fighting) {
+        const p = (t - clash) / (res - clash);
+        for (let q = 0; q < 10; q++) { const a = hash(i, q, 3) * Math.PI * 2, rr = p * (8 + hash(q, i, 4) * 18) * s; g.fillStyle = q % 2 ? '#ffd34d' : '#ffffff'; g.fillRect(mid + Math.cos(a) * rr, gy - 8 * s + Math.sin(a) * rr * 0.6, s, s); }
+        if (raceA === 'human' || raceD === 'human') { g.strokeStyle = `rgba(255,255,255,${1 - p})`; g.lineWidth = s; g.beginPath(); g.arc(mid, gy - 8 * s, (6 + p * 10) * s, -1.2 + p, 0.3 + p); g.stroke(); }
+        if (raceA === 'dwarf' || raceD === 'dwarf') { g.strokeStyle = `rgba(255,211,77,${1 - p})`; g.lineWidth = s; g.beginPath(); g.ellipse(mid, gy, (4 + p * 22) * s, (1 + p * 5) * s, 0, 0, Math.PI * 2); g.stroke(); }
+      }
+      // 결과 도장
+      if (t >= res) {
+        const p = ease((t - res) / 0.25), c = win === 'att' ? cA : cD, label = win === 'att' ? '공격 승' : '방어 승';
+        g.save(); g.translate(mid, gy - 16 * s); g.scale(lerp(2.2, 1, p), lerp(2.2, 1, p)); g.rotate(-0.08); g.globalAlpha = p;
+        g.font = `400 ${Math.max(14, fs * 0.8)}px ${PFONT}`; const tw = g.measureText(label).width + 18, th = Math.max(14, fs * 0.8) + 10;
+        g.fillStyle = '#1b1430'; g.fillRect(-tw / 2 - 3, -th / 2 - 3, tw + 6, th + 6); g.fillStyle = c; g.fillRect(-tw / 2, -th / 2, tw, th);
+        g.fillStyle = '#fff'; g.fillText(label, 0, 1); g.restore(); g.globalAlpha = 1;
       }
     }
-    if (t < 0.6) { // 시작 글자
-      g.globalAlpha = 1 - ease((t - 0.3) / 0.3); g.font = `700 ${12 * sc}px ${PFONT}`; g.lineWidth = 6; g.strokeStyle = '#c22f53'; g.strokeText('⚔ 전투 시작', mid, H2 / 2); g.fillStyle = '#fff'; g.fillText('⚔ 전투 시작', mid, H2 / 2); g.globalAlpha = 1;
-    }
-    if (t >= BT_END) {
-      const sum = document.querySelector('#btSide .sum'); if (sum && sum.hidden) { sum.hidden = false; for (let i = 0; i < r.fronts.length; i++) { const row = document.querySelector(`#btSide tr[data-lane="${i}"]`); if (!row.dataset.done) { row.dataset.done = 1; row.querySelector('.res').textContent = r.fronts[i] === 'att' ? '공격 승' : '방어 승'; row.className = r.fronts[i]; } } }
-      const meAtt = myView && r.att === myView.me.id, won = (r.winner === 'att') === meAtt;
-      const p = ease((t - BT_END) / 0.35);
-      g.globalAlpha = p * 0.55; g.fillStyle = '#1b1430'; g.fillRect(0, 0, W2, H2); g.globalAlpha = p;
-      g.font = `700 ${16 * sc}px ${PFONT}`; g.lineWidth = 8; g.strokeStyle = won ? '#c27a00' : '#7a1f3a'; g.strokeText(won ? '승리!' : '패배', mid, H2 / 2); g.fillStyle = won ? '#ffd34d' : '#ffb3c4'; g.fillText(won ? '승리!' : '패배', mid, H2 / 2);
+    // 시작 글자
+    if (t < 0.9) { g.globalAlpha = 1 - ease((t - 0.55) / 0.35); const big = Math.min(W2 / 8, 72); g.font = `400 ${big}px ${PFONT}`; g.lineWidth = 10; g.strokeStyle = '#c22f53'; g.strokeText('⚔ 전투 시작 ⚔', W2 / 2, H2 / 2); g.fillStyle = '#fff'; g.fillText('⚔ 전투 시작 ⚔', W2 / 2, H2 / 2); g.globalAlpha = 1; }
+    // 끝: 큰 결과
+    const END = btEnd(r);
+    if (t >= END) {
+      if (!r._done) { r._done = 1; SND.play(r.winner === 'att' ? 'war' : 'ok'); $('btSum').hidden = false; }
+      const p = ease((t - END) / 0.4);
+      g.globalAlpha = p * 0.6; g.fillStyle = '#1b1430'; g.fillRect(-10, -10, W2 + 20, H2 + 20); g.globalAlpha = p;
+      const big = Math.min(W2 / 7, 96), c = r.winner === 'att' ? cA : cD;
+      g.font = `400 ${big}px ${PFONT}`; g.lineWidth = 12; g.strokeStyle = '#1b1430'; const txt = r.winner === 'att' ? '공격 승리!' : '방어 승리!';
+      g.strokeText(txt, W2 / 2, H2 / 2 - big * 0.2); g.fillStyle = c; g.fillText(txt, W2 / 2, H2 / 2 - big * 0.2);
+      g.font = `400 ${big * 0.38}px ${PFONT}`; g.lineWidth = 6; const sub = r.winner === 'att' ? `${r.attName} · 영역 ${(r.lost || []).length || 1}곳 점령` : `${r.defName} · 영역을 지켜 냄`;
+      g.strokeText(sub, W2 / 2, H2 / 2 + big * 0.55); g.fillStyle = '#fff6d6'; g.fillText(sub, W2 / 2, H2 / 2 + big * 0.55);
       g.globalAlpha = 1;
     }
+    g.restore();
   }
+  // ---- 영역전 시작 배너 (모두에게) + 중계 목록
+  let WAR = null;
+  function warBanner(text) {
+    const el = $('warBanner'); $('warBannerText').textContent = text || '⚔ 영역전 시작 ⚔';
+    el.hidden = false; el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); SND.play('war');
+    clearTimeout(warBanner.t); warBanner.t = setTimeout(() => { el.hidden = true; }, 3400);
+  }
+  function openWarCast() {
+    const w = WAR; const box = $('castBody');
+    if (!w || !w.reports || !w.reports.length) { box.innerHTML = '<p class="msg">아직 영역전이 없었어요. 매일 점심 1시·밤 10시에 열려요.</p>'; }
+    else box.innerHTML = `<p class="msg">${esc(w.label)} · 전투 ${w.reports.length}건 — 누구나 볼 수 있어요</p>` + w.reports.map((r, k) => `<div class="row cast"><span><b style="color:${natColor(r.att)}">${esc(r.attName)}</b> ⚔ <b style="color:${natColor(r.def)}">${esc(r.defName)}</b><small> ${esc(terrLabel(r.target))} · ${r.winner === 'att' ? `공격 승 (영역 ${(r.lost || []).length}곳)` : '방어 승'}</small></span><button data-cast="${k}">보기</button></div>`).join('') + (w.reports.length > 1 ? '<div class="row"><span></span><button id="castAll">전부 보기</button></div>' : '');
+    for (const b of box.querySelectorAll('[data-cast]')) b.onclick = () => { $('warCast').hidden = true; playBattles([w.reports[+b.dataset.cast]], () => {}); };
+    if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
+    $('warCast').hidden = false;
+  }
+  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); } }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
+  $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
   // ---- 전쟁 창
   let warTab = 'nation', warTarget = null;
@@ -2124,6 +2202,8 @@
         h += `<div class="plan"><h3>🌀 균열 침식 · 우리 나라 ${pct}%</h3><div class="ebar"><i style="width:${Math.min(100, pct * 2)}%"></i></div><p class="msg">매일 아침 영역마다 ${MPRules.NUM.erodeStep}%씩 침식돼요 (수도는 안전). 나라 전체가 <b>${MPRules.NUM.erodeFall}%</b>가 되면 나라가 무너져요. 백신 ${me.vaccine}개 · 백신은 영역 하나를 0%로 되돌려요. 다른 나라 땅을 빼앗으면 침식률이 내려가요.</p>` +
           mineE.map((tid) => `<div class="row"><span>${esc(terrLabel(tid))} · ${tid === me.capital ? '수도 (안전)' : `침식 ${EROSION[tid] | 0}%`}</span>${tid !== me.capital && (EROSION[tid] | 0) > 0 ? `<button data-vax="${tid}" ${me.vaccine > 0 ? '' : 'disabled'}>백신 쓰기</button>` : ''}</div>`).join('') + '</div>';
       }
+      { const cur = (nationsPub[me.id] && nationsPub[me.id].race) || 'human';
+        h += `<div class="plan"><h3>🛡 병력 종족</h3><p class="msg">전투 장면에서 우리 병사의 모습과 무기가 바뀌어요 (지금은 모습만).</p><div class="targets">${Object.entries(RACE_INFO).map(([k, v]) => `<button class="tgt" data-race="${k}" aria-pressed="${k === cur}" ${king ? '' : 'disabled'}>${v.icon} ${v.name}<small>${v.weapon}</small></button>`).join('')}</div>${king ? '' : '<p class="note">종족은 왕만 정할 수 있어요.</p>'}</div>`; }
       h += `<h3>나라 정보</h3><div class="msg">수도 ${esc(terrLabel(me.capital))} · 영토 ${me.territories}곳 · 병력 ${me.army} · 코인 ${me.coin} · 행동력 ${me.actions}</div>`;
       // 천도: 왕이 코인을 내고 우리 영역 중 아무 곳으로 (전투 대기 중 불가, 하루에 한 번)
       const mineT = Object.keys(owners).filter((k) => owners[k] === me.id && +k !== me.capital).map(Number);
@@ -2181,6 +2261,7 @@
     for (const b of box.querySelectorAll('[data-tgt]')) b.onclick = () => { warTarget = +b.dataset.tgt; renderWar(); };
     for (const b of box.querySelectorAll('[data-vax]')) b.onclick = () => warAction('vaccinate', { terr: +b.dataset.vax });
     for (const b of box.querySelectorAll('[data-intel]')) b.onclick = () => warAction('intel', { battle: +b.dataset.intel });
+    for (const b of box.querySelectorAll('[data-race]')) b.onclick = () => warAction('setRace', { race: b.dataset.race });
     for (const b of box.querySelectorAll('[data-cap]')) b.onclick = () => { if (confirm(`${terrLabel(+b.dataset.cap)}(으)로 천도할까요? 코인 ${MPRules.NUM.capitalMoveCost}이 들고 하루 동안 다시 못 옮겨요.`)) warAction('moveCapital', { terr: +b.dataset.cap }); };
     if ($('btnDefault')) $('btnDefault').onclick = () => warAction('defaultDef', { ratio: $('ddIn').value.split(/[\s,:]+/).filter(Boolean).map((x) => Math.max(0, parseInt(x, 10) || 0)).slice(0, 30) });
     for (const b of box.querySelectorAll('[data-defend]')) {
@@ -2462,7 +2543,7 @@
   addEventListener('keydown', (e) => { if (e.target && e.target.tagName === 'INPUT') return; const k = e.key.toLowerCase(); if (DIRS[k]) { lastDirKey = k; if (!e.repeat) queuedDir = DIRS[k]; } });
   const DIRS = { arrowleft: [-1, 0], a: [-1, 0], arrowright: [1, 0], d: [1, 0], arrowup: [0, -1], w: [0, -1], arrowdown: [0, 1], s: [0, 1] };
   // 시작 화면·로딩·건국 창·퍼즐·옷장 같은 창이 열려 있으면 캐릭터가 움직이지 않음
-  const BLOCK_MOVE = ['title', 'opening', 'loading', 'found', 'puzzle', 'closet', 'coupon', 'doomPop', 'battle', 'reinBox', 'bailBox'];
+  const BLOCK_MOVE = ['warCast', 'title', 'opening', 'loading', 'found', 'puzzle', 'closet', 'coupon', 'doomPop', 'battle', 'reinBox', 'bailBox'];
   const moveLocked = () => BLOCK_MOVE.some((id) => { const el = $(id); return el && !el.hidden; });
   function wantDir() {
     if (moveLocked()) { queuedDir = null; return null; }

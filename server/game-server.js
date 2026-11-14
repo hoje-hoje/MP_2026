@@ -492,6 +492,14 @@ wss.on('connection', (ws) => {
         send(ws, { t: 'ok', text: '방어 배치 저장' });
         break;
       }
+      case 'setRace': { // 병력 종족 (왕)
+        const n = world.nationOfPlayer(s.token); if (!n) return;
+        if (n.king !== s.token) return send(ws, { t: 'err', text: '종족은 왕만 정할 수 있어요' });
+        const r = world.setRace(n.id, String(m.race)); if (!r.ok) return send(ws, { t: 'err', text: r.err });
+        dirty = true; broadcastOwners(); notifyNation(n.id, `🛡 우리 병력의 종족: ${{ human: '인간 (검)', elf: '엘프 (활)', dwarf: '드워프 (도끼)' }[n.race]}`);
+        break;
+      }
+      case 'warCast': send(ws, { t: 'warCast', war: state.lastWar || null }); break; // 지난 전투 시간 중계 목록
       case 'moveCapital': { // 천도 (왕)
         const n = world.nationOfPlayer(s.token); if (!n) return;
         if (n.king !== s.token) return send(ws, { t: 'err', text: '천도는 왕만 할 수 있어요' });
@@ -853,7 +861,14 @@ function notifyNation(nid, text) {
 }
 function resolveNight(why, slot) {
   const before = Object.assign({}, world.s.owner);
+  const pendingN = world.s.battles.filter((b) => slot == null || b.slot == null || b.slot <= slot).length;
+  // 모두의 화면에 '영역전 시작' 배너 (전투가 있을 때)
+  if (pendingN) { const msg = JSON.stringify({ t: 'warStart', n: pendingN, label: why }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); }
   const reports = world.resolveAll(slot);
+  if (reports.length) { // 누구나 볼 수 있는 중계 (전투가 끝난 뒤라 병력 공개)
+    state.lastWar = { label: why, at: Date.now(), reports: reports.map((r) => Object.assign({}, r, { members: undefined })) };
+    const msg = JSON.stringify({ t: 'warCast', war: state.lastWar, live: true }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+  }
   for (const r of reports) {
     if (!r.lost.length) continue;
     const A = world.nation(r.att), D = world.nation(r.def), lostSet = new Set(r.lost);
