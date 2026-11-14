@@ -60,7 +60,7 @@
     if (GWALL.has(y * W + x)) return true; // 관리자가 칠한 장벽
     if (GFLOOR.size && isWater(GFLOOR.get(y * W + x))) return true; // 관리자가 깐 물 타일
     { const pr = GPROPS.get(y * W + x); if (pr && pr.b) return true; } // 관리자가 놓은 막힘 소품
-    const e = TILES[y * W + x]; if (e && e.k === 'wall' && e.n !== MY_NID) return true; // 남의 방벽
+    const e = TILES[y * W + x]; if (e && ((e.k === 'wall' && e.n !== MY_NID) || e.k === 'water')) return true; // 남의 방벽 · 수로
     return STORE_AT.has(y * W + x);
   }
   // ---- 영지: 설치물(바닥·방벽), 우리 덫, 저장소 자리
@@ -509,7 +509,7 @@
             break;
         }
         { const gf = GFLOOR.get(y * W + x); if (gf) drawSheetTile(g, gf, px, py, TILE, x * TILE, y * TILE); } // 관리자가 깐 타일
-        { const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under)) g.drawImage(floorArtId(e.k === 'floor' ? tileItem(e) : e.under), px, py, TILE, TILE); } // 벽·장식 밑의 바닥도
+        { const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under)) g.drawImage(floorArtId(e.k === 'floor' ? tileItem(e) : e.under), px, py, TILE, TILE); else if (e && e.k === 'farm') g.drawImage(farmArt(nearCanal(x, y)), px, py, TILE, TILE); else if (e && e.k === 'water') g.drawImage(canalArt(canalMask(x, y)), px, py, TILE, TILE); } // 벽·장식 밑의 바닥도 · 밭 · 수로
         // 영토 색 + 국경선: 우리 나라는 진하게, 경계는 우리 나라 색 띠 / 나머지 경계는 흰 선
         const o = terrAt(x, y);
         const own = o > 0 ? ownerOf(o) : null;
@@ -831,7 +831,7 @@
     priest: { name: '신의 사제 루미엘', ch: 'Monk', color: '#6b4fb3', lines: ['어서 오세요, 하늘 신전에.', '신탁 제단에 신들의 말씀이 내려와요. 멸망이 선포되면 균열이 어디를 삼킬지 알려 주지요.', '땅으로 내려가려면 남쪽 구름 문으로 가세요. 올라온 수도로 돌아가요.'] },
     build: { name: '건축 천사 아라엘', ch: 'Woman', color: '#3d5fb8', shop: 'build', lines: ['어서 와요! 천상·숲·겨울·돌 테마로 바닥·벽·기둥·장식이 있어요.', '테마는 모양만 달라요. 효과는 종류마다 똑같아요!', '산 물건은 나라 저장소로 바로 가요. 설치 모드(G)로 우리 땅에 놓아요.', '벽과 기둥은 내구도가 100이에요. 적이 때리면 조금씩 닳아요.'] },
     vaccine: { name: '치유 천사 세라', ch: 'Princess', color: '#d64f86', shop: 'vaccine', lines: ['균열이 무서운가요? 백신 하나면 영토 하나를 지킬 수 있어요.', '많이 살수록 비싸져요. 꼭 필요한 만큼만!'] },
-    seed: { name: '정원 천사 플로라', ch: 'Villager2', color: '#3fa37a', shop: 'seed', lines: ['씨앗이랑 비료는 곧 들어와요!', '조금만 기다려 줘요. 밭을 갈 준비를 해 두세요.'] },
+    seed: { name: '정원 천사 플로라', ch: 'Villager2', color: '#3fa37a', shop: 'seed', lines: ['어서 와요! 밭·수로·씨앗·비료가 있어요.', '우리 땅에 밭을 갈고(설치 모드 농사 탭) 그 위에 서서 씨앗을 심어요.', '수로 2칸 안은 20% 빨리 자라고, 비료를 주면 남은 시간이 절반!', '다 자라면 E로 수확해서 저한테 팔아요.'] },
     war: { name: '전쟁의 천사 미카', ch: 'KnightGold', color: '#c22f53', rules: true, lines: ['나는 전쟁의 규칙을 지키는 천사.', '3일차부터 영역전이 열린다. 그때 규칙서를 보여 주지.'] },
     clerk: { name: '등록 천사 노엘', ch: 'Villager', color: '#277a58', desk: true, lines: ['나라가 없나요? 여기서 귀화·용병·건국을 등록해요.'] },
     rest: { name: '쉼터지기 하루', ch: 'Monk2', color: '#4bb3c4', lines: ['조용히 쉬어 가요.', '여긴 나중에 쓰일지도 몰라요. 지금은 쉼터예요.'] },
@@ -902,7 +902,8 @@
   function renderShop() {
     const me = myView && myView.me; if (!me) return;
     const P = MPRules.NUM.price;
-    const tabs = SHOP_KIND === 'build' ? [['heaven', '☁ 천상'], ['forest', '🌲 숲'], ['winter', '❄ 겨울'], ['stone', '🪨 돌'], ['trap', '🪤 덫']] : [];
+    const tabs = SHOP_KIND === 'build' ? [['heaven', '☁ 천상'], ['forest', '🌲 숲'], ['winter', '❄ 겨울'], ['stone', '🪨 돌'], ['trap', '🪤 덫']] : SHOP_KIND === 'seed' ? [['buy', '🌱 씨앗·밭'], ['sell', '🧺 작물 팔기']] : [];
+    if (SHOP_KIND === 'seed' && SHOP_TAB !== 'sell') SHOP_TAB = 'buy';
     if (SHOP_KIND === 'build' && !tabs.some(([k]) => k === SHOP_TAB)) SHOP_TAB = 'heaven';
     $('shopTabs').hidden = !tabs.length;
     $('shopTabs').innerHTML = tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === SHOP_TAB}">${l}</button>`).join('');
@@ -913,12 +914,15 @@
     const want = (k) => SHOP_TAB === 'all' || SHOP_TAB === k;
     const CAT_DESC = { floor: '우리 국민이 1.5배 빨라져요', wall: `다른 나라 사람을 막아요 · 내구도 ${MPRules.NUM.buildHp}`, deco: '꾸미기 · 밟고 지나갈 수 있어요', trap: '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임' };
     const CNT = { floor: [1, 5, 20], wall: [1, 5, 10], deco: [1, 5], trap: [1, 3] };
-    if (SHOP_KIND === 'build') html = MPRules.BUILD.filter((b) => (SHOP_TAB === 'trap' ? b.cat === 'trap' : b.theme === SHOP_TAB && b.cat !== 'trap')).map((b) => card(b.id, b.name, CAT_DESC[b.cat], P[b.cat], CNT[b.cat], me.items[b.id] || 0)).join('');
+    if (SHOP_KIND === 'build') html = MPRules.BUILD.filter((b) => !FARM_CATS.has(b.cat) && b.cat !== 'crop' && (SHOP_TAB === 'trap' ? b.cat === 'trap' : b.theme === SHOP_TAB && b.cat !== 'trap')).map((b) => card(b.id, b.name, CAT_DESC[b.cat], P[b.cat], CNT[b.cat], me.items[b.id] || 0)).join('');
     else if (false) html = (want('floor') ? card('floor', '황금 바닥', '우리 국민이 1.5배 빨라져요', P.floor, [1, 5, 20], me.items.floor) : '') + (want('wall') ? card('wall', '방벽', '다른 나라 사람을 막아요 (5초 맞으면 부서짐)', P.wall, [1, 5, 10], me.items.wall) : '') + (want('trap') ? card('trap', '덫', '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임', P.trap, [1, 3], me.items.trap) : '');
     else if (SHOP_KIND === 'vaccine') html = card('vaccine', '백신', '균열에서 영토 하나를 지켜요 · 살수록 비싸져요', me.vaccinePrice, null, me.vaccine);
-    else html = `<div class="hvSoon">${ICON.seed ? '<canvas data-ico="seed" width="64" height="64"></canvas>' : ''}<p><b>씨앗·비료는 곧 들어와요!</b><br>농사가 열리면 여기서 씨앗을 사고, 비료를 뿌리면 2배로 빨리 자라요.</p></div>`;
+    else if (SHOP_TAB === 'buy') html = [['farm', '밭 1칸 · 설치 모드 농사 탭에서 발밑에 갈아요', [1, 5, 20]], ['canal', '수로 1칸 · 2칸 안의 작물이 20% 빨리 자라요 (사람은 못 지나감)', [1, 5]], ['fert', '심은 작물에 주면 남은 시간이 절반!', [1, 5]]].map(([id, d, c]) => card(id, BUILD_BY[id].name, d, BUILD_BY[id].price, c, me.items[id] || 0)).join('')
+      + Object.entries(CROPS).map(([k, c]) => card('s_' + k, c.name + ' 씨앗', `${fmtLeft(c.min * 60e3)} · ${c.yield}개 수확 · 1개 ${c.sell}코인에 팔림`, c.seed, [1, 5, 9], me.items['s_' + k] || 0)).join('');
+    else { const owned = Object.keys(CROPS).filter((k) => me.items['p_' + k] > 0); html = owned.length ? owned.map((k) => { const n2 = me.items['p_' + k]; return `<div class="hvCard"><canvas data-ico="p_${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${CROPS[k].name}</b><small>1개 ${CROPS[k].sell}코인</small><i>가진 것 ${n2}개</i></div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${(CROPS[k].sell * n2).toLocaleString()}<small> 전부</small></span><div><button type="button" data-sell="p_${k}" data-n="1">1개</button><button type="button" data-sell="p_${k}" data-n="${n2}">전부</button></div></div></div>`; }).join('') : '<div class="hvSoon"><p><b>팔 작물이 없어요</b><br>우리 땅에 밭을 갈고 씨앗을 심어 보세요. 다 자라면 E로 수확!</p></div>'; }
     $('shopBody').innerHTML = html;
     for (const c of $('shopBody').querySelectorAll('[data-ico]')) { if (BUILD_BY[c.dataset.ico]) { itemIcon(c, c.dataset.ico); continue; } const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(ICON[c.dataset.ico], 0, 0, 64, 64); }
+    for (const b of $('shopBody').querySelectorAll('[data-sell]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'sell', item: b.dataset.sell, n: +b.dataset.n })); $('shopSay').textContent = '싱싱하네요! 코인은 나라 저장소로 보냈어요.'; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
     for (const b of $('shopBody').querySelectorAll('[data-buy]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'buy', item: b.dataset.buy, n: +b.dataset.n })); $('shopSay').textContent = ['고마워요! 저장소로 보냈어요.', '좋은 선택이에요!', '또 와요~'][(Math.random() * 3) | 0]; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
   }
   // 영역전 규칙서 (전쟁의 천사에게서, 3일차부터)
@@ -1005,9 +1009,60 @@
     g.fillStyle = '#2b2340'; g.fillRect(L - 2, T - 2, w + 4, 9); g.fillStyle = '#4a3f5e'; g.fillRect(L, T, w, 5);
     g.fillStyle = r > 0.5 ? '#5ad16a' : r > 0.25 ? '#ffd34d' : '#ff5a4a'; g.fillRect(L, T, Math.round(w * r), 5); g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(L, T, Math.round(w * r), 2);
   }
+  // ------------------------------------------------------------ 농사 그림 (밭·수로·작물 4단계, 직접 그림)
+  const CROPS = MPRules.CROPS;
+  const farmCache = {};
+  function farmArt(wet) { // 갈아 놓은 밭: 이랑 3줄 (수로 근처면 촉촉하게 진한 색)
+    const key = wet ? 'w' : 'd'; if (farmCache[key]) return farmCache[key];
+    return (farmCache[key] = artCanvas(32, 32, (g) => {
+      const C = wet ? ['#6b4a2e', '#5a3c24', '#7d5836', '#4a301c'] : ['#9a6a3e', '#86592f', '#b07a48', '#6e4a28'];
+      g.fillStyle = C[0]; g.fillRect(0, 0, 32, 32);
+      for (let r = 0; r < 3; r++) { const y = 3 + r * 10; g.fillStyle = C[1]; g.fillRect(2, y + 5, 28, 3); g.fillStyle = C[2]; g.fillRect(2, y, 28, 4); g.fillStyle = C[3]; g.fillRect(2, y + 8, 28, 1); }
+      g.fillStyle = C[2]; for (const [x, y] of [[6, 1], [20, 11], [12, 21], [26, 29]]) g.fillRect(x, y, 2, 2);
+      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(0, 0, 32, 1); g.fillRect(0, 0, 1, 32);
+    }));
+  }
+  const canalCache = {};
+  function canalArt(mask) { // 수로: 물 + 이웃이 수로가 아닌 쪽에만 돌 테두리 (mask: 1=위 2=오른 4=아래 8=왼 이 수로)
+    if (canalCache[mask]) return canalCache[mask];
+    return (canalCache[mask] = artCanvas(32, 32, (g) => {
+      g.fillStyle = '#5fb6e6'; g.fillRect(0, 0, 32, 32); g.fillStyle = '#7fcaf2'; g.fillRect(4, 8, 10, 2); g.fillRect(18, 20, 8, 2); g.fillStyle = '#d6f1ff'; g.fillRect(8, 8, 3, 2); g.fillRect(20, 20, 3, 2);
+      const edge = (x, y, w, h) => { g.fillStyle = '#8c8a96'; g.fillRect(x, y, w, h); g.fillStyle = '#b3b0bc'; g.fillRect(x, y, w, Math.min(h, 2)); };
+      if (!(mask & 1)) edge(0, 0, 32, 5); if (!(mask & 4)) edge(0, 27, 32, 5); if (!(mask & 8)) edge(0, 0, 5, 32); if (!(mask & 2)) edge(27, 0, 5, 32);
+    }));
+  }
+  function canalMask(x, y) { const w = (dx, dy) => { const e = TILES[(y + dy) * W + x + dx]; return e && e.k === 'water'; }; return (w(0, -1) ? 1 : 0) | (w(1, 0) ? 2 : 0) | (w(0, 1) ? 4 : 0) | (w(-1, 0) ? 8 : 0); }
+  function nearCanal(x, y) { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const e = TILES[(y + dy) * W + x + dx]; if (e && e.k === 'water') return true; } return false; }
+  const cropStage = (cr) => { const k = (Date.now() - cr.at) / cr.d; return k >= 1 ? 3 : k >= 0.6 ? 2 : k >= 0.25 ? 1 : 0; };
+  function px2(g, x, y, c, w = 2, h = 2) { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), w, h); }
+  function drawCrop(g, x, y, c, st, t = 0) { // x = 칸 가운데, y = 칸 아래쪽
+    const sway = st > 0 ? Math.round(Math.sin(t * 2 + x * 0.1)) : 0, G = '#5fbf6a', GD = '#3f9a52';
+    if (st === 0) { px2(g, x - 4, y - 10, '#5a3c24', 8, 3); px2(g, x - 1, y - 12, '#e8d9a8'); return; } // 씨앗 자리
+    if (st === 1) { px2(g, x - 1, y - 14, GD, 2, 6); px2(g, x - 4 + sway, y - 16, G, 4, 2); px2(g, x + 1 + sway, y - 17, G, 4, 2); return; } // 새싹
+    const leaves = (h) => { px2(g, x - 1, y - 6 - h, GD, 2, h); for (let k = 0; k < h; k += 4) { px2(g, x - 6 + sway, y - 8 - k, G, 5, 2); px2(g, x + 2 + sway, y - 10 - k, G, 5, 2); } };
+    if (st === 2) { leaves(c === 'wheat' ? 14 : 10); if (c === 'pumpkin') px2(g, x - 3, y - 7, '#e8a23c', 6, 4); if (c === 'berry') px2(g, x + 3, y - 12, '#f2f2f2'); return; } // 자라는 중
+    // 다 자람 (작물마다 모양)
+    if (c === 'wheat') { for (const dx of [-6, -2, 2, 6]) { px2(g, x + dx, y - 20 + sway, GD, 2, 14); px2(g, x + dx - 1 + sway, y - 26, '#f0c23a', 4, 8); px2(g, x + dx + sway, y - 28, '#fff0b0', 2, 2); } }
+    else if (c === 'carrot') { leaves(10); for (const dx of [-5, 3]) { px2(g, x + dx, y - 8, '#ff8a2a', 5, 5); px2(g, x + dx + 1, y - 9, '#ffb05a', 3, 2); } }
+    else if (c === 'potato') { leaves(12); for (const [dx, dy] of [[-7, -5], [1, -4], [5, -7]]) { px2(g, x + dx, y + dy, '#b98a50', 5, 4); px2(g, x + dx + 1, y + dy, '#d9aa6a', 2, 2); } }
+    else if (c === 'berry') { px2(g, x - 8, y - 14, GD, 16, 10); px2(g, x - 7, y - 16, G, 14, 6); for (const [dx, dy] of [[-6, -10], [-1, -14], [4, -9], [1, -7], [-4, -6]]) { px2(g, x + dx, y + dy, '#e8423c', 3, 3); px2(g, x + dx, y + dy, '#ff9aa0', 1, 1); } }
+    else if (c === 'pumpkin') { px2(g, x - 9, y - 8, GD, 4, 2); px2(g, x + 6, y - 9, G, 4, 2); px2(g, x - 7, y - 14, '#2b2340', 14, 12); px2(g, x - 6, y - 13, '#e8823c', 12, 10); px2(g, x - 2, y - 13, '#f0a050', 2, 10); px2(g, x + 2, y - 13, '#c86424', 2, 10); px2(g, x - 1, y - 17, '#5a7a2a', 2, 4); }
+    if (Math.sin(t * 4 + x) > 0.75) { px2(g, x + 7, y - 24, '#fff6c8'); px2(g, x + 6, y - 23, '#fff6c8', 4, 1); } // 수확하라고 반짝
+  }
+  function farmIcon(g, id, W2, H2) { // 상점·보관함 그림
+    const B = BUILD_BY[id]; g.imageSmoothingEnabled = false;
+    if (B.cat === 'farm') { g.fillStyle = '#2b2340'; g.fillRect(W2 / 2 - 26, H2 / 2 - 26, 52, 52); g.drawImage(farmArt(false), W2 / 2 - 24, H2 / 2 - 24, 48, 48); return; }
+    if (B.cat === 'water') { g.fillStyle = '#2b2340'; g.fillRect(W2 / 2 - 26, H2 / 2 - 26, 52, 52); g.drawImage(canalArt(10), W2 / 2 - 24, H2 / 2 - 24, 48, 48); return; }
+    if (B.cat === 'fert') { g.save(); g.translate(W2 / 2, H2 / 2 + 4); g.scale(2, 2); px2(g, -9, -10, '#2b2340', 18, 18); px2(g, -8, -9, '#8fbf5a', 16, 16); px2(g, -8, -9, '#b7e07a', 16, 3); px2(g, -4, -4, '#ffffff', 8, 6); px2(g, -3, -3, '#5a7a2a', 2, 4); px2(g, 0, -3, '#5a7a2a', 2, 2); px2(g, -6, -13, '#5a3416', 12, 4); g.restore(); return; }
+    if (B.cat === 'seed') { g.drawImage(ICON.seed, 0, 0, 16, 16, W2 / 2 - 24, H2 / 2 - 22, 48, 48); g.save(); g.translate(W2 / 2 + 14, H2 - 6); drawCrop(g, 0, 0, B.crop, 3, 0); g.restore(); return; }
+    if (B.cat === 'crop') { g.save(); g.translate(W2 / 2, H2 / 2 + 18); g.scale(1.6, 1.6); drawCrop(g, 0, 0, B.crop, 3, 0); g.restore(); }
+  }
+  const FARM_CATS = new Set(['farm', 'water', 'seed', 'fert']);
+  const fmtLeft = (ms) => { const m = Math.ceil(ms / 60e3); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60 ? (m % 60) + '분' : ''}` : `${m}분`; };
   function itemIcon(cv, id) { // 상점·설치 카드 그림
     const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height; g.clearRect(0, 0, W2, H2); g.imageSmoothingEnabled = false;
     const B = BUILD_BY[id]; if (!B) return;
+    if (FARM_CATS.has(B.cat) || B.cat === 'crop') { farmIcon(g, id, W2, H2); return; }
     if (B.cat === 'trap') { g.drawImage(ICON.trap, 0, 0, 16, 16, (W2 - 48) / 2, (H2 - 48) / 2, 48, 48); return; }
     if (B.cat === 'floor') { const c = floorArtId(id); g.fillStyle = '#2b2340'; g.fillRect(W2 / 2 - 26, H2 / 2 - 26, 52, 52); g.drawImage(c, 0, 0, 32, 32, W2 / 2 - 24, H2 / 2 - 24, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2, H2 / 2 - 24, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2 - 24, H2 / 2, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2, H2 / 2, 24, 24); return; }
     const k = B.id.startsWith('p_') ? 0.8 : B.cat === 'wall' ? 0.78 : 1; g.save(); g.translate(W2 / 2, H2 - 6); g.scale(k, k); drawBuild(g, 0, 0, { k: B.cat, n: MY_NID, id }); g.restore();
@@ -1056,7 +1111,7 @@
         banner(3, 'blue'), banner(11, 'white'), banner(18, 'white'), banner(26, 'blue'),
         { x: 3, y: 4, w: 4, h: 2, npc: 'build', draw: (g, x, y) => pavilion(g, x, y, '#7fb2ff', '건축 상점', NPCS.build.ch) },
         { x: 13, y: 4, w: 4, h: 2, npc: 'vaccine', draw: (g, x, y) => pavilion(g, x, y, '#ff9fc4', '치유의 샘 · 백신', NPCS.vaccine.ch) },
-        { x: 23, y: 4, w: 4, h: 2, npc: 'seed', draw: (g, x, y) => pavilion(g, x, y, '#8fe0a8', '씨앗·비료 (곧)', NPCS.seed.ch) },
+        { x: 23, y: 4, w: 4, h: 2, npc: 'seed', draw: (g, x, y) => pavilion(g, x, y, '#8fe0a8', '정원 상점 · 씨앗', NPCS.seed.ch) },
         { x: 13, y: 13, w: 4, h: 2, draw: lightFountain },
         P1(8, 13, cloudBench, { w: 2 }), P1(21, 13, cloudBench, { w: 2 }),
         P1(2, 12, urn), P1(27, 12, urn), P1(2, 16, urn), P1(27, 16, urn),
@@ -1652,7 +1707,21 @@
       for (const q of nodes) if (ownerOf(q.id) === MY_NID && Math.hypot(q.tx + 0.5 - ptx, q.ty + 0.5 - pty) < 1.6) return { kind: 'pickB', what: { kind: 'mine', terr: q.id }, text: '금광 옮기기 (E) → 옮길 자리에서 E' };
     }
     if (build.on && myView) {
-      const B = BUILD_BY[build.id] || BUILD_BY.f_stone, tiles = shapeTiles(), shape = B.cat === 'trap' || B.cat === 'deco' ? '1' : build.shape;
+      const B = BUILD_BY[build.id] || BUILD_BY.f_stone, tiles = shapeTiles(), shape = B.cat === 'trap' || B.cat === 'deco' || B.cat === 'fert' ? '1' : build.shape;
+      if (B.cat === 'seed' || B.cat === 'fert' || B.cat === 'farm') { // 농사: 내 발밑 기준
+        const [mx, my] = [Math.floor(player.x / TILE), Math.floor(player.y / TILE)], f = TILES[my * W + mx], have = myView.me.items[B.id] || 0;
+        if (ownerOf(terrAt(mx, my)) !== MY_NID) return { kind: 'info', text: '농사는 우리 땅에서만 해요' };
+        if (f && f.k === 'farm' && f.n === MY_NID && f.crop && cropStage(f.crop) === 3) return { kind: 'harvest', tiles, text: `${CROPS[f.crop.c].name} 수확하기 (E)` };
+        if (B.cat === 'farm') {
+          if (f && f.k === 'farm' && f.n === MY_NID && !f.crop) return { kind: 'pickup', tiles, text: '발밑 밭 거두기 (E)' };
+          if (!have) return { kind: 'info', text: '밭이 없어요 · 하늘 정원 천사에게서 사요' };
+          return { kind: 'place', tiles, text: `발밑에 밭 ${SHAPE_NAME[shape]} 갈기 · 남은 ${have}개` };
+        }
+        if (!f || f.k !== 'farm' || f.n !== MY_NID) return { kind: 'info', text: `밭 위에 서서 ${B.cat === 'seed' ? '심어요' : '비료를 줘요'} (밭은 농사 탭에서 깔아요)` };
+        if (!have) return { kind: 'info', text: `${B.name}이(가) 없어요 · 하늘 정원 천사에게서 사요` };
+        if (B.cat === 'seed') return f.crop ? { kind: 'info', text: `${CROPS[f.crop.c].name} 자라는 중 · ${fmtLeft(f.crop.d - (Date.now() - f.crop.at))} 남음` } : { kind: 'plant', tiles, text: `${B.name} ${SHAPE_NAME[shape]} 심기 · 남은 ${have}개` };
+        return !f.crop ? { kind: 'info', text: '심은 작물이 없어요' } : f.crop.f ? { kind: 'info', text: '이미 비료를 줬어요' } : { kind: 'fert', tiles, text: `비료 주기 · 남은 시간 절반 (${fmtLeft(f.crop.d - (Date.now() - f.crop.at))} → ${fmtLeft((f.crop.d - (Date.now() - f.crop.at)) / 2)})` };
+      }
       if (B.cat === 'floor') { // 바닥은 내 발밑 기준
         const [mx, my] = [Math.floor(player.x / TILE), Math.floor(player.y / TILE)], me2 = TILES[my * W + mx];
         if (ownerOf(terrAt(mx, my)) !== MY_NID) return { kind: 'info', text: '설치 모드 · 우리 땅에서만 깔 수 있어요' };
@@ -1683,6 +1752,11 @@
       if (player.carry) return { kind: 'info', text: '이미 훔친 걸 들고 있어요 · 우리 저장소로!' };
       return { kind: 'steal', nid, hold: MPRules.NUM.stealSec * 1000, text: `${natName(nid)} 저장소 털기 · E 꾹 ${MPRules.NUM.stealSec}초` };
     }
+    if (MY_NID) for (const [hx, hy] of [[Math.floor(ptx), Math.floor(pty)], [fx, fy]]) { // 발밑·앞의 우리 밭: 수확 / 남은 시간
+      const f = TILES[hy * W + hx]; if (!f || f.k !== 'farm' || f.n !== MY_NID || !f.crop) continue;
+      if (cropStage(f.crop) === 3) return { kind: 'harvest', tiles: [[hx, hy]], text: `${CROPS[f.crop.c].name} 수확하기 (E)` };
+      if (hx === Math.floor(ptx) && hy === Math.floor(pty)) return { kind: 'info', text: `${CROPS[f.crop.c].name} 자라는 중 · ${fmtLeft(f.crop.d - (Date.now() - f.crop.at))} 남음${f.crop.w ? ' · 💧수로' : ''}${f.crop.f ? ' · 🌿비료' : ''}` };
+    }
     if (treeAt(fx, fy) && MY_NID && ownerOf(terrAt(fx, fy)) === MY_NID) return { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '나무 베기 · E 꾹 누르기' };
     if (e && e.k === 'wall' && e.n !== MY_NID) return { kind: 'hitB', x: fx, y: fy, text: `${natName(e.n)} ${(BUILD_BY[tileItem(e)] || {}).name || '벽'} 때리기 · E (꾹 = 계속) · 내구도 ${e.hp ?? MPRules.NUM.buildHp}/${MPRules.NUM.buildHp}` };
     return null;
@@ -1710,8 +1784,8 @@
   const SHAPE_NAME = { 1: '1칸', h3: '가로 3칸', v3: '세로 3칸', s3: '3×3' };
   // 설치 모양: 바라보는 방향으로는 앞으로 뻗고, 옆 방향은 가운데 맞춤
   function shapeTiles() {
-    const cat = (BUILD_BY[build.id] || {}).cat, shape = cat === 'trap' || cat === 'deco' ? '1' : build.shape;
-    if (cat === 'floor') { // 바닥: 내가 선 칸에 (모양은 내 칸을 가운데로)
+    const cat = (BUILD_BY[build.id] || {}).cat, shape = cat === 'trap' || cat === 'deco' || cat === 'fert' ? '1' : build.shape;
+    if (cat === 'floor' || cat === 'farm' || cat === 'seed' || cat === 'fert') { // 바닥·밭·씨앗: 내가 선 칸에 (모양은 내 칸을 가운데로)
       const mx = Math.floor(player.x / TILE), my = Math.floor(player.y / TILE), wx = shape === 'h3' || shape === 's3' ? 1 : 0, wy = shape === 'v3' || shape === 's3' ? 1 : 0, out = [];
       for (let y = my - wy; y <= my + wy; y++) for (let x = mx - wx; x <= mx + wx; x++) out.push([x, y]); return out;
     }
@@ -1729,11 +1803,12 @@
     if (vwid - L - R < 360) { bb.style.left = '8px'; bb.style.right = '8px'; } else { bb.style.left = L + 'px'; bb.style.right = R + 'px'; }
   }
   addEventListener('resize', placeBuildBar);
-  const BB_TABS = [['all', '전체'], ['floor', '바닥'], ['wall', '벽·기둥'], ['deco', '장식'], ['trap', '덫']];
+  const BB_TABS = [['all', '전체'], ['floor', '바닥'], ['wall', '벽·기둥'], ['deco', '장식'], ['trap', '덫'], ['farm', '🌱 농사']];
   function setBuild(on, id) {
     if (on && !myView) { toast('나라가 있어야 설치할 수 있어요'); return; }
     if (on && player.scene === 'sky') { toast('설치 모드는 땅에서만 쓸 수 있어요'); return; }
     build.on = on; if (id) build.id = id; if (!on) build.moving = null;
+    if (on && !id && myView && !(myView.me.items[build.id] > 0)) { const f = MPRules.BUILD.find((x) => x.cat !== 'crop' && myView.me.items[x.id] > 0); if (f) build.id = f.id; } // 켤 때 가진 물건으로
     document.body.classList.toggle('building', on);
     $('buildBar').hidden = !on; if (on) renderBuildTray();
     near = null;
@@ -1743,8 +1818,8 @@
     $('buildBar').dataset.theme = (BUILD_BY[build.id] || {}).theme || 'heaven'; // 보관함 색 = 고른 물건의 테마
     placeBuildBar();
     $('bbTabs').innerHTML = BB_TABS.map(([k, l]) => `<button type="button" data-bt="${k}" aria-pressed="${k === build.tab}">${l}</button>`).join('');
-    for (const b of $('bbTabs').querySelectorAll('[data-bt]')) b.onclick = () => { build.tab = b.dataset.bt; renderBuildTray(); };
-    const list = MPRules.BUILD.filter((b) => build.tab === 'all' || b.cat === build.tab).sort((a, b) => (items[b.id] > 0) - (items[a.id] > 0));
+    for (const b of $('bbTabs').querySelectorAll('[data-bt]')) b.onclick = () => { build.tab = b.dataset.bt; const inTab = (x) => x.cat !== 'crop' && (build.tab === 'all' || (build.tab === 'farm' ? FARM_CATS.has(x.cat) : x.cat === build.tab)); const cur = BUILD_BY[build.id]; if (!cur || !inTab(cur)) { const f = MPRules.BUILD.find((x) => inTab(x) && items[x.id] > 0) || MPRules.BUILD.find(inTab); if (f) build.id = f.id; } near = null; renderBuildTray(); }; // 탭을 바꾸면 그 탭의 가진 물건을 자동으로 고름
+    const list = MPRules.BUILD.filter((b) => b.cat !== 'crop' && (build.tab === 'all' ? true : build.tab === 'farm' ? FARM_CATS.has(b.cat) : b.cat === build.tab)).sort((a, b) => (items[b.id] > 0) - (items[a.id] > 0));
     $('bbList').innerHTML = list.map((b) => `<button type="button" class="bbCard${items[b.id] ? '' : ' none'}" data-bid="${b.id}" aria-pressed="${b.id === build.id}"><canvas width="64" height="64"></canvas><span>${b.name}</span><i>${items[b.id] || 0}</i><em>${MPRules.THEMES[b.theme]}</em></button>`).join('') || '<p class="bbEmpty">아직 없어요 · 하늘 건축 상점에서 사요</p>';
     for (const c of $('bbList').querySelectorAll('[data-bid]')) { itemIcon(c.querySelector('canvas'), c.dataset.bid); c.onclick = () => { build.id = c.dataset.bid; renderBuildTray(); near = null; }; }
     for (const b of document.querySelectorAll('#buildBar [data-shape]')) { b.setAttribute('aria-pressed', String(b.dataset.shape === build.shape)); b.disabled = cat === 'trap' || cat === 'deco'; }
@@ -1779,6 +1854,7 @@
     if (near.kind === 'pickB') { build.moving = near.what; near = null; toast('옮길 자리 바로 앞에서 E를 누르세요 (우리 땅, 다른 건물과 2칸 이상)'); return; }
     if (near.kind === 'dropB') { if (netOn) ws.send(JSON.stringify(Object.assign({ t: 'moveB', x: near.x, y: near.y }, build.moving))); build.moving = null; near = null; return; }
     if (near.kind === 'place' || near.kind === 'pickup') { if (netOn) ws.send(JSON.stringify({ t: near.kind, tiles: near.tiles, id: build.id })); return; }
+    if (near.kind === 'plant' || near.kind === 'fert' || near.kind === 'harvest') { if (netOn) ws.send(JSON.stringify({ t: near.kind, tiles: near.tiles, id: build.id })); SND.play(near.kind === 'harvest' ? 'coin' : 'place'); return; }
     if (near.kind === 'info') { toast(near.text); return; }
     if (near.kind === 'reinforce') { openReinforce(near.battle); return; }
     if (near.kind === 'deposit') { if (netOn) ws.send(JSON.stringify({ t: 'deposit' })); return; }
@@ -2111,7 +2187,7 @@
         break;
       }
       case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
-      case 'tile': { const prev = TILES[m.i]; if (m.e && prev && m.e.hp != null && m.e.hp < (prev.hp ?? MPRules.NUM.buildHp)) { HPSEEN.set(m.i, performance.now()); SND.play('hit'); } else if (m.e && m.e.n === MY_NID && !prev) SND.play('place'); if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); break; }
+      case 'tile': { const prev = TILES[m.i]; if (m.e && prev && m.e.hp != null && m.e.hp < (prev.hp ?? MPRules.NUM.buildHp)) { HPSEEN.set(m.i, performance.now()); SND.play('hit'); } else if (m.e && m.e.n === MY_NID && !prev) SND.play('place'); const wasW = prev && prev.k === 'water', isW = m.e && m.e.k === 'water'; if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); if (wasW || isW) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx || dy) dirtyTile(m.i + dy * W + dx); break; } // 수로가 바뀌면 이웃 밭·수로 다시 그림
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
@@ -3019,6 +3095,7 @@
     }
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const i = ty * W + tx, e = TILES[i];
+      if (e && e.k === 'farm' && e.crop) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawCrop(g, X, Y, e.crop.c, cropStage(e.crop), performance.now() / 1000) });
       if (e && (e.k === 'wall' || e.k === 'deco')) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => { drawBuild(g, X, Y, e); drawHpBar(g, X, Y, e, i); } });
       if (MY_TRAPS.has(i)) list.push({ x: tx * TILE + 16, y: ty * TILE + 4, draw: (g, X, Y) => drawTrap(g, X, Y + 24) });
       const pr = GPROPS.get(i); if (pr) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawProp(g, pr.r, X, Y) });

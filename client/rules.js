@@ -28,6 +28,16 @@
     ['d_torch', 'deco', 'stone', '횃불'],
     ['trap', 'trap', 'stone', '덫'],
   ].map(([id, cat, theme, name]) => ({ id, cat, theme, name }));
+  // 농사: 작물 (실제 시간으로 자람 · 수로 2칸 안이면 20% 빨리 · 비료 주면 남은 시간 절반)
+  const CROPS = {
+    wheat: { name: '밀', seed: 10, min: 20, yield: 2, sell: 15 },
+    carrot: { name: '당근', seed: 20, min: 40, yield: 2, sell: 25 },
+    potato: { name: '감자', seed: 30, min: 60, yield: 3, sell: 20 },
+    berry: { name: '딸기', seed: 50, min: 120, yield: 3, sell: 40 },
+    pumpkin: { name: '호박', seed: 80, min: 240, yield: 1, sell: 250 },
+  };
+  BUILD.push({ id: 'farm', cat: 'farm', theme: 'forest', name: '밭', price: 10 }, { id: 'canal', cat: 'water', theme: 'stone', name: '수로', price: 15 }, { id: 'fert', cat: 'fert', theme: 'forest', name: '비료', price: 40 });
+  for (const [k, c] of Object.entries(CROPS)) BUILD.push({ id: 's_' + k, cat: 'seed', theme: 'forest', name: c.name + ' 씨앗', price: c.seed, crop: k }, { id: 'p_' + k, cat: 'crop', theme: 'forest', name: c.name, sell: c.sell, crop: k });
   const BUILD_BY = Object.fromEntries(BUILD.map((b) => [b.id, b]));
   const LEGACY_FLOOR = ['f_stone', 'f_wood', 'f_brick', 'f_sand', 'f_sky', 'f_amethyst']; // 예전 바닥 색 번호 → 디자인
   function normItems(items) { const o = {}; for (const [k, v] of Object.entries(items || {})) { const id = k === 'floor' ? 'f_stone' : k === 'wall' ? 'w_brick' : k; if (BUILD_BY[id] && v > 0) o[id] = (o[id] || 0) + v; } return o; }
@@ -54,6 +64,7 @@
     // 영지 (나라 공용 저장소)
     woodPerTree: 2,                // 나무 1그루 목재
     price: { floor: 20, wall: 60, deco: 30, trap: 150 }, // 건축 상점 가격 (코인, 1개 · 종류별로 같음, 테마는 모양만 다름)
+    canalBoost: 0.8, canalRange: 2, maxFarms: 120, maxCanals: 60,
     buildHp: 100, hitDmg: 10, hitCdMs: 380, maxDeco: 80, // 벽·기둥 내구도: 한 번 때리면 −10 (E 꾹 = 0.4초마다)
     vaccineBase: 3000, vaccineStep: 500,       // 백신: 나라가 살 때마다 비싸짐 (쓰면 영역 하나 침식 0%)
     erodeStep: 10, erodeFall: 50,  // 균열: 멸망 선포 다음 날부터 매일 아침 영역마다 침식 +10%, 나라 전체 침식 50% 이상이면 멸망 (수도는 침식 안 됨)
@@ -625,5 +636,5 @@
   const notorietyTier = (v) => { const T2 = NUM.notorietyTiers; let k = 0; for (let i = 0; i < T2.length; i++) if ((v || 0) >= T2[i].min) k = i; return k; };
   // 이름 옆 표시: 마이너스 = 체포왕 👮, 1~199 💀, 200~499 💀💀, 500 이상 💀💀💀
   const notorietyBadge = (v) => (v < 0 ? '👮' : v <= 0 ? '' : v < 200 ? '💀' : v < 500 ? '💀💀' : '💀💀💀');
-  return { BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
