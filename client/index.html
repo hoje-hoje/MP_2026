@@ -438,6 +438,22 @@ body.building #prompt { bottom: calc(196px + env(safe-area-inset-bottom, 0px)); 
 #buildBar[data-theme="winter"] .bbTray { background: linear-gradient(180deg, #e6f6ff, #ffffff); } #buildBar[data-theme="winter"] .bbTabs button { color: #3f7fb0 !important; border-color: #9fd3f2 !important; background: #fff !important; } #buildBar[data-theme="winter"] .bbTabs button[aria-pressed="true"] { background: #3f7fb0 !important; color: #fff !important; }
 #buildBar[data-theme="stone"] .bbTray { background: linear-gradient(180deg, #e6ddcc, #f6f0e4); } #buildBar[data-theme="stone"] .bbTabs button { color: #6b5a44 !important; border-color: #b8a88c !important; background: #f6f0e4 !important; } #buildBar[data-theme="stone"] .bbTabs button[aria-pressed="true"] { background: #6b5a44 !important; color: #fff !important; }
 body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
+
+/* 상점: 위(천사·탭)는 고정, 물건만 스크롤 · 창 크기 고정 */
+#shopBox .hv, #storeBox .hv { height: min(680px, calc(100vh - 40px)); display: flex; flex-direction: column; overflow: hidden; }
+#shopBox .hvTop, #shopBox .hvTabs, #shopBox .hvCoin, #storeBox .hvTop, #storeBox .stRes, #storeBox .hvTabs, #storeBox .stFoot { flex: none; }
+#shopBox .hvGrid { flex: 1; min-height: 0; overflow-y: auto; align-content: start; padding: 2px 4px 6px 2px; }
+/* 저장소 */
+.stRes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.stR { display: grid; grid-template-columns: 56px 1fr; grid-template-rows: auto auto; align-items: center; column-gap: 8px; background: #fff; border: 3px solid #e8c260; box-shadow: 3px 3px 0 #b8862b; padding: 6px 10px; }
+.stR canvas { grid-row: 1 / 3; width: 56px; height: 56px; image-rendering: pixelated; background: radial-gradient(circle, #fff6d6, #f1e6c8); }
+.stR span { font-size: 12px; color: #8a7f9a; } .stR b { font-family: var(--font-display); font-weight: 400; font-size: clamp(18px, 2.6vw, 26px); color: #5a3d10; }
+.stGrid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; align-content: start; padding: 10px 2px 6px; }
+.stItem { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; background: #fff; border: 3px solid #e8c260; box-shadow: 0 3px 0 #b8862b; padding: 6px 4px; }
+.stItem canvas { width: 56px; height: 56px; image-rendering: pixelated; } .stItem span { font-size: 11px; text-align: center; line-height: 1.2; }
+.stItem i { position: absolute; right: 4px; top: 4px; font-style: normal; font-size: 12px; min-width: 22px; text-align: center; padding: 0 5px; background: #3d5fb8; color: #fff; border: 2px solid #2b2340; border-radius: 999px; }
+.stEmpty { grid-column: 1 / -1; margin: 18px; text-align: center; color: #8a7f9a; } .stFoot { display: flex; justify-content: flex-end; padding-top: 8px; border-top: 2px dashed #efe0b8; }
+@media (max-width: 640px) { .stRes { grid-template-columns: repeat(2, 1fr); } }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -540,7 +556,13 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div class="bbHead"><b>🏗 설치</b><div class="bbTabs" id="bbTabs"></div><span class="bbShapes"><button data-shape="1" type="button">1칸</button><button data-shape="h3" type="button">가로3</button><button data-shape="v3" type="button">세로3</button><button data-shape="s3" type="button">3×3</button></span><button id="buildOff" type="button" title="끄기 (G)">✕</button></div>
   <div class="bbList" id="bbList"></div>
 </div></div>
-<div id="storeBox" class="modalbox" hidden><div class="panel card"><h2>📦 우리 저장소</h2><div id="storeBody"></div><div class="seg"><button id="storeBuild" type="button">설치 모드 켜기</button><button id="storeClose" type="button">닫기</button></div></div></div>
+<div id="storeBox" class="modalbox" hidden><div class="hv storeHv"><div class="hvClouds"></div>
+  <div class="hvTop"><div class="hvFace"><canvas id="storeArt" width="120" height="120"></canvas></div><div class="hvSay"><b id="storeName">우리 저장소</b><p>우리 나라 모두가 같이 쓰는 저장소예요. 산 물건·수확한 작물이 다 여기 모여요.</p></div><button id="storeClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
+  <div class="stRes" id="storeRes"></div>
+  <div class="hvTabs" id="storeTabs"></div>
+  <div class="stGrid" id="storeBody"></div>
+  <div class="stFoot"><button id="storeBuild" type="button">🏗 설치 모드 켜기 (G)</button></div>
+</div></div>
 <div id="bailBox" class="modalbox" hidden><div class="panel card"><h2>🔓 면회실 · 보석금</h2><div id="bailBody"></div><div class="seg"><button id="bailClose" type="button">닫기</button></div></div></div>
 <div id="reinBox" class="modalbox" hidden><div class="panel card"><h2>🪖 전선 진지</h2><div id="reinBody"></div><div class="seg"><button id="reinAdd" type="button">충원</button><button id="reinSub" type="button">빼기</button><button id="reinClose" type="button">닫기</button></div></div></div>
 <div id="shopBox" class="modalbox" hidden><div class="hv"><div class="hvClouds"></div>
