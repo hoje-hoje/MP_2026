@@ -693,86 +693,312 @@
   const JAIL_BARS = [];
   for (let x = 1; x <= 29; x++) JAIL_BARS.push({ x, y: 8, w: 1, h: 1, draw: x % 5 === 3 ? (g, X, Y) => { drawBars(g, X, Y); sign(g, X, Y - 40, `감옥 ${Math.floor(x / 5) + 1}`); } : drawBars });
   for (let k = 1; k <= 5; k++) for (let y = 9; y <= 14; y++) JAIL_BARS.push({ x: 5 * k, y, w: 1, h: 1, draw: drawBars });
+  // ------------------------------------------------------------ 천상계 도트 (직접 그림: 기둥·화분·등불·깃발·천사·상점 정자·분수)
+  function artCanvas(w, h, fn) { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingEnabled = false; fn(g, w, h); return c; }
+  function pxRows(rows, pal) { return artCanvas(rows[0].length, rows.length, (g) => rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) { const c = pal[r[x]]; if (c) { g.fillStyle = c; g.fillRect(x, y, 1, 1); } } })); }
+  function blit(g, c, x, bottom, k = 2, flip = false) { const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; const w = c.width * k, h = c.height * k; if (flip) { g.save(); g.translate(Math.round(x), 0); g.scale(-1, 1); g.drawImage(c, Math.round(-w / 2), Math.round(bottom - h), w, h); g.restore(); } else g.drawImage(c, Math.round(x - w / 2), Math.round(bottom - h), w, h); g.imageSmoothingEnabled = p; }
+  function pxDisc(g, cx, cy, r, wrap) { for (let y = -r; y <= r; y += 2) for (let x = -r; x <= r; x += 2) if (x * x + y * y <= r * r) { const X = cx + x, Y = cy + y; g.fillRect(X, Y, 2, 2); if (wrap) { g.fillRect(X - 64, Y, 2, 2); g.fillRect(X + 64, Y, 2, 2); g.fillRect(X, Y - 64, 2, 2); g.fillRect(X, Y + 64, 2, 2); } } }
+  Object.assign(GEN_FLOOR, {
+    marble_w: (g) => { // 흰 대리석 + 금 장식
+      g.fillStyle = '#f4efe6'; g.fillRect(0, 0, 64, 64);
+      for (let i = 0; i < 4; i++) { const x = (i % 2) * 32, y = (i >> 1) * 32; g.fillStyle = i === 0 || i === 3 ? '#faf7f1' : '#f1ebe1'; g.fillRect(x + 2, y + 2, 30, 30); g.fillStyle = 'rgba(255,255,255,0.7)'; g.fillRect(x + 2, y + 2, 30, 2); }
+      g.fillStyle = '#e6dccb'; for (let k = 0; k < 12; k++) { const x = (hash(k, 1, 77) * 28 | 0) * 2 + 2, y = (hash(k, 2, 77) * 28 | 0) * 2 + 2; g.fillRect(x, y, 4, 2); g.fillRect(x + 4, y + 2, 2, 2); }
+      g.fillStyle = '#ddd0b8'; g.fillRect(0, 0, 64, 2); g.fillRect(0, 32, 64, 2); g.fillRect(0, 0, 2, 64); g.fillRect(32, 0, 2, 64);
+      for (const [x, y] of [[0, 0], [64, 0], [0, 64], [64, 64], [32, 32]]) { g.fillStyle = '#e8c260'; g.fillRect(x - 4, y, 10, 2); g.fillRect(x, y - 4, 2, 10); g.fillStyle = '#fff3c4'; g.fillRect(x, y, 2, 2); }
+    },
+    aisle: (g) => { // 하늘색 융단 + 금별
+      g.fillStyle = '#93b4f0'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#88aaea'; for (let y = 0; y < 64; y += 8) for (let x = (y / 8 % 2) * 8; x < 64; x += 16) g.fillRect(x, y, 8, 8);
+      for (const [x, y] of [[14, 14], [46, 46]]) { g.fillStyle = '#ffd84d'; g.fillRect(x, y - 4, 2, 10); g.fillRect(x - 4, y, 10, 2); g.fillStyle = '#fff6c8'; g.fillRect(x, y, 2, 2); }
+    },
+    cloud: (g) => { // 폭신한 구름 바닥
+      g.fillStyle = '#eaf2ff'; g.fillRect(0, 0, 64, 64);
+      for (let i = 0; i < 12; i++) { const x = (hash(i, 1, 91) * 32 | 0) * 2, y = (hash(i, 2, 91) * 32 | 0) * 2, r = 6 + (hash(i, 3, 91) * 4 | 0) * 2; g.fillStyle = '#d9e5fa'; pxDisc(g, x, y + 2, r, true); g.fillStyle = '#ffffff'; pxDisc(g, x, y, r - 2, true); }
+    },
+    silver: (g) => { // 감옥: 차가운 은빛 돌
+      g.fillStyle = '#9aa2bb'; g.fillRect(0, 0, 64, 64);
+      for (let y = 0; y < 64; y += 16) for (let x = (y / 16 % 2) * 16; x < 80; x += 32) { g.fillStyle = hash(x, y, 5) > 0.5 ? '#a7afc6' : '#a2aac1'; g.fillRect(x - 14, y + 2, 28, 12); g.fillStyle = '#8890a8'; g.fillRect(x - 14, y + 14, 28, 2); }
+    },
+  });
+
+  const ART_COL = artCanvas(12, 46, (g) => { // 흰 기둥 + 금 머리
+    g.fillStyle = '#e8c260'; g.fillRect(0, 0, 12, 4); g.fillStyle = '#fff0b0'; g.fillRect(1, 0, 10, 1); g.fillStyle = '#b8862b'; g.fillRect(0, 4, 12, 1); g.fillStyle = '#e8c260'; g.fillRect(1, 5, 10, 2);
+    for (let y = 7; y < 40; y++) { g.fillStyle = '#fffdf8'; g.fillRect(2, y, 8, 1); g.fillStyle = '#e9e3f2'; g.fillRect(4, y, 1, 1); g.fillRect(7, y, 1, 1); g.fillStyle = '#d4cce2'; g.fillRect(9, y, 1, 1); }
+    g.fillStyle = '#e8c260'; g.fillRect(1, 40, 10, 2); g.fillStyle = '#f3eee6'; g.fillRect(0, 42, 12, 3); g.fillStyle = '#d6ccbb'; g.fillRect(0, 45, 12, 1);
+  });
+  const ART_URN = artCanvas(14, 20, (g) => { // 흰 화분 + 꽃
+    g.fillStyle = '#5fbf6a'; for (const [x, y] of [[2, 6], [4, 4], [9, 4], [11, 6], [6, 3], [3, 8], [10, 8]]) g.fillRect(x, y, 2, 2);
+    g.fillStyle = '#3f9a52'; for (const [x, y] of [[5, 6], [8, 6], [7, 5]]) g.fillRect(x, y, 2, 2);
+    for (const [c, x, y] of [['#ff8fb1', 3, 2], ['#ffd84d', 7, 1], ['#9fd3ff', 10, 3], ['#ff8fb1', 5, 0], ['#ffffff', 9, 0], ['#c9a7ff', 1, 5]]) { g.fillStyle = c; g.fillRect(x, y, 2, 2); }
+    g.fillStyle = '#e8c260'; g.fillRect(2, 9, 10, 1); g.fillStyle = '#fffdf8'; g.fillRect(3, 10, 8, 5); g.fillRect(4, 15, 6, 2); g.fillRect(3, 17, 8, 2);
+    g.fillStyle = '#ddd5e8'; g.fillRect(9, 10, 2, 5); g.fillRect(8, 15, 2, 2); g.fillStyle = '#e8c260'; g.fillRect(3, 12, 8, 1); g.fillStyle = '#cfc6dc'; g.fillRect(3, 19, 8, 1);
+  });
+  const artBanner = (c1, c2) => artCanvas(12, 26, (g) => { // 금 막대 깃발 + 해 무늬
+    g.fillStyle = '#b8862b'; g.fillRect(0, 0, 12, 2); g.fillStyle = '#e8c260'; g.fillRect(0, 0, 12, 1);
+    g.fillStyle = c1; g.fillRect(1, 2, 10, 18); for (let i = 0; i < 5; i++) g.fillRect(1 + i, 20 + i, 10 - 2 * i, 1);
+    g.fillStyle = c2; g.fillRect(1, 2, 1, 18); g.fillRect(10, 2, 1, 18);
+    g.fillStyle = '#ffd84d'; g.fillRect(4, 8, 4, 4); g.fillRect(5, 6, 2, 8); g.fillRect(3, 9, 6, 2); g.fillStyle = '#fff3b0'; g.fillRect(5, 9, 2, 2); g.fillStyle = '#e8c260'; g.fillRect(1, 17, 10, 1);
+  });
+  const BANNERS = { blue: artBanner('#5b7fd6', '#3f5fb0'), white: artBanner('#fffaf0', '#e6dccb'), red: artBanner('#d6455b', '#a8303f'), green: artBanner('#3fa37a', '#2b7a58') };
+  const WING = pxRows([
+    '........OOO...', '......OOWWWO..', '....OOWWWWWWO.', '...OWWWWWWWWWO', '..OWWwWWWWWWWO', '.OWWwWWwWWWWO.',
+    '.OWwWWwWWWWO..', 'OWwWWwWWWWO...', 'OWwWwWWWOO....', '.OwOwWOO......', '..O.OO........',
+  ], { O: '#b3c1e2', W: '#ffffff', w: '#e1e9fa' });
+  const HALO = pxRows(['.YYYYYY.', 'Y......Y', '.YYYYYY.'], { Y: '#ffd84d' });
+  // 천사: 게임 캐릭터 + 날개 + 금빛 고리 (statue면 하얀 돌 조각상)
+  function drawAngel(g, name, x, y, statue = false) {
+    const t = performance.now() / 1000, bob = statue ? 0 : Math.round(Math.sin(t * 2 + x * 0.01) * 1.5) * 2, flap = !statue && Math.sin(t * 3 + x) > 0.55 ? 2 : 0;
+    g.fillStyle = 'rgba(40,40,90,0.18)'; ell(g, x, y + 1, 18, 5);
+    if (statue) g.filter = 'grayscale(1) contrast(0.55) brightness(1.9)';
+    blit(g, WING, x - 12, y - 10 + bob - flap, 2); blit(g, WING, x + 12, y - 10 + bob - flap, 2, true);
+    const k = Math.max(0, CHARS.names.indexOf(name));
+    if (ART.chars) { const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(ART.chars, (k % CHARS.cols) * 64, Math.floor(k / CHARS.cols) * 112, 16, 16, Math.round(x - 16), Math.round(y - 30 + bob), 32, 32); g.imageSmoothingEnabled = p; }
+    g.filter = 'none';
+    if (!statue) { g.fillStyle = 'rgba(255,230,120,0.25)'; ell(g, x, y - 36 + bob, 14, 5); blit(g, HALO, x, y - 32 + bob, 2); }
+  }
+  function holyAltar(g, x, y, wide = 40, top = 'book') { // 흰 대리석 제단 + 금 띠 + 하늘색 천 + 위에 책/성배
+    const t = performance.now() / 1000;
+    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 2, wide + 10, 8);
+    g.fillStyle = '#2b2340'; g.fillRect(x - wide - 2, y - 38, wide * 2 + 4, 40);
+    g.fillStyle = '#efe8dc'; g.fillRect(x - wide, y - 30, wide * 2, 30); g.fillStyle = '#fffdf8'; g.fillRect(x - wide, y - 36, wide * 2, 8);
+    g.fillStyle = '#e8c260'; g.fillRect(x - wide, y - 28, wide * 2, 3); g.fillRect(x - wide, y - 4, wide * 2, 3);
+    g.fillStyle = '#7fa6ec'; g.fillRect(x - 12, y - 36, 24, 30); g.fillStyle = '#e8c260'; for (let i = 0; i < 6; i++) g.fillRect(x - 12 + i * 4, y - 6, 2, 4);
+    g.fillStyle = '#ffd84d'; g.fillRect(x - 3, y - 24, 6, 6); g.fillRect(x - 1, y - 28, 2, 14); g.fillRect(x - 6, y - 22, 12, 2);
+    const grd = g.createRadialGradient(x, y - 46, 2, x, y - 46, 34); grd.addColorStop(0, `rgba(255,240,170,${0.45 + Math.sin(t * 2) * 0.1})`); grd.addColorStop(1, 'rgba(255,240,170,0)'); g.fillStyle = grd; g.fillRect(x - 34, y - 80, 68, 68);
+    if (top === 'book') { g.fillStyle = '#b8862b'; g.fillRect(x - 16, y - 44, 32, 8); g.fillStyle = '#ffffff'; g.fillRect(x - 15, y - 48, 14, 8); g.fillRect(x + 1, y - 48, 14, 8); g.fillStyle = '#c9c0d8'; g.fillRect(x - 12, y - 46, 8, 2); g.fillRect(x + 4, y - 46, 8, 2); g.fillRect(x - 1, y - 48, 2, 10); }
+    else { g.fillStyle = '#e8c260'; g.fillRect(x - 8, y - 56, 16, 10); g.fillRect(x - 2, y - 46, 4, 6); g.fillRect(x - 6, y - 40, 12, 4); g.fillStyle = '#fff0b0'; g.fillRect(x - 6, y - 56, 4, 6); g.fillStyle = '#d6455b'; g.fillRect(x - 6, y - 58, 12, 2); }
+  }
+  function plaque(g, x, y, text) { // 금테 이름판
+    g.font = `700 13px ${PFONT}`; const w = Math.ceil(g.measureText(text).width) + 22, L = Math.round(x - w / 2), T = Math.round(y - 11);
+    g.fillStyle = '#2b2340'; g.fillRect(L - 4, T - 4, w + 8, 30); g.fillStyle = '#b8862b'; g.fillRect(L - 2, T - 2, w + 4, 26); g.fillStyle = '#e8c260'; g.fillRect(L, T, w, 22);
+    g.fillStyle = '#fffaf0'; g.fillRect(L + 3, T + 3, w - 6, 16); g.fillStyle = '#ffd84d'; g.fillRect(L - 8, T + 8, 4, 6); g.fillRect(L + w + 4, T + 8, 4, 6);
+    g.fillStyle = '#5a3d10'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, Math.round(x), T + 12);
+  }
+  function lantern(g, x, y) { // 떠 있는 빛 수정 등불
+    const t = performance.now() / 1000, b = Math.round(Math.sin(t * 2.2 + x) * 2) * 2, cy = y - 58 + b;
+    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 1, 10, 3);
+    g.fillStyle = '#b8862b'; g.fillRect(x - 6, y - 4, 12, 4); g.fillStyle = '#e8c260'; g.fillRect(x - 2, y - 40, 4, 36); g.fillRect(x - 8, y - 44, 16, 4); g.fillStyle = '#fff0b0'; g.fillRect(x - 2, y - 40, 2, 36);
+    const grd = g.createRadialGradient(x, cy, 2, x, cy, 30); grd.addColorStop(0, 'rgba(200,240,255,0.55)'); grd.addColorStop(1, 'rgba(200,240,255,0)'); g.fillStyle = grd; g.fillRect(x - 30, cy - 30, 60, 60);
+    g.fillStyle = '#7fc8ff'; g.fillRect(x - 6, cy - 4, 12, 8); g.fillRect(x - 4, cy - 10, 8, 20); g.fillRect(x - 2, cy - 14, 4, 28);
+    g.fillStyle = '#d6f1ff'; g.fillRect(x - 4, cy - 6, 4, 8); g.fillStyle = '#ffffff'; g.fillRect(x - 2, cy - 10, 2, 4);
+  }
+  function urn(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); blit(g, ART_URN, x, y + 2, 2); }
+  function column(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); blit(g, ART_COL, x, y + 4, 2); }
+  function lightFountain(g, x, y) { // 빛의 분수: 대리석 둥근 못 + 물 + 빛 기둥
+    const t = performance.now() / 1000;
+    g.fillStyle = 'rgba(40,40,90,0.15)'; ell(g, x, y + 2, 76, 20);
+    g.fillStyle = '#d9d0c0'; ell(g, x, y - 6, 74, 24); g.fillStyle = '#fffdf8'; ell(g, x, y - 10, 72, 22); g.fillStyle = '#e8c260'; ell(g, x, y - 12, 64, 18);
+    g.fillStyle = '#7fd0f4'; ell(g, x, y - 12, 58, 15); g.fillStyle = '#a9e4ff'; ell(g, x - 8, y - 15, 40, 9);
+    for (let i = 0; i < 6; i++) { const a = t * 1.3 + i; g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(Math.round(x + Math.cos(a) * 44), Math.round(y - 12 + Math.sin(a) * 10), 4, 2); }
+    g.fillStyle = '#fffdf8'; g.fillRect(x - 8, y - 46, 16, 34); g.fillStyle = '#e8c260'; g.fillRect(x - 10, y - 50, 20, 6); g.fillRect(x - 10, y - 16, 20, 4);
+    const h = 70 + Math.sin(t * 3) * 6, grd = g.createLinearGradient(0, y - 50 - h, 0, y - 50); grd.addColorStop(0, 'rgba(255,250,210,0)'); grd.addColorStop(1, 'rgba(255,250,210,0.75)');
+    g.fillStyle = grd; g.fillRect(x - 6, y - 50 - h, 12, h);
+    for (let i = 0; i < 10; i++) { const k = (t * 0.7 + i / 10) % 1, px = x + Math.sin(i * 2.3 + t) * 14, py = y - 54 - k * 90; g.globalAlpha = 1 - k; g.fillStyle = i % 3 ? '#fff6c8' : '#bfe9ff'; g.fillRect(Math.round(px), Math.round(py), 4, 4); }
+    g.globalAlpha = 1;
+  }
+  function cloudBench(g, x, y) { // 구름 의자
+    g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 40, 6);
+    g.fillStyle = '#dbe6fb'; for (const [dx, r] of [[-26, 12], [-8, 16], [10, 15], [28, 11]]) pxDisc(g, x + dx, y - 10, r);
+    g.fillStyle = '#ffffff'; for (const [dx, r] of [[-26, 10], [-8, 14], [10, 13], [28, 9]]) pxDisc(g, x + dx, y - 14, r);
+  }
+  function pavilion(g, x, y, c1, label, keeper) { // 상점 정자: 줄무늬 차양 + 금 지붕 + 대리석 계산대 + 천사 상인
+    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 2, 72, 10);
+    blit(g, ART_COL, x - 56, y - 8, 2); blit(g, ART_COL, x + 56, y - 8, 2);
+    if (keeper) drawAngel(g, keeper, x, y - 44);
+    // 지붕
+    g.fillStyle = '#b8862b'; g.fillRect(x - 70, y - 124, 140, 6);
+    g.fillStyle = '#e8c260'; for (let i = 0; i < 9; i++) g.fillRect(x - 66 + i * 6, y - 130 - i * 3, 132 - i * 12, 6);
+    g.fillStyle = '#fff0b0'; for (let i = 0; i < 9; i++) g.fillRect(x - 66 + i * 6, y - 130 - i * 3, 132 - i * 12, 2);
+    g.fillStyle = '#ffd84d'; pxDisc(g, x, y - 162, 6); g.fillStyle = '#ffffff'; g.fillRect(x - 2, y - 166, 2, 2);
+    // 줄무늬 차양 + 물결 끝
+    for (let i = 0; i < 9; i++) { g.fillStyle = i % 2 ? '#ffffff' : c1; g.fillRect(x - 72 + i * 16, y - 118, 16, 22); pxDisc(g, x - 64 + i * 16, y - 96, 8); g.fillRect(x - 72 + i * 16, y - 104, 16, 8); }
+    g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(x - 72, y - 100, 144, 4);
+    // 계산대
+    g.fillStyle = '#2b2340'; g.fillRect(x - 58, y - 36, 116, 30); g.fillStyle = '#fffdf8'; g.fillRect(x - 56, y - 34, 112, 26);
+    g.fillStyle = '#e8c260'; g.fillRect(x - 58, y - 38, 116, 6); g.fillStyle = '#fff0b0'; g.fillRect(x - 58, y - 38, 116, 2);
+    g.fillStyle = '#efe6d4'; for (let i = -2; i <= 2; i++) { g.fillRect(x + i * 22 - 4, y - 24, 8, 8); } g.fillStyle = '#e8c260'; for (let i = -2; i <= 2; i++) g.fillRect(x + i * 22 - 2, y - 22, 4, 4);
+    g.fillStyle = '#e6dccb'; g.fillRect(x - 56, y - 10, 112, 2);
+    plaque(g, x, y - 108, label);
+  }
+  // ------------------------------------------------------------ NPC 말 걸기 (대화창) · 천상 상점 · 영역전 규칙서
+  const NPCS = {
+    priest: { name: '신의 사제 루미엘', ch: 'Monk', color: '#6b4fb3', lines: ['어서 오세요, 하늘 신전에.', '신탁 제단에 신들의 말씀이 내려와요. 멸망이 선포되면 균열이 어디를 삼킬지 알려 주지요.', '땅으로 내려가려면 남쪽 구름 문으로 가세요. 올라온 수도로 돌아가요.'] },
+    build: { name: '건축 천사 아라엘', ch: 'Woman', color: '#3d5fb8', shop: 'build', lines: ['어서 와요! 바닥·방벽·덫이 다 있어요.', '산 물건은 나라 저장소로 바로 가요. 설치 모드(G)로 우리 땅에 놓아요.'] },
+    vaccine: { name: '치유 천사 세라', ch: 'Princess', color: '#d64f86', shop: 'vaccine', lines: ['균열이 무서운가요? 백신 하나면 영토 하나를 지킬 수 있어요.', '많이 살수록 비싸져요. 꼭 필요한 만큼만!'] },
+    seed: { name: '정원 천사 플로라', ch: 'Villager2', color: '#3fa37a', shop: 'seed', lines: ['씨앗이랑 비료는 곧 들어와요!', '조금만 기다려 줘요. 밭을 갈 준비를 해 두세요.'] },
+    war: { name: '전쟁의 천사 미카', ch: 'KnightGold', color: '#c22f53', rules: true, lines: ['나는 전쟁의 규칙을 지키는 천사.', '3일차부터 영역전이 열린다. 그때 규칙서를 보여 주지.'] },
+    clerk: { name: '등록 천사 노엘', ch: 'Villager', color: '#277a58', desk: true, lines: ['나라가 없나요? 여기서 귀화·용병·건국을 등록해요.'] },
+    rest: { name: '쉼터지기 하루', ch: 'Monk2', color: '#4bb3c4', lines: ['조용히 쉬어 가요.', '여긴 나중에 쓰일지도 몰라요. 지금은 쉼터예요.'] },
+  };
+  const npcProp = (id, x, y) => ({ x, y, w: 1, h: 1, npc: id, draw: (g, X, Y) => { drawAngel(g, NPCS[id].ch, X, Y); nameTag(g, X, Y - 64, NPCS[id].name.split(' ').pop(), NPCS[id].color); } });
+  const TALK = { npc: null, i: 0 };
+  function facePortrait(cv, npc) { // 큰 얼굴: 하늘 배경 + 날개 + 얼굴 + 고리
+    const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height; g.imageSmoothingEnabled = false;
+    const grd = g.createLinearGradient(0, 0, 0, H2); grd.addColorStop(0, '#bfe6ff'); grd.addColorStop(1, '#fff6e0'); g.fillStyle = grd; g.fillRect(0, 0, W2, H2);
+    g.fillStyle = '#ffffff'; for (const [x, y, r] of [[18, 96, 16], [40, 104, 14], [100, 98, 18], [80, 108, 12]]) pxDisc(g, x * W2 / 120, y * H2 / 120, r);
+    g.drawImage(WING, 0, 0, 14, 11, 2, 34, 42, 33); g.save(); g.translate(W2, 0); g.scale(-1, 1); g.drawImage(WING, 0, 0, 14, 11, 2, 34, 42, 33); g.restore();
+    const k = Math.max(0, CHARS.names.indexOf(npc.ch));
+    if (ART.faces) g.drawImage(ART.faces, (k % CHARS.cols) * 38, Math.floor(k / CHARS.cols) * 38, 38, 38, 22, 26, 76, 76);
+    else if (ART.chars) g.drawImage(ART.chars, (k % CHARS.cols) * 64, Math.floor(k / CHARS.cols) * 112, 16, 16, 28, 34, 64, 64);
+    g.drawImage(HALO, 0, 0, 8, 3, 36, 8, 48, 18);
+  }
+  function openTalk(id) {
+    const npc = NPCS[id]; TALK.npc = id; TALK.i = 0;
+    $('talkName').textContent = npc.name; $('talkName').style.background = npc.color;
+    facePortrait($('talkFace'), npc); showTalkLine(); $('talk').hidden = false; SND.play('ok');
+  }
+  function showTalkLine() {
+    const npc = NPCS[TALK.npc]; let text = npc.lines[TALK.i % npc.lines.length];
+    if (npc.rules && DAY >= 3) text = TALK.i === 0 ? '영역전이 열렸다. 규칙을 모르고 싸우면 진다. 규칙서를 읽어 보아라.' : text;
+    $('talkText').textContent = text;
+    const btn = [];
+    if (npc.shop) btn.push(['물건 보기', () => { closeTalk(); openShop(npc.shop, TALK.last); }]);
+    if (npc.rules && DAY >= 3) btn.push(['📜 영역전 규칙서', () => { closeTalk(); $('rulebook').hidden = false; }]);
+    if (npc.desk) btn.push(['등록 창구', () => { closeTalk(); $('wanderMsg').textContent = '나라가 없다면 여기서 등록하세요.'; renderWander(); $('wanderBox').hidden = false; }]);
+    if (npc.lines.length > 1) btn.push(['다음 이야기', () => { TALK.i++; showTalkLine(); }]);
+    btn.push(['잘 있어요', closeTalk]);
+    TALK.last = TALK.npc;
+    const box = $('talkBtns'); box.innerHTML = ''; btn.forEach(([label, fn], i) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (i === 0) b.className = 'main'; b.onclick = fn; box.appendChild(b); });
+  }
+  function closeTalk() { $('talk').hidden = true; TALK.npc = null; }
+  function talkPrimary() { const b = $('talkBtns').querySelector('button'); if (b) b.click(); }
+  // 상점 물건 그림 (16×16 도트)
+  const ICON = {
+    floor: pxRows(['................', '.CCCCCCCCCCCCCC.', '.CccCccCccCccCC.', '.CcCCcCCcCCcCcC.', '.CCCCCCCCCCCCCC.', '.CccCccCccCccCC.', '.CcCCcCCcCCcCcC.', '.CCCCCCCCCCCCCC.', '.CccCccCccCccCC.', '.CcCCcCCcCCcCcC.', '.CCCCCCCCCCCCCC.', '.CccCccCccCccCC.', '.CcCCcCCcCCcCcC.', '.CCCCCCCCCCCCCC.', '.dddddddddddddd.', '................'], { C: '#e8c260', c: '#fff0b0', d: '#b8862b' }),
+    wall: pxRows(['................', '.KKKKKKKKKKKKKK.', '.RRRrKRRRrKRRRK.', '.RrrrKRrrrKRrrK.', '.KKKKKKKKKKKKKK.', '.RrKRRRrKRRRrKR.', '.rrKRrrrKRrrrKr.', '.KKKKKKKKKKKKKK.', '.RRRrKRRRrKRRRK.', '.RrrrKRrrrKRrrK.', '.KKKKKKKKKKKKKK.', '.RrKRRRrKRRRrKR.', '.rrKRrrrKRrrrKr.', '.KKKKKKKKKKKKKK.', '.dddddddddddddd.', '................'], { K: '#5a4a6e', R: '#d9826a', r: '#b9604c', d: '#3b2f4a' }),
+    trap: pxRows(['................', '................', '..S..S..S..S....', '..SS.SS.SS.SS...', '..S.S.S.S.S.S...', '.MMMMMMMMMMMMM..', '.MmmmmmmmmmmmM..', '.MmmmmBBBmmmmM..', '.MmmmmBbBmmmmM..', '.MmmmmBBBmmmmM..', '.MmmmmmmmmmmmM..', '.MMMMMMMMMMMMM..', '..S.S.S.S.S.S...', '..SS.SS.SS.SS...', '..S..S..S..S....', '................'], { S: '#c8ced8', M: '#5a5a6e', m: '#8a8aa0', B: '#e8423c', b: '#ffb0a8' }),
+    vaccine: pxRows(['......WWWW......', '......WggW......', '.......gg.......', '......GGGG......', '.....GwwwwG.....', '....GwwPPwwG....', '....GwPPPPwG....', '....GwwPPwwG....', '....GPPPPPPG....', '....GPPPPPPG....', '....GPPPPPPG....', '....GPPPPPPG....', '....GPPPPPPG....', '.....GPPPPG.....', '......GGGG......', '................'], { W: '#e8c260', g: '#b8862b', G: '#5a4a6e', w: '#ffffff', P: '#ff8fb1' }),
+    seed: pxRows(['................', '.....TTTTTT.....', '......TttT......', '.....BBBBBB.....', '....BbbbbbbB....', '...BbbbbbbbbB...', '...BbbSbbSbbB...', '..BbbbbSSbbbbB..', '..BbbbSSSSbbbB..', '..BbbbbSSbbbbB..', '..BbbbbbbbbbbB..', '..BbbbbbbbbbbB..', '...BbbbbbbbbB...', '....BBBBBBBB....', '................', '................'], { T: '#5a3416', t: '#8a5a2b', B: '#8a5a2b', b: '#d9a066', S: '#5fbf6a' }),
+  };
+  let SHOP_TAB = 'build', SHOP_NPC = 'build';
+  function openShop(tab = 'build', npcId) {
+    const me = myView && myView.me;
+    if (!me) { toast('나라가 있어야 살 수 있어요 (나라 공용 저장소에서 내요)'); return; }
+    SHOP_TAB = tab; SHOP_NPC = npcId || ({ build: 'build', vaccine: 'vaccine', seed: 'seed' })[tab] || 'build';
+    const npc = NPCS[SHOP_NPC]; $('shopWho').textContent = npc.name; facePortrait($('shopFace'), npc);
+    $('shopSay').textContent = npc.lines[0];
+    renderShop(); $('shopBox').hidden = false;
+  }
+  function renderShop() {
+    const me = myView && myView.me; if (!me) return;
+    const P = MPRules.NUM.price;
+    $('shopTabs').innerHTML = [['build', '🏗 건축'], ['vaccine', '💉 백신'], ['seed', '🌱 씨앗·비료']].map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === SHOP_TAB}">${l}</button>`).join('');
+    for (const b of $('shopTabs').querySelectorAll('[data-tab]')) b.onclick = () => { SHOP_TAB = b.dataset.tab; renderShop(); };
+    $('shopCoin').innerHTML = `<span class="coinIco"></span> 우리 저장소 <b>${me.coin.toLocaleString()}</b> 코인 <small>· 산 물건은 나라 저장소로 가요</small>`;
+    const card = (k, name, desc, price, counts, have) => `<div class="hvCard"><canvas data-ico="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${name}</b><small>${desc}</small>${have != null ? `<i>가진 것 ${have}개</i>` : ''}</div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${price.toLocaleString()}${counts ? '<small>/개</small>' : ''}</span><div>${(counts || [1]).map((c) => `<button type="button" data-buy="${k}" data-n="${c}" ${me.coin < price * c ? 'disabled' : ''}>${counts ? c + '개' : '사기'}</button>`).join('')}</div></div></div>`;
+    let html = '';
+    if (SHOP_TAB === 'build') html = card('floor', '황금 바닥', '우리 국민이 1.5배 빨라져요', P.floor, [1, 5, 20], me.items.floor) + card('wall', '방벽', '다른 나라 사람을 막아요 (5초 맞으면 부서짐)', P.wall, [1, 5, 10], me.items.wall) + card('trap', '덫', '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임', P.trap, [1, 3], me.items.trap);
+    else if (SHOP_TAB === 'vaccine') html = card('vaccine', '백신', '균열에서 영토 하나를 지켜요 · 살수록 비싸져요', me.vaccinePrice, null, me.vaccine);
+    else html = `<div class="hvSoon">${ICON.seed ? '<canvas data-ico="seed" width="64" height="64"></canvas>' : ''}<p><b>씨앗·비료는 곧 들어와요!</b><br>농사가 열리면 여기서 씨앗을 사고, 비료를 뿌리면 2배로 빨리 자라요.</p></div>`;
+    $('shopBody').innerHTML = html;
+    for (const c of $('shopBody').querySelectorAll('[data-ico]')) { const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(ICON[c.dataset.ico], 0, 0, 64, 64); }
+    for (const b of $('shopBody').querySelectorAll('[data-buy]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'buy', item: b.dataset.buy, n: +b.dataset.n })); $('shopSay').textContent = ['고마워요! 저장소로 보냈어요.', '좋은 선택이에요!', '또 와요~'][(Math.random() * 3) | 0]; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
+  }
+  // 영역전 규칙서 (전쟁의 천사에게서, 3일차부터)
+  const RULEBOOK = [
+    ['기본', ['전선 수 = 공격받는 나라의 영역 수 k로 2k+1개', '모든 전선에 (보낼 병력 ÷ 전선 수)의 20% 이상 배치', '한 전투 시간에 한 나라를 선전포고할 수 있는 나라는 최대 2나라', '전투 30분 전까지 한 선전포고만 그 전투에 들어가요', '한 나라는 한 전투 시간에 최대 2번 선전포고', '전투는 매일 13시와 22시']],
+    ['⚔ 공격팀', ['왕만 경계선이 붙은 영역에 선전포고 (양쪽에 알림)', '보낼 병력을 고르고 모든 전선에 배치', '선전포고 뒤 팀원 누구나 전선 근처(E)에서 충원·빼기 (선전포고 때 병력은 못 뺌)', '충원은 선전포고 병력의 10%까지']],
+    ['🛡 방어팀', ['전선 수는 방어팀 영역 수로 정해져요', '왕만 막을 병력과 배치를 전투 전까지 몇 번이든 바꿀 수 있어요', '배치 안 하면 기본 방어 비율로 자동 배치', '방어 병력은 1.1배로 계산', '여러 나라가 공격하면 전투마다 따로 배치']],
+    ['📊 판정', ['전선마다 병력 비교 (방어 ×1.1)', '전선 절반 넘게 이긴 팀이 승리', '같으면 방어 승']],
+    ['🏆 결과', ['공격 승: 잃는 영역 = ⌈방어 영역 수 × (공격 이긴 전선 − 방어 이긴 전선) ÷ 전선 수⌉', '넘어가는 순서: 선전포고한 영역 → 공격팀 땅에서 가까운 곳 → 같으면 수도가 아닌 곳', '재료: 잃은 비율만큼의 10%를 공격팀이 가져가요', '모든 영역을 잃으면 멸망 → 유랑민', '방어 승: 영역·재료 그대로, 공격팀이 잃은 병력의 10%를 포로로']],
+    ['💀 병력 손실 (란체스터 제곱 법칙)', ['이긴 쪽 남는 병력 = √(이긴 쪽² − 진 쪽²)', '진 쪽은 20%만 살아 돌아와요']],
+    ['🤝 동맹', ['왕끼리 합의, 최대 3나라', '동맹끼리 선전포고 불가', '동맹이 싸우면 참전 가능: 병력을 정해 직접 배치 (한 번만, 못 뺌)', '살아남은 참전 병력은 도와준 나라 병력']],
+    ['🏛 천도', ['왕이 1000코인으로 우리 영역 아무 곳으로 수도 이동', '선전포고 받은 동안은 불가 · 하면 하루 동안 다시 못 함', '수도를 빼앗기면 공격팀에게서 가장 먼 곳으로 강제 천도']],
+  ];
+  function renderRulebook() {
+    $('ruleBody').innerHTML = RULEBOOK.map(([h, items]) => `<section><h3>${h}</h3><ul>${items.map((t) => `<li>${t}</li>`).join('')}</ul></section>`).join('');
+  }
+  function heavenWall(g, w, R) { // 하늘 방 윗벽: 흰 벽 + 금 띠 + 하늘이 보이는 아치 창 + 기둥
+    const top = 18, bot = 2 * TILE;
+    g.fillStyle = '#fbf8f1'; g.fillRect(18, top, w - 36, bot - top);
+    g.fillStyle = '#efe8dc'; g.fillRect(18, bot - 10, w - 36, 10); g.fillStyle = '#e8c260'; g.fillRect(18, bot - 12, w - 36, 2);
+    for (let tx = 2; tx < R.w - 2; tx += 3) {
+      const cx = tx * TILE + 16;
+      g.fillStyle = '#f3ede2'; g.fillRect(cx + 44, top + 6, 8, bot - top - 16); g.fillStyle = '#e8c260'; g.fillRect(cx + 42, top + 6, 12, 3);
+      if (R.doors.some((d) => d.side === 'N' && Math.abs(d.at - tx) <= 2)) continue;
+      g.fillStyle = '#e8c260'; pxDisc(g, cx, 38, 14); g.fillRect(cx - 14, 38, 30, 18);
+      const grd = g.createLinearGradient(0, 26, 0, 56); grd.addColorStop(0, '#8fd0ff'); grd.addColorStop(1, '#e6f6ff'); g.fillStyle = grd; pxDisc(g, cx, 38, 10); g.fillRect(cx - 10, 38, 22, 16);
+      g.fillStyle = '#ffffff'; pxDisc(g, cx - 3, 50, 4); pxDisc(g, cx + 5, 51, 3); g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(cx, 28, 2, 26); g.fillRect(cx - 10, 42, 22, 2);
+    }
+    g.fillStyle = '#b8862b'; g.fillRect(18, top + 6, w - 36, 2); g.fillStyle = '#e8c260'; g.fillRect(18, top, w - 36, 6); g.fillStyle = '#fff0b0'; g.fillRect(18, top, w - 36, 2);
+    g.fillStyle = 'rgba(60,35,20,0.12)'; g.fillRect(18, bot - 2, w - 36, 6);
+  }
+  const P1 = (x, y, fn, extra) => Object.assign({ x, y, w: 1, h: 1, draw: fn }, extra || {});
+  const banner = (x, kind) => ({ x, y: 0, w: 1, h: 2, walk: true, draw: (g, X, Y) => blit(g, BANNERS[kind], X, Y + 6, 2) });
   const ROOMS = {
     temple: {
       name: '하늘 신전', desc: '신들의 공지 · 신탁 제단 · 멸망의 탑', w: 30, h: 18, pos: [1, 1], crowd: 10,
-      floor: 'floor_palace', wall: true, trim: '#e2b93b',
+      floor: 'marble_w', wall: true, carpets: [[14, 2, 3, 16], [1, 7, 28, 3]], trim: '#e2b93b',
       emotes: ['신탁 봤어?', '오늘 공지 뭐임', '!', '?', '내일 어디 무너짐?', '탑이 빛난다'],
       doors: [{ side: 'W', at: 8, to: 'market' }, { side: 'E', at: 8, to: 'council' }, { side: 'N', at: 15, to: 'plaza' }, { side: 'S', at: 15, to: 'ground' }],
       props: [
-        { x: 3, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner1', x, y + 4, 2) }, { x: 9, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner5', x, y + 4, 2) },
-        { x: 20, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner5', x, y + 4, 2) }, { x: 26, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner1', x, y + 4, 2) },
-        { x: 11, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 18, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
-        { x: 5, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) }, { x: 24, y: 2, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) },
-        { x: 3, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar_na', x, y + 4, 2) }, { x: 3, y: 13, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar_na', x, y + 4, 2) },
-        { x: 26, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar_na', x, y + 4, 2) }, { x: 26, y: 13, w: 1, h: 1, draw: (g, x, y) => pix(g, 'pillar_na', x, y + 4, 2) },
-        { x: 11, y: 11, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 18, y: 11, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
-        { x: 11, y: 14, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_lion', x, y + 4, 1.5) }, { x: 18, y: 14, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_lion', x, y + 4, 1.5) },
-        { x: 5, y: 11, w: 3, h: 1, board: true, draw: (g, x, y) => { pix(g, 'altar', x, y + 4); pix(g, 'book', x, y - 44); sign(g, x, y - 92, '신탁 제단'); } },
-        { x: 8, y: 12, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'bishop', x, y + 2); nameTag(g, x, y - 58, '신의 사제', '#6b4fb3'); } },
-        { x: 2, y: 15, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) }, { x: 27, y: 15, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) },
-        { x: 22, y: 11, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
-        { x: 13, y: 6, w: 4, h: 1, walk: true, draw: (g, x, y) => { if (!DOOM) return; g.fillStyle = '#5a4630'; g.fillRect(x - 140, y - 150, 8, 150); g.fillRect(x + 132, y - 150, 8, 150); drawDoomBanner(g, x, y - 176, 1.5); } }, // 멸망 게시판 (기둥 두 개에 걸린 배너)
+        banner(4, 'blue'), banner(10, 'white'), banner(19, 'white'), banner(25, 'blue'),
+        P1(4, 4, column), P1(4, 12, column), P1(25, 4, column), P1(25, 12, column), P1(12, 4, column), P1(18, 4, column),
+        P1(2, 3, urn), P1(27, 3, urn), P1(2, 15, urn), P1(27, 15, urn),
+        P1(12, 12, lantern), P1(18, 12, lantern),
+        { x: 5, y: 11, w: 3, h: 1, board: true, draw: (g, x, y) => { holyAltar(g, x, y, 40, 'book'); plaque(g, x, y - 92, '신탁 제단'); } },
+        npcProp('priest', 9, 12),
+        P1(11, 15, (g, x, y) => { g.fillStyle = '#d9d0c0'; g.fillRect(x - 18, y - 14, 36, 14); g.fillStyle = '#fffdf8'; g.fillRect(x - 16, y - 18, 32, 6); drawAngel(g, 'Princess', x, y - 16, true); }),
+        P1(19, 15, (g, x, y) => { g.fillStyle = '#d9d0c0'; g.fillRect(x - 18, y - 14, 36, 14); g.fillStyle = '#fffdf8'; g.fillRect(x - 16, y - 18, 32, 6); drawAngel(g, 'Knight', x, y - 16, true); }),
+        { x: 13, y: 6, w: 4, h: 1, walk: true, draw: (g, x, y) => { if (!DOOM) return; g.fillStyle = '#5a4630'; g.fillRect(x - 140, y - 150, 8, 150); g.fillRect(x + 132, y - 150, 8, 150); drawDoomBanner(g, x, y - 176, 1.5); } },
       ],
     },
     market: {
-      name: '거래소', desc: '자원·병력·정보를 사고파는 곳', w: 30, h: 18, pos: [0, 1], crowd: 9,
-      floor: 'stonefloor', wall: true, trim: '#e7a33e',
-      emotes: ['열쇠 조각 팝니다', '병력 100 ↔ 코인 3천', '강화석 삼', '정보 삽니다', '흥정 ㄱ?', '너무 비쌈;;'],
+      name: '천상 상점가', desc: '천사들이 여는 상점 · 건축 · 백신 · 씨앗', w: 30, h: 18, pos: [0, 1], crowd: 9,
+      floor: 'marble_w', wall: true, carpets: [[1, 8, 28, 3]], trim: '#e7a33e',
+      emotes: ['방벽 몇 개 살까', '백신 비싸ㅠ', '씨앗은 언제 나와?', '천사님 예쁘다', '분수 반짝반짝', '우리 저장소 코인 얼마?'],
       doors: [{ side: 'E', at: 9, to: 'temple' }],
       props: [
-        { x: 4, y: 3, w: 4, h: 2, shop: 'build', draw: (g, x, y) => stall(g, x, y, 0, 'woodpile', '바닥·방벽·덫') },
-        { x: 12, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 200, 'key', '병력') },
-        { x: 20, y: 3, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 120, 'book', '정보') },
-        { x: 4, y: 12, w: 4, h: 2, shop: 'vaccine', draw: (g, x, y) => stall(g, x, y, 260, 'chalice', '백신 (균열 방어)') },
-        { x: 12, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 40, 'coin', '경매') },
-        { x: 20, y: 12, w: 4, h: 2, draw: (g, x, y) => stall(g, x, y, 160, 'candles', '환전') },
-        { x: 9, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner6', x, y + 4, 2) }, { x: 17, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner3', x, y + 4, 2) }, { x: 25, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner6', x, y + 4, 2) },
+        banner(3, 'blue'), banner(11, 'white'), banner(18, 'white'), banner(26, 'blue'),
+        { x: 3, y: 4, w: 4, h: 2, npc: 'build', draw: (g, x, y) => pavilion(g, x, y, '#7fb2ff', '건축 상점', NPCS.build.ch) },
+        { x: 13, y: 4, w: 4, h: 2, npc: 'vaccine', draw: (g, x, y) => pavilion(g, x, y, '#ff9fc4', '치유의 샘 · 백신', NPCS.vaccine.ch) },
+        { x: 23, y: 4, w: 4, h: 2, npc: 'seed', draw: (g, x, y) => pavilion(g, x, y, '#8fe0a8', '씨앗·비료 (곧)', NPCS.seed.ch) },
+        { x: 13, y: 13, w: 4, h: 2, draw: lightFountain },
+        P1(8, 13, cloudBench, { w: 2 }), P1(21, 13, cloudBench, { w: 2 }),
+        P1(2, 12, urn), P1(27, 12, urn), P1(2, 16, urn), P1(27, 16, urn),
+        P1(9, 8, lantern), P1(20, 8, lantern), P1(9, 15, lantern), P1(20, 15, lantern),
       ],
     },
     council: {
-      name: '회담장', desc: '나라끼리 조약을 맺는 곳 · 밀실 2개', w: 26, h: 16, pos: [2, 1], crowd: 7,
-      floor: 'floor_palace', wall: true, carpets: [[8, 4, 10, 8], [0, 7, 8, 3]], trim: '#5b7fd6',
-      emotes: ['불가침 조약 ㄱ?', '동맹 맺자', '조건이 뭔데', '배신하면 알지?', '왕끼리 얘기하자'],
+      name: '회담장', desc: '나라끼리 조약을 맺는 곳 · 전쟁의 천사', w: 26, h: 16, pos: [2, 1], crowd: 7,
+      floor: 'marble_w', wall: true, carpets: [[8, 4, 10, 8], [0, 7, 8, 3]], trim: '#5b7fd6',
+      emotes: ['불가침 조약 ㄱ?', '동맹 맺자', '조건이 뭔데', '배신하면 알지?', '왕끼리 얘기하자', '규칙서 읽어 봤어?'],
       doors: [{ side: 'W', at: 8, to: 'temple' }, { side: 'E', at: 4, to: 'secret1' }, { side: 'E', at: 12, to: 'secret2' }, { side: 'S', at: 13, to: 'jail' }],
       props: [
-        { x: 11, y: 6, w: 4, h: 2, draw: (g, x, y) => { pix(g, 'altar', x, y + 6, 3); pix(g, 'book', x - 20, y - 70); pix(g, 'chalice', x + 22, y - 72); sign(g, x, y - 110, '조약 제단'); } },
-        { x: 9, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 16, y: 5, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
-        { x: 9, y: 10, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) }, { x: 16, y: 10, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candelabra', x, y + 2) },
-        { x: 5, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner2', x, y + 4, 2) }, { x: 13, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner4', x, y + 4, 2) }, { x: 20, y: 0, w: 1, h: 2, draw: (g, x, y) => pix(g, 'banner2', x, y + 4, 2) },
-        { x: 3, y: 12, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 22, y: 12, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
-        { x: 3, y: 3, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) }, { x: 22, y: 3, w: 1, h: 1, draw: (g, x, y) => pix(g, 'plant', x, y + 2, 2) },
+        banner(5, 'red'), banner(13, 'white'), banner(20, 'red'),
+        { x: 11, y: 6, w: 4, h: 2, draw: (g, x, y) => { holyAltar(g, x - 22, y, 34, 'book'); holyAltar(g, x + 40, y, 22, 'cup'); plaque(g, x, y - 96, '조약 제단'); } },
+        npcProp('war', 17, 7),
+        P1(9, 5, lantern), P1(16, 5, lantern), P1(9, 11, lantern), P1(16, 11, lantern),
+        P1(3, 12, column), P1(22, 12, column), P1(3, 3, urn), P1(22, 3, urn),
       ],
     },
     secret1: {
-      name: '밀실 1', desc: '들어온 사람끼리만 보이는 작은 방 (예정)', w: 14, h: 10, pos: [3, 0.55], crowd: 2,
-      floor: 'stonefloor', dark: true, wall: true, trim: '#6b4fb3',
-      emotes: ['쉿', '여기서 한 얘기는 비밀', '...'],
+      name: '구름 쉼터 1', desc: '조용히 쉬어 가는 작은 방', w: 14, h: 10, pos: [3, 0.55], crowd: 2,
+      floor: 'cloud', wall: true, trim: '#6b4fb3',
+      emotes: ['쉿', '여기 조용하다', '...'],
       doors: [{ side: 'W', at: 5, to: 'council' }],
-      props: [{ x: 6, y: 4, w: 2, h: 1, draw: smallTable }],
+      props: [P1(6, 5, cloudBench, { w: 2 }), P1(3, 3, urn), P1(10, 3, urn), P1(10, 7, lantern), npcProp('rest', 6, 3)],
     },
     secret2: {
-      name: '밀실 2', desc: '들어온 사람끼리만 보이는 작은 방 (예정)', w: 14, h: 10, pos: [3, 1.45], crowd: 1,
-      floor: 'stonefloor', dark: true, wall: true, trim: '#6b4fb3',
+      name: '구름 쉼터 2', desc: '조용히 쉬어 가는 작은 방', w: 14, h: 10, pos: [3, 1.45], crowd: 1,
+      floor: 'cloud', wall: true, trim: '#6b4fb3',
       emotes: ['쉿', '...'],
       doors: [{ side: 'W', at: 5, to: 'council' }],
-      props: [{ x: 6, y: 4, w: 2, h: 1, draw: smallTable }],
+      props: [P1(6, 5, cloudBench, { w: 2 }), P1(3, 3, urn), P1(10, 3, urn), P1(3, 7, lantern)],
     },
-    plaza: { // 넓은 구름 광장: 가운데 분수 광장, 네 귀퉁이 꽃밭, 위쪽 이벤트 무대
+    plaza: { // 넓은 구름 광장: 가운데 빛의 분수, 네 귀퉁이 꽃밭, 위쪽 이벤트 무대
       name: '구름 광장', desc: '모여서 노는 곳 · 이벤트가 열리는 곳', w: 56, h: 34, pos: [1, 0], crowd: 24,
       floor: 'lawn', trim: '#4bb3c4',
-      patches: [[26, 2, 4, 31, 'cobble', 0], [3, 16, 50, 3, 'cobble', 0], [17, 11, 22, 12, 'floor_palace', 30], [4, 4, 13, 7, 'meadow', 22], [39, 4, 13, 7, 'meadow', 22], [4, 23, 13, 7, 'meadow', 22], [39, 23, 13, 7, 'meadow', 22], [20, 3, 16, 5, 'planks', 6]],
+      patches: [[26, 2, 4, 31, 'cobble', 0], [3, 16, 50, 3, 'cobble', 0], [17, 11, 22, 12, 'marble_w', 30], [4, 4, 13, 7, 'meadow', 22], [39, 4, 13, 7, 'meadow', 22], [4, 23, 13, 7, 'meadow', 22], [39, 23, 13, 7, 'meadow', 22], [20, 3, 16, 5, 'planks', 6]],
       emotes: ['3팀 모여~', 'ㅋㅋㅋ', '안녕!', '이벤트 언제?', '같이 다닐 사람', '우리 나라 짱', '분수 예쁘다', '무대 올라가 봐'],
       doors: [{ side: 'S', at: 28, to: 'temple' }, { side: 'N', at: 28, to: 'wander' }],
       props: [
         { x: 21, y: 3, w: 14, h: 2, draw: plazaStage },
-        { x: 26, y: 15, w: 4, h: 3, draw: (g, x, y) => { pix(g, 'pool', x, y + 8, 3); } },
-        { x: 20, y: 13, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 35, y: 13, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
-        { x: 20, y: 20, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) }, { x: 35, y: 20, w: 1, h: 1, draw: (g, x, y) => pix(g, 'statue_orb', x, y + 4, 2) },
-        ...[[24, 9], [31, 9], [24, 25], [31, 25], [24, 29], [31, 29]].map(([x, y]) => ({ x, y, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'candelabra', X, Y + 2) })),
+        { x: 26, y: 15, w: 4, h: 3, draw: lightFountain },
+        P1(20, 13, column), P1(35, 13, column), P1(20, 20, column), P1(35, 20, column),
+        ...[[24, 9], [31, 9], [24, 25], [31, 25], [24, 29], [31, 29]].map(([x, y]) => P1(x, y, lantern)),
         { x: 9, y: 16, w: 2, h: 1, draw: bonfire },
         ...[[7, 15], [12, 15], [7, 18], [12, 18]].map(([x, y]) => ({ x, y, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'log', X, Y + 2, 2) })),
-        { x: 45, y: 16, w: 2, h: 1, draw: smallTable }, { x: 43, y: 16, w: 1, h: 1, draw: (g, x, y) => pix(g, 'stump', x, y + 2, 3) }, { x: 48, y: 16, w: 1, h: 1, draw: (g, x, y) => pix(g, 'stump', x, y + 2, 3) },
+        P1(45, 16, cloudBench, { w: 2 }), P1(45, 19, cloudBench, { w: 2 }),
         ...gardenProps(4, 4), ...gardenProps(39, 4), ...gardenProps(4, 23), ...gardenProps(39, 23),
         { x: 8, y: 7, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:chick', x, y + 2, 2) }, { x: 44, y: 8, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:rabbit', x, y + 2, 2) },
         { x: 10, y: 26, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:hen', x, y + 2, 2) }, { x: 46, y: 27, w: 2, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:pig', x, y + 2, 2) },
@@ -782,11 +1008,11 @@
     },
     jail: { // 감옥: 위쪽은 면회실(회담장과 이어짐), 아래는 나라별 감옥 방 6칸 (창살). 3스택이면 갇힘, 보석금으로 바로 나감
       name: '감옥', desc: '체포 3스택이면 갇히는 곳 · 면회실에서 보석금', w: 31, h: 16, pos: [2, 2], crowd: 0,
-      floor: 'stonefloor', dark: true, wall: true, trim: '#5a5a6e',
+      floor: 'silver', dark: true, wall: true, wallStyle: 'iron', trim: '#5a5a6e',
       emotes: ['억울해', '꺼내 줘', '...', '다음엔 안 잡혀', '보석금 좀'],
       doors: [{ side: 'N', at: 15, to: 'council' }],
       props: [
-        { x: 15, y: 4, w: 2, h: 1, bail: true, draw: (g, x, y) => { pix(g, 'altar', x, y + 6, 2); pix(g, 'book', x - 10, y - 46); sign(g, x, y - 90, '면회실 · 보석금 내기'); } },
+        { x: 15, y: 4, w: 2, h: 1, bail: true, draw: (g, x, y) => { pix(g, 'altar', x, y + 6, 2); pix(g, 'book', x - 10, y - 46); plaque(g, x, y - 90, '면회실 · 보석금 내기'); } },
         { x: 4, y: 3, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candles', x, y + 2) }, { x: 26, y: 3, w: 1, h: 1, draw: (g, x, y) => pix(g, 'candles', x, y + 2) },
         ...JAIL_BARS,
       ],
@@ -798,8 +1024,8 @@
       emotes: ['용병 구합니다', '귀화시켜 주세요', '우리 4명 모이면 건국함', '몸값 얼마?', '어느 나라가 좋음?', '여기 따뜻하다'],
       doors: [{ side: 'S', at: 16, to: 'plaza' }],
       props: [
-        { x: 13, y: 2, w: 6, h: 2, board: true, desk: 'wander', draw: (g, x, y) => { pix(g, 'cabin', x, y + 6, 3); sign(g, x, y - 132, '등록 창구'); } },
-        { x: 11, y: 4, w: 1, h: 1, draw: (g, x, y) => { pix(g, 'keeper', x, y + 2); nameTag(g, x, y - 58, '등록 담당', '#277a58'); } },
+        { x: 13, y: 2, w: 6, h: 2, board: true, desk: 'wander', draw: (g, x, y) => { pix(g, 'cabin', x, y + 6, 3); plaque(g, x, y - 132, '등록 창구'); } },
+        npcProp('clerk', 11, 4),
         { x: 21, y: 3, w: 4, h: 1, draw: posterBoard },
         { x: 4, y: 9, w: 2, h: 1, draw: (g, x, y) => pix(g, 'tent', x, y + 4, 3) }, { x: 8, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'tent', x, y + 4, 3) }, { x: 4, y: 14, w: 2, h: 1, draw: (g, x, y) => pix(g, 'tent', x, y + 4, 3) },
         { x: 25, y: 11, w: 2, h: 1, draw: bonfire },
@@ -811,7 +1037,6 @@
       ],
     },
   };
-
   const SKY_M = 90;
   function buildRooms() { for (const id of Object.keys(ROOMS)) buildRoom(id); }
   // 관리자 '맵 고치기'로 바꾼 방 (타일·장벽·소품 숨기기). 서버가 보내 준다
@@ -819,7 +1044,7 @@
   const GFLOOR = new Map(), GWALL = new Set(), GPROPS = new Map(); // GPROPS: 칸 → { r: 'x:그림'|'u:동물', b: 막힘 } // 땅 지도에 관리자가 깐 타일·장벽 (칸 번호)
   const SHEETS = { town: { key: 'k_town', cols: 12, name: '타이니 타운' }, dungeon: { key: 'k_dungeon', cols: 12, name: '타이니 던전' }, onebit: { key: 'k_onebit', cols: 49, name: '1비트 팩' }, ninja: { key: 'floor', cols: 22, name: '닌자 바닥' }, winter: { key: 'k_winter', cols: 10, name: '겨울' }, water: { key: 'water', cols: 0, name: '물가' }, base: { key: 'base_gen', cols: 8, name: '기본 지형' } };
   // '기본 지형' 탭: 원래 지도·방에 그려지던 바닥(신전 바닥·보라 벽·허공·방 바닥 무늬)을 타일처럼 깔 수 있게 함. 무늬는 칸 위치에 맞춰 이어짐
-  const BASE_PATS = ['holy', 'holy_edge', 'wall', 'void', 'lawn', 'meadow', 'cobble', 'planks', 'stonefloor', 'carpet', 'grass', 'dirt', 'marble', 'floor_palace', 'brick'];
+  const BASE_PATS = ['holy', 'holy_edge', 'wall', 'void', 'lawn', 'meadow', 'cobble', 'planks', 'stonefloor', 'carpet', 'grass', 'dirt', 'marble', 'floor_palace', 'brick', 'marble_w', 'aisle', 'cloud', 'silver'];
   const patCache = {};
   function patCanvas(key) {
     if (patCache[key]) return patCache[key];
@@ -946,9 +1171,11 @@
     g.fillStyle = pat(R.floor); rr(g, 18, 18, w - 36, h - 36, 18);
     if (R.dark) { g.fillStyle = 'rgba(30,20,60,0.35)'; rr(g, 18, 18, w - 36, h - 36, 18); }
     else if (R.floor === 'stonefloor') { g.fillStyle = 'rgba(255,248,235,0.22)'; rr(g, 18, 18, w - 36, h - 36, 18); }
-    for (const [cx, cy, cw, ch] of R.carpets || []) { g.fillStyle = pat('carpet'); g.fillRect(cx * TILE, cy * TILE, cw * TILE, ch * TILE); }
+    if (R.floor !== 'lawn') { g.strokeStyle = '#e8c260'; g.lineWidth = 4; g.beginPath(); if (g.roundRect) g.roundRect(26, 26, w - 52, h - 52, 12); else g.rect(26, 26, w - 52, h - 52); g.stroke(); g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 2; g.beginPath(); if (g.roundRect) g.roundRect(32, 32, w - 64, h - 64, 10); else g.rect(32, 32, w - 64, h - 64); g.stroke(); } // 금테
+    for (const [cx, cy, cw, ch] of R.carpets || []) { g.fillStyle = pat(R.carpet || 'aisle'); g.fillRect(cx * TILE, cy * TILE, cw * TILE, ch * TILE); g.strokeStyle = '#e8c260'; g.lineWidth = 4; g.strokeRect(cx * TILE + 2, cy * TILE + 2, cw * TILE - 4, ch * TILE - 4); g.strokeStyle = '#fff0b0'; g.lineWidth = 2; g.strokeRect(cx * TILE + 6, cy * TILE + 6, cw * TILE - 12, ch * TILE - 12); }
     for (const [px, py, pw, ph, key, rad] of R.patches || []) { g.fillStyle = pat(key); rr(g, px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0); g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 3; g.beginPath(); g.roundRect ? g.roundRect(px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0) : g.rect(px * TILE, py * TILE, pw * TILE, ph * TILE); g.stroke(); } // 꽃밭·길·광장 바닥
-    if (R.wall) {
+    if (R.wall && R.wallStyle !== 'iron') heavenWall(g, w, R);
+    else if (R.wall) {
       const bt = document.createElement('canvas'); bt.width = bt.height = TILE; const bg2 = bt.getContext('2d'); bg2.imageSmoothingEnabled = false; bg2.drawImage(ART.x_brick, 0, 0, TILE, TILE);
       g.fillStyle = g.createPattern(bt, 'repeat'); g.fillRect(18, 18, w - 36, 2 * TILE - 18);
       g.fillStyle = '#c9a77a'; g.fillRect(18, 18, w - 36, 8);
@@ -1172,12 +1399,12 @@
     if (k === 'm') toggleMap();
     if (k === 'b') toggleWar();
     if (k === 't') { if (player.carry) toast('훔친 걸 들고 있으면 순간이동할 수 없어요'); else goHome(); }
-    if (k === 'e' && !e.repeat) pressE();
+    if (k === 'e' && !e.repeat) { if (!$('talk').hidden) talkPrimary(); else pressE(); }
     if (k === 'g' && ONLINE) setBuild(!build.on);
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
     if ((k === '[' || k === ']') && !ONLINE) { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
+    if (k === 'escape') { closeTalk(); $('rulebook').hidden = true; $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
   });
   addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); });
   // 패드·폰: 화면 아래 안내를 누르면 E (꾹 누르기도 됨)
@@ -1269,6 +1496,7 @@
       for (const sp of player.room.sprites) {
         if (sp.board && Math.hypot(sp.x - player.x, sp.y + 16 - player.y) < 90) best = sp.prop && sp.prop.desk === 'wander' ? { kind: 'desk', text: '등록 창구 이용하기' } : { kind: 'board', text: '게시판 읽기' };
         if (sp.prop && sp.prop.bail && ONLINE && MY_NID && Math.hypot(sp.x - player.x, sp.y + 20 - player.y) < 100) best = { kind: 'bail', text: '면회실 · 우리 팀원 보석금 내기' };
+        if (sp.prop && sp.prop.npc && Math.hypot(sp.x - player.x, sp.y + 24 - player.y) < 96) best = { kind: 'npc', npc: sp.prop.npc, text: `${NPCS[sp.prop.npc].name}에게 말 걸기` };
         if (sp.prop && sp.prop.shop && Math.hypot(sp.x - player.x, sp.y + 20 - player.y) < 100) best = ONLINE ? { kind: 'shop', text: sp.prop.shop === 'build' ? '바닥·방벽·덫 사기' : '백신 사기' } : sp.prop.shop === 'vaccine' ? { kind: 'vaccine', text: `백신 사기 · 코인 ${vaccinePrice().toLocaleString()}` } : null;
       }
     } else {
@@ -1400,23 +1628,14 @@
   }
   $('storeBuild').addEventListener('click', () => { $('storeBox').hidden = true; setBuild(true); });
   $('storeClose').addEventListener('click', () => { $('storeBox').hidden = true; });
-  // 하늘 거래소 창
-  function openShop() {
-    const me = myView && myView.me;
-    if (!me) { toast('나라가 있어야 살 수 있어요 (나라 공용 저장소에서 내요)'); return; }
-    const P = MPRules.NUM.price;
-    const item = (k, name, desc, price, counts) => `<div class="shopItem"><div><b>${name}</b> <small>${desc}</small><br><span>코인 ${price.toLocaleString()}${counts ? ' / 개' : ''}</span></div><div class="seg">${(counts || [1]).map((c) => `<button data-buy="${k}" data-n="${c}">${counts ? c + '개' : '사기'}</button>`).join('')}</div></div>`;
-    $('shopBody').innerHTML = `<p class="msg">우리 저장소 코인 <b>${me.coin.toLocaleString()}</b> · 산 물건은 우리 저장소에 들어가요</p>` +
-      item('floor', '▦ 바닥', '우리 국민이 1.5배 빨라짐', P.floor, [1, 5, 20]) + item('wall', '🧱 방벽', '다른 나라 사람을 막음 (5초면 부서짐)', P.wall, [1, 5, 10]) +
-      item('trap', '🪤 덫', '밟은 적이 3초 동안 못 움직임 · 적에겐 안 보임', P.trap, [1, 3]) + item('vaccine', '💉 백신', '균열에서 영토 하나를 지킴 · 살수록 비싸짐', me.vaccinePrice, null);
-    for (const b of $('shopBody').querySelectorAll('[data-buy]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'buy', item: b.dataset.buy, n: +b.dataset.n })); };
-    $('shopBox').hidden = false;
-  }
   $('shopClose').addEventListener('click', () => { $('shopBox').hidden = true; });
+  $('ruleClose').addEventListener('click', () => { $('rulebook').hidden = true; });
+  renderRulebook();
   function interact() {
     if (!near) return;
     if (near.kind === 'store') { openStore(); return; }
     if (near.kind === 'shop') { openShop(); return; }
+    if (near.kind === 'npc') { openTalk(near.npc); return; }
     if (near.kind === 'bail') { if (netOn) ws.send(JSON.stringify({ t: 'bailList' })); return; }
     if (near.kind === 'hit') { HITFX.set(near.t.id, performance.now() + 120); if (netOn) ws.send(JSON.stringify({ t: 'hit', terr: near.t.id })); return; }
     if (near.kind === 'pickB') { build.moving = near.what; near = null; toast('옮길 자리 바로 앞에서 E를 누르세요 (우리 땅, 다른 건물과 2칸 이상)'); return; }

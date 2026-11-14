@@ -352,6 +352,42 @@ body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 
 @keyframes wbin { 0% { transform: scaleY(0); opacity: 0; } 8% { transform: scaleY(1.15); opacity: 1; } 14% { transform: scaleY(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: scaleY(0.6); } }
 .row.cast small { color: #6b6280; }
 #tools { max-width: 52vw; gap: 6px; } #tools button { padding: 0 9px; font-size: 13px; min-height: 34px; } /* 버튼 6개가 한 줄에 */
+
+/* 천상 테마 창 (상점·규칙서) */
+.hv { position: relative; width: min(760px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: linear-gradient(180deg, #d9f0ff 0%, #f4faff 90px, #fffaf0 160px); color: #2b2340; border: 4px solid #b8862b; box-shadow: 0 0 0 3px #fff0b0, 0 0 0 7px #2b2340, 0 18px 50px rgba(20, 10, 50, 0.5); padding: 18px 18px 16px; }
+.hvClouds { position: absolute; left: 0; right: 0; top: 0; height: 26px; pointer-events: none; background: radial-gradient(circle at 20px 26px, #fff 18px, transparent 19px) 0 0 / 56px 26px repeat-x; opacity: 0.9; }
+.hvTop { position: relative; display: flex; gap: 14px; align-items: center; margin-bottom: 12px; }
+.hvTop h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 26px; color: #5a3d10; } .hvTop h2 small { font-size: 14px; color: #b8862b; margin-left: 8px; }
+.hvFace { flex: none; width: 112px; height: 112px; border: 4px solid #e8c260; outline: 3px solid #2b2340; background: #bfe6ff; box-shadow: 0 0 18px rgba(255, 216, 77, 0.6); }
+.hvFace canvas, .tkFace canvas { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+.hvSay { position: relative; flex: 1; background: #fff; border: 3px solid #2b2340; padding: 10px 14px; min-height: 64px; }
+.hvSay::before { content: ""; position: absolute; left: -14px; top: 24px; border: 7px solid transparent; border-right-color: #2b2340; } .hvSay::after { content: ""; position: absolute; left: -9px; top: 26px; border: 5px solid transparent; border-right-color: #fff; }
+.hvSay b { display: block; font-family: var(--font-display); font-weight: 400; font-size: 18px; color: #b8862b; } .hvSay p { margin: 4px 0 0; font-size: 15px; line-height: 1.5; }
+.hvX { position: absolute; right: -6px; top: -8px; min-height: 0; width: 38px; height: 38px; padding: 0; font-size: 18px; background: #fffaf0 !important; color: #5a3d10 !important; border: 3px solid #b8862b !important; }
+.hv .hvX:hover { background: #fff0b0 !important; }
+.hvTabs { display: flex; gap: 6px; border-bottom: 4px solid #e8c260; } .hvTabs button { min-height: 40px; font-size: 15px; background: #efe3c4 !important; color: #7a5a20 !important; border: 3px solid #b8862b !important; border-bottom: 0 !important; margin-bottom: -4px; }
+.hvTabs button[aria-pressed="true"] { background: #fffaf0 !important; color: #2b2340 !important; box-shadow: 0 -3px 0 #ffd84d inset; }
+.hvCoin { margin: 10px 0; font-size: 14px; display: flex; align-items: center; gap: 6px; } .hvCoin b { font-family: var(--font-display); font-size: 20px; font-weight: 400; color: #b8862b; } .hvCoin small { color: #8a7f9a; }
+.coinIco { display: inline-block; width: 14px; height: 14px; background: radial-gradient(circle at 40% 35%, #fff6c8 0 2px, #ffd84d 3px 5px, #b8862b 6px 7px, transparent 7.5px); vertical-align: -2px; }
+.hvGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.hvCard { display: grid; grid-template-columns: 64px 1fr; gap: 6px 10px; background: #fff; border: 3px solid #e8c260; box-shadow: 3px 3px 0 #b8862b; padding: 10px; }
+.hvCard canvas { width: 64px; height: 64px; image-rendering: pixelated; background: radial-gradient(circle, #fff6d6, #f1e6c8); border: 2px solid #efe0b8; }
+.hvInfo b { display: block; font-family: var(--font-display); font-weight: 400; font-size: 19px; } .hvInfo small { display: block; color: #6b6280; font-size: 12px; line-height: 1.45; } .hvInfo i { font-style: normal; font-size: 12px; color: #3d5fb8; }
+.hvBuy { grid-column: 1 / 3; display: flex; align-items: center; justify-content: space-between; gap: 6px; border-top: 2px dashed #efe0b8; padding-top: 8px; }
+.hvBuy .price { font-family: var(--font-display); font-size: 18px; color: #b8862b; display: flex; align-items: center; gap: 4px; } .hvBuy .price small { font-size: 12px; color: #8a7f9a; }
+.hvBuy { flex-wrap: wrap; } .hvBuy div { display: flex; gap: 4px; } .hvBuy button { min-height: 34px; font-size: 13px; padding: 0 9px; white-space: nowrap; } .hvBuy button:disabled { opacity: 0.45; cursor: not-allowed; }
+.hvSoon { grid-column: 1 / -1; display: flex; gap: 14px; align-items: center; background: #fff; border: 3px dashed #8fe0a8; padding: 14px; } .hvSoon canvas { width: 64px; height: 64px; image-rendering: pixelated; } .hvSoon p { margin: 0; line-height: 1.6; }
+.hv.book { width: min(820px, 100%); } #ruleBody { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+#ruleBody section { background: #fff; border: 3px solid #e8c260; box-shadow: 3px 3px 0 #b8862b; padding: 8px 12px; } #ruleBody h3 { margin: 0 0 4px; font-family: var(--font-display); font-weight: 400; font-size: 19px; color: #5a3d10; }
+#ruleBody ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.65; }
+/* NPC 대화창 */
+#talk { position: fixed; z-index: 26; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(780px, calc(100vw - 24px)); display: flex; gap: 14px; align-items: stretch; background: linear-gradient(180deg, #f4faff, #fffaf0); color: #2b2340; border: 4px solid #b8862b; box-shadow: 0 0 0 3px #fff0b0, 0 0 0 7px #2b2340, 0 12px 30px rgba(20, 10, 50, 0.45); padding: 12px; }
+#talk[hidden] { display: none; }
+.tkFace { flex: none; width: 104px; height: 104px; border: 4px solid #e8c260; outline: 3px solid #2b2340; align-self: center; }
+.tkMain { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; } #talkName { align-self: flex-start; color: #fff; padding: 2px 12px; font-family: var(--font-display); font-weight: 400; font-size: 17px; border: 2px solid #2b2340; }
+#talkText { margin: 0; font-size: clamp(15px, 2vw, 18px); line-height: 1.55; flex: 1; } #talkBtns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; } #talkBtns button { min-height: 36px; font-size: 14px; } #talkBtns button.main { outline: 3px solid #ffd84d; }
+.tkHint { position: absolute; right: 10px; top: 8px; font-size: 11px; color: #b8862b; border: 2px solid #e8c260; padding: 0 5px; background: #fff; }
+@media (max-width: 560px) { .hvFace { width: 76px; height: 76px; } .tkFace { width: 72px; height: 72px; } }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -451,7 +487,12 @@ body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 
 <div id="storeBox" class="modalbox" hidden><div class="panel card"><h2>📦 우리 저장소</h2><div id="storeBody"></div><div class="seg"><button id="storeBuild" type="button">설치 모드 켜기</button><button id="storeClose" type="button">닫기</button></div></div></div>
 <div id="bailBox" class="modalbox" hidden><div class="panel card"><h2>🔓 면회실 · 보석금</h2><div id="bailBody"></div><div class="seg"><button id="bailClose" type="button">닫기</button></div></div></div>
 <div id="reinBox" class="modalbox" hidden><div class="panel card"><h2>🪖 전선 진지</h2><div id="reinBody"></div><div class="seg"><button id="reinAdd" type="button">충원</button><button id="reinSub" type="button">빼기</button><button id="reinClose" type="button">닫기</button></div></div></div>
-<div id="shopBox" class="modalbox" hidden><div class="panel card"><h2>🛒 하늘 거래소</h2><div id="shopBody"></div><div class="seg"><button id="shopClose" type="button">닫기</button></div></div></div>
+<div id="shopBox" class="modalbox" hidden><div class="hv"><div class="hvClouds"></div>
+  <div class="hvTop"><div class="hvFace"><canvas id="shopFace" width="120" height="120"></canvas></div><div class="hvSay"><b id="shopWho">천사 상인</b><p id="shopSay">어서 오세요!</p></div><button id="shopClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
+  <div class="hvTabs" id="shopTabs"></div><div class="hvCoin" id="shopCoin"></div><div class="hvGrid" id="shopBody"></div>
+</div></div>
+<div id="talk" hidden><div class="tkFace"><canvas id="talkFace" width="120" height="120"></canvas></div><div class="tkMain"><b id="talkName">천사</b><p id="talkText"></p><div id="talkBtns"></div></div><span class="tkHint">E</span></div>
+<div id="rulebook" class="modalbox" hidden><div class="hv book"><div class="hvClouds"></div><div class="hvTop"><h2>📜 영역전 규칙서 <small>전쟁의 천사 미카</small></h2><button id="ruleClose" class="hvX" type="button" aria-label="닫기">✕</button></div><div id="ruleBody"></div></div></div>
 <div id="coupon" hidden>
   <div class="panel card">
     <h2>쿠폰 코드</h2>
