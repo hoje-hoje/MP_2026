@@ -215,6 +215,21 @@ tr.editing td { background: #fff1b8; }
     </section>
   </div>
 
+  <section class="card" id="labCard">
+    <h2>🧪 전투 실험실 <span class="hint">예시일 뿐 게임에는 반영 안 됨 · 이 화면에서만 혼자 움직여 봐요</span></h2>
+    <div class="row">
+      <label>캐릭터 <select id="labChar"></select></label>
+      <label>적 <select id="labFoe"></select></label>
+      <label><input type="checkbox" id="labAI" checked> 적이 따라와서 공격</label>
+      <label><input type="checkbox" id="labBox"> 공격 범위 보기</label>
+      <button id="labHeal" type="button">💚 회복</button>
+    </div>
+    <div id="labWeapons" class="row"></div>
+    <canvas id="labCv" width="960" height="540" tabindex="0" style="width:100%;max-width:960px;image-rendering:pixelated;border:3px solid var(--line);background:#5b8a3c;outline:none;display:block"></canvas>
+    <p class="muted" id="labHelp">화면을 한 번 누른 다음 → <b>WASD/화살표</b> 이동 · <b>J 또는 스페이스</b> 공격 · <b>K</b> 방패(누르고 있기, 앞에서 오는 공격 80% 막음) · <b>1~6</b> 무기 바꾸기 · <b>L</b> 구르기(무적 0.3초)</p>
+    <div style="overflow:auto"><table id="labTable"></table></div>
+  </section>
+
   <section class="card danger-zone">
     <details>
       <summary>⚠ 초기화 (행사 시작 전 테스트 기록 지우기)</summary>
@@ -513,6 +528,183 @@ tr.editing td { background: #fff1b8; }
 
   if (key) load().then(start).catch(() => logout()); else logout();
 })();
+</script>
+<script type="module">
+// 🧪 전투 실험실: HP 전투가 어떤 느낌인지 보는 예시 (서버와 상관없이 이 화면에서만 돌아감)
+const P = '/assets/pixelfx/';
+const names = ['melee/sword-slash', 'melee/heavy-cleave', 'melee/thrust', 'melee/dagger-flurry', 'projectiles/arrow', 'fire/fireball', 'impacts/hit-spark', 'impacts/crit-hit', 'impacts/blunt-hit', 'impacts/shield-block', 'ui/damage-number', 'ui/crit-number', 'spawn/shatter-death', 'spawn/respawn-beam', 'holy/heal', 'spawn/poof', 'explosions/small-explosion'];
+const [core, ...mods] = await Promise.all([import(P + 'core/index.js'), ...names.map((n) => import(P + 'fx/' + n + '.js'))]);
+const FX = {}; names.forEach((n, i) => { FX[n.split('/')[1]] = mods[i]; });
+const sheet = new Image(); sheet.src = '/assets/na/chars.png';
+const CH = await fetch('/assets/na/chars.json').then((r) => r.json());
+
+// 무기: 범위는 "월드 픽셀" (캐릭터 키 = 32px). hitT = 이펙트에서 칼이 닿는 순간
+const hitsOf = (m) => ((m.act && m.act.hits) || [{ t: 0.08, stop: 0.08, shake: 0.12, amp: 2, push: 2 }]);
+const W = [
+  { key: 'sword', name: '검', fx: 'sword-slash', reach: 30, wide: 30, dmg: [9, 12], cd: 0.45, move: 0.6 },
+  { key: 'axe', name: '도끼', fx: 'heavy-cleave', reach: 38, wide: 40, dmg: [20, 26], cd: 1.15, move: 0.2 },
+  { key: 'spear', name: '창', fx: 'thrust', reach: 58, wide: 12, dmg: [11, 14], cd: 0.6, move: 0.4 },
+  { key: 'dagger', name: '단검', fx: 'dagger-flurry', reach: 22, wide: 24, dmg: [2, 3], cd: 0.8, move: 0.8 },
+  { key: 'bow', name: '활', proj: 'arrow', speed: 300, range: 230, dmg: [7, 9], cd: 0.7, move: 0.5 },
+  { key: 'magic', name: '불마법', proj: 'fireball', speed: 170, range: 200, dmg: [13, 16], cd: 1.3, move: 0.3, boom: true },
+];
+for (const w of W) w.hits = w.fx ? hitsOf(FX[w.fx]) : [{ t: 0.08 }];
+
+const VW = 480, VH = 270, cv = document.getElementById('labCv'), g = cv.getContext('2d');
+const world = document.createElement('canvas'); world.width = VW; world.height = VH; const wg = world.getContext('2d');
+const frame = core.createFrame(VW, VH), img = new ImageData(VW, VH), off = document.createElement('canvas'); off.width = VW; off.height = VH;
+let fx = [], shakeT = 0, shakeA = 0, stopT = 0, boxes = [];
+const add = (name, x, y, o = {}) => { const f = core.createFx(FX[name], Object.assign({ x, y }, o)); fx.push(f); return f; };
+
+const DIRV = [[0, 1], [0, -1], [-1, 0], [1, 0]]; // 시트 열: 0 아래 1 위 2 왼 3 오른
+function mk(name, x, y, team) { return { name, x, y, sx: x, sy: y, dir: team ? 2 : 3, hp: 100, max: 100, team, kx: 0, ky: 0, atk: null, cd: 0, inv: 0, flash: 0, dead: 0, block: false, roll: 0, walk: 0, w: 0 }; }
+const me = mk('Knight', 140, 160, 0), foe = mk('Skeleton', 340, 160, 1), dummy = mk('Statue', 300, 90, 1);
+dummy.max = dummy.hp = 300; dummy.still = true;
+const all = [me, foe, dummy];
+
+// 선택 UI
+const opt = (sel, v) => { for (const n of CH.names) sel.add(new Option(n, n)); sel.value = v; };
+opt(document.getElementById('labChar'), me.name); opt(document.getElementById('labFoe'), foe.name);
+document.getElementById('labChar').onchange = (e) => { me.name = e.target.value; cv.focus(); };
+document.getElementById('labFoe').onchange = (e) => { foe.name = e.target.value; cv.focus(); };
+for (const id of ['labAI', 'labBox']) document.getElementById(id).onchange = () => cv.focus();
+document.getElementById('labHeal').onclick = () => { me.hp = Math.min(me.max, me.hp + 40); add('heal', me.x, me.y); cv.focus(); };
+const wbox = document.getElementById('labWeapons');
+const drawW = () => { wbox.innerHTML = W.map((w, i) => `<button type="button" data-w="${i}" ${i === me.w ? 'class="primary"' : ''}>${i + 1}. ${w.name}</button>`).join(''); };
+wbox.onclick = (e) => { const b = e.target.closest('[data-w]'); if (b) { me.w = +b.dataset.w; drawW(); cv.focus(); } };
+drawW();
+document.getElementById('labTable').innerHTML = '<tr><th>무기</th><th>데미지</th><th>범위(px)</th><th>재사용</th><th>초당 데미지</th><th>공격 중 이동</th></tr>' + W.map((w) => {
+  const n = w.hits.length, avg = (w.dmg[0] + w.dmg[1]) / 2 * n;
+  return `<tr><td>${w.name}</td><td>${w.dmg[0]}~${w.dmg[1]}${n > 1 ? ' × ' + n + '번' : ''}</td><td>${w.proj ? '날아감 ' + w.range : '앞 ' + w.reach + ' × 폭 ' + w.wide}</td><td>${w.cd}초</td><td>${(avg / w.cd).toFixed(1)}</td><td>${Math.round(w.move * 100)}%</td></tr>`;
+}).join('') + '<tr><td colspan="6" class="muted">치명타 10% (×1.8) · 맞으면 0.35초 무적 + 밀려남 · 방패: 앞에서 오는 공격 80% 막음(이동 40%) · HP 100 (허수아비 300) · 죽으면 2.5초 뒤 부활</td></tr>';
+
+const keys = new Set();
+cv.addEventListener('keydown', (e) => { keys.add(e.key.toLowerCase()); if (/^[1-6]$/.test(e.key)) { me.w = +e.key - 1; drawW(); } if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault(); });
+cv.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+cv.addEventListener('blur', () => keys.clear());
+cv.addEventListener('pointerdown', () => cv.focus());
+
+function body(e) { return { x: e.x - 8, y: e.y - 26, w: 16, h: 26 }; }
+const hit2 = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+function zone(e, w) { // 공격 범위: 바라보는 쪽 앞의 네모
+  const [dx, dy] = DIRV[e.dir], cy = e.y - 13;
+  if (dx) return { x: dx > 0 ? e.x + 4 : e.x - 4 - w.reach, y: cy - w.wide / 2, w: w.reach, h: w.wide };
+  return { x: e.x - w.wide / 2, y: dy > 0 ? e.y - 4 : cy - 9 - w.reach, w: w.wide, h: w.reach };
+}
+function startAttack(e) {
+  const w = W[e.w]; if (e.cd > 0 || e.atk || e.dead || e.roll > 0) return;
+  e.cd = w.cd; e.atk = { w, t: 0, done: 0 }; const [dx, dy] = DIRV[e.dir];
+  const ang = dy ? (dy > 0 ? Math.PI / 2 : -Math.PI / 2) : 0, flip = dx < 0;
+  if (w.fx) add(w.fx, e.x + dx * 2, e.y - (dy ? 13 : 0), { flip, angle: ang });
+}
+function damage(src, t, w, hitInfo) {
+  if (t.dead || t.inv > 0 || t.roll > 0) return;
+  let n = Math.round(w.dmg[0] + Math.random() * (w.dmg[1] - w.dmg[0])); const crit = Math.random() < 0.1; if (crit) n = Math.round(n * 1.8);
+  const fromX = Math.sign(src.x - t.x), fromY = Math.sign(src.y - t.y), [fx2, fy2] = DIRV[t.dir];
+  const blocked = t.block && (fx2 === fromX && fx2 !== 0 || fy2 === fromY && fy2 !== 0);
+  if (blocked) { n = Math.max(1, Math.round(n * 0.2)); add('shield-block', t.x, t.y, { flip: fromX < 0 }); }
+  t.hp -= n; t.inv = w.hits.length > 1 ? 0.04 : 0.35; t.flash = 0.1;
+  const push = Math.abs(hitInfo.push ?? 2) * (blocked ? 25 : w.hits.length > 1 ? 8 : 60), dx = t.x - src.x, dy = t.y - src.y, L = Math.hypot(dx, dy) || 1;
+  t.kx = dx / L * push; t.ky = dy / L * push;
+  stopT = Math.max(stopT, hitInfo.stop ?? 0.06); if (hitInfo.shake) { shakeT = hitInfo.shake; shakeA = hitInfo.amp || 2; }
+  if (!blocked) add(crit ? 'crit-hit' : w.key === 'axe' ? 'blunt-hit' : 'hit-spark', t.x, t.y - 4, { flip: dx < 0 });
+  add(crit ? 'crit-number' : 'damage-number', t.x, t.y - 30, { text: crit ? n + '!' : '-' + n, seed: (Math.random() * 99) | 0 });
+  if (t.hp <= 0) { t.hp = 0; t.dead = 2.5; t.atk = null; add('shatter-death', t.x, t.y); }
+}
+const projs = [];
+function step(dt) {
+  // 내 조작
+  if (!me.dead) {
+    let mx = (keys.has('d') || keys.has('arrowright')) - (keys.has('a') || keys.has('arrowleft')), my = (keys.has('s') || keys.has('arrowdown')) - (keys.has('w') || keys.has('arrowup'));
+    me.block = keys.has('k') && !me.atk;
+    if (keys.has('j') || keys.has(' ')) startAttack(me);
+    if (keys.has('l') && me.roll <= 0 && me.cd <= 0 && (mx || my)) { me.roll = 0.3; me.cd = 0.5; me.rx = mx; me.ry = my; }
+    moveE(me, mx, my, dt);
+  }
+  // 적: 따라와서 칼질
+  if (!foe.dead && document.getElementById('labAI').checked && !me.dead) {
+    const dx = me.x - foe.x, dy = me.y - foe.y, ad = Math.abs(dx) > Math.abs(dy);
+    foe.w = 0; const close = Math.abs(dx) < 34 && Math.abs(dy) < 14 || Math.abs(dy) < 34 && Math.abs(dx) < 12;
+    if (close) { foe.dir = ad ? (dx > 0 ? 3 : 2) : (dy > 0 ? 0 : 1); foe.think = (foe.think || 0) - dt; if (foe.think <= 0) { startAttack(foe); foe.think = 1.1; } moveE(foe, 0, 0, dt); }
+    else moveE(foe, Math.sign(dx) * (Math.abs(dx) > 10 ? 1 : 0), Math.sign(dy) * (Math.abs(dy) > 4 ? 1 : 0), dt, 0.55);
+  } else moveE(foe, 0, 0, dt);
+  moveE(dummy, 0, 0, dt);
+  for (const e of all) {
+    e.cd = Math.max(0, e.cd - dt); e.inv = Math.max(0, e.inv - dt); e.flash = Math.max(0, e.flash - dt);
+    if (e.dead) { e.dead -= dt; if (e.dead <= 0) { e.dead = 0; e.hp = e.max; e.x = e.sx; e.y = e.sy; e.inv = 1; add('respawn-beam', e.x, e.y); } continue; }
+    if (e.atk) {
+      const a = e.atk; a.t += dt;
+      while (a.done < a.w.hits.length && a.t >= a.w.hits[a.done].t) {
+        const h = a.w.hits[a.done++];
+        if (a.w.proj) { const [dx, dy] = DIRV[e.dir]; projs.push({ w: a.w, src: e, x: e.x + dx * 10, y: e.y - 14 + dy * 6, dx, dy, d: 0, f: add(a.w.proj, e.x, e.y - 14, { flip: dx < 0, angle: dy ? (dy > 0 ? Math.PI / 2 : -Math.PI / 2) : 0 }) }); }
+        else { const z = zone(e, a.w); boxes.push({ z, t: 0.15 }); for (const t of all) if (t !== e && t.team !== e.team && hit2(z, body(t))) damage(e, t, a.w, h); }
+      }
+      if (a.t > Math.max(0.3, a.w.hits[a.w.hits.length - 1].t + 0.12)) e.atk = null;
+    }
+  }
+  for (const p of projs) {
+    const s = p.w.speed * dt; p.x += p.dx * s; p.y += p.dy * s; p.d += s; p.f.options.x = p.x; p.f.options.y = p.y;
+    const pb = { x: p.x - 3, y: p.y - 3, w: 6, h: 6 };
+    for (const t of all) if (t !== p.src && t.team !== p.src.team && !t.dead && hit2(pb, body(t))) { damage(p.src, t, p.w, { push: p.w.boom ? 3 : 1.4, stop: 0.05, shake: p.w.boom ? 0.2 : 0, amp: 2 }); if (p.w.boom) add('small-explosion', p.x, p.y + 10); p.d = 1e9; break; }
+    if (p.d >= p.w.range || p.x < 0 || p.x > VW || p.y < 0 || p.y > VH) { if (p.d < 1e9) add('poof', p.x, p.y + 6); p.dead = true; fx = fx.filter((f) => f !== p.f); }
+  }
+  for (let i = projs.length - 1; i >= 0; i--) if (projs[i].dead || projs[i].d >= 1e9) { fx = fx.filter((f) => f !== projs[i].f); projs.splice(i, 1); }
+}
+function moveE(e, mx, my, dt, speedK = 1) {
+  if (e.dead) return;
+  let sp = 72 * speedK;
+  if (e.atk) sp *= e.atk.w.move; if (e.block) sp *= 0.4;
+  if (e.roll > 0) { e.roll -= dt; mx = e.rx; my = e.ry; sp = 190; }
+  if ((mx || my) && !e.still) { const L = Math.hypot(mx, my); e.x += mx / L * sp * dt; e.y += my / L * sp * dt; e.walk += dt; if (!e.atk && e.roll <= 0 && !e.block) e.dir = Math.abs(mx) >= Math.abs(my) && mx ? (mx > 0 ? 3 : 2) : (my > 0 ? 0 : 1); } else e.walk = 0;
+  e.x += e.kx * dt; e.y += e.ky * dt; e.kx *= Math.pow(0.0005, dt); e.ky *= Math.pow(0.0005, dt);
+  e.x = Math.max(10, Math.min(VW - 10, e.x)); e.y = Math.max(30, Math.min(VH - 4, e.y));
+}
+function drawE(e) {
+  if (e.dead) return;
+  const k = Math.max(0, CH.names.indexOf(e.name)), row = e.atk ? 4 : e.walk > 0 ? Math.floor(e.walk * 8) % 4 : 0;
+  wg.fillStyle = 'rgba(0,0,0,.25)'; wg.beginPath(); wg.ellipse(e.x, e.y, 9, 3, 0, 0, 7); wg.fill();
+  if (e.inv > 0 && e.inv < 0.9 && Math.floor(e.inv * 20) % 2 && !e.flash) wg.globalAlpha = 0.5;
+  if (e.flash > 0) wg.filter = 'brightness(4)';
+  if (e.roll > 0) { wg.save(); wg.translate(e.x, e.y - 12); wg.rotate((0.3 - e.roll) / 0.3 * Math.PI * 2 * (e.rx < 0 ? -1 : 1)); wg.drawImage(sheet, (k % CH.cols) * 64 + e.dir * 16, Math.floor(k / CH.cols) * 112, 16, 16, -16, -16, 32, 32); wg.restore(); }
+  else wg.drawImage(sheet, (k % CH.cols) * 64 + e.dir * 16, Math.floor(k / CH.cols) * 112 + row * 16, 16, 16, Math.round(e.x - 16), Math.round(e.y - 30), 32, 32);
+  wg.filter = 'none'; wg.globalAlpha = 1;
+  if (e.block) { const [dx, dy] = DIRV[e.dir]; wg.fillStyle = '#9fd3ff'; wg.fillRect(Math.round(e.x + dx * 11 - (dx ? 1 : 7)), Math.round(e.y - 14 + dy * 9 - (dy ? 1 : 7)), dx ? 3 : 14, dx ? 14 : 3); }
+  // HP 바
+  const bw = 24, r = e.hp / e.max; wg.fillStyle = '#1b1430'; wg.fillRect(Math.round(e.x - bw / 2 - 1), Math.round(e.y - 36), bw + 2, 5);
+  wg.fillStyle = r > 0.5 ? '#5ad16a' : r > 0.25 ? '#ffd34d' : '#ff5a4a'; wg.fillRect(Math.round(e.x - bw / 2), Math.round(e.y - 35), Math.round(bw * r), 3);
+}
+let last = performance.now();
+function loop(now) {
+  let dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (stopT > 0) { stopT -= dt; dt = 0; } // 맞는 순간 아주 잠깐 멈춤 (손맛)
+  step(dt);
+  // 땅
+  wg.fillStyle = '#5b8a3c'; wg.fillRect(0, 0, VW, VH);
+  wg.fillStyle = '#527f35'; for (let y = 0; y < VH; y += 16) for (let x = (y / 16 % 2) * 16; x < VW; x += 32) wg.fillRect(x, y, 16, 16);
+  wg.fillStyle = 'rgba(255,255,255,.7)'; wg.font = '10px Galmuri11, sans-serif'; wg.fillText('허수아비 (HP 300)', dummy.sx - 38, dummy.sy + 14);
+  const order = [...all].sort((a, b) => a.y - b.y);
+  for (const e of order) drawE(e);
+  if (document.getElementById('labBox').checked) {
+    wg.strokeStyle = 'rgba(255,255,255,.6)'; for (const e of all) if (!e.dead) { const b = body(e); wg.strokeRect(b.x + 0.5, b.y + 0.5, b.w, b.h); }
+    wg.strokeStyle = '#ff3b3b'; for (const b of boxes) wg.strokeRect(b.z.x + 0.5, b.z.y + 0.5, b.z.w, b.z.h);
+    if (!me.dead) { const z = zone(me, W[me.w].fx ? W[me.w] : { reach: W[me.w].range, wide: 6 }); wg.strokeStyle = 'rgba(255,211,77,.5)'; wg.strokeRect(z.x + 0.5, z.y + 0.5, z.w, z.h); }
+  }
+  boxes = boxes.filter((b) => (b.t -= dt) > 0);
+  // pixelfx
+  core.clearFrame(frame);
+  for (const f of fx) { f.update(dt); f.draw(frame); }
+  fx = fx.filter((f) => !f.done || !f.done());
+  core.composite(frame, img.data, null); off.getContext('2d').putImageData(img, 0, 0); wg.drawImage(off, 0, 0);
+  wg.fillStyle = '#fff'; wg.fillText(`무기: ${W[me.w].name}   HP ${me.hp}/${me.max}${me.dead ? '   (부활 중…)' : ''}`, 6, 12);
+  // 화면 흔들림
+  let ox = 0, oy = 0; if (shakeT > 0) { shakeT -= dt; ox = (Math.random() * 2 - 1) * shakeA; oy = (Math.random() * 2 - 1) * shakeA; }
+  g.imageSmoothingEnabled = false; g.fillStyle = '#5b8a3c'; g.fillRect(0, 0, cv.width, cv.height);
+  g.drawImage(world, Math.round(ox * 2), Math.round(oy * 2), VW * 2, VH * 2);
+  if (document.activeElement !== cv) { g.fillStyle = 'rgba(27,20,48,.55)'; g.fillRect(0, cv.height - 34, cv.width, 34); g.fillStyle = '#fff'; g.font = '16px Galmuri11, sans-serif'; g.fillText('화면을 눌러서 조작 시작', 12, cv.height - 12); }
+  requestAnimationFrame(loop);
+}
+sheet.decode().then(() => requestAnimationFrame(loop));
+window.LAB = { me, foe, dummy, W, startAttack, fx: () => fx.length };
 </script>
 </body>
 </html>
