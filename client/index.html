@@ -131,13 +131,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 .shopItem small { color: var(--muted); font-size: 11px; }
 .shopItem .seg { display: flex; gap: 4px; flex: none; }
 .shopItem button { min-height: 36px; font-size: 13px; }
-#buildBar { left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 4px; align-items: center; padding: 6px 10px; max-width: calc(100vw - 32px); }
-#buildBar .r { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; font-size: 13px; }
-#buildBar .r[hidden] { display: none; }
-#buildColors button { min-height: 30px; min-width: 44px; font-size: 12px; color: #fff; border: 3px solid #2b2340; border-image: none; text-shadow: 0 1px 0 #000; padding: 0 6px; }
 #buildBar[hidden] { display: none; }
-#buildBar button { min-height: 36px; font-size: 13px; }
-#buildBar button[aria-pressed="true"] { filter: brightness(1.25); outline: 3px solid #ffd34d; }
 #prompt { cursor: pointer; touch-action: none; }
 #coupon { position: fixed; z-index: 20; inset: 0; background: rgba(27, 20, 48, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #coupon .panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; width: min(380px, 100%); }
@@ -388,6 +382,23 @@ body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 
 #talkText { margin: 0; font-size: clamp(15px, 2vw, 18px); line-height: 1.55; flex: 1; } #talkBtns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; } #talkBtns button { min-height: 36px; font-size: 14px; } #talkBtns button.main { outline: 3px solid #ffd84d; }
 .tkHint { position: absolute; right: 10px; top: 8px; font-size: 11px; color: #b8862b; border: 2px solid #e8c260; padding: 0 5px; background: #fff; }
 @media (max-width: 560px) { .hvFace { width: 76px; height: 76px; } .tkFace { width: 72px; height: 72px; } }
+
+/* 설치 모드 (G): 쿠킹덤식 보관함 */
+#buildBar { position: fixed; z-index: 7; left: 50%; transform: translateX(-50%); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: min(980px, calc(100vw - 16px)); display: flex; flex-direction: column; gap: 0; }
+#buildBar[hidden] { display: none; }
+.bbTop { align-self: center; display: flex; gap: 8px; align-items: center; background: #fffaf0; border: 3px solid #b8862b; border-bottom: 0; padding: 6px 10px; box-shadow: 0 0 0 3px #2b2340; font-size: 13px; color: #5a3d10; flex-wrap: wrap; justify-content: center; }
+.bbTop b { font-family: var(--font-display); font-weight: 400; font-size: 18px; } .bbShapes { display: flex; gap: 4px; } .bbTop button { min-height: 32px; font-size: 13px; padding: 0 9px; } .bbTop button[aria-pressed="true"] { outline: 3px solid #ffd84d; } .bbTop button:disabled { opacity: 0.4; } .bbHint { color: #8a7f9a; font-size: 12px; }
+.bbTray { min-width: 0; background: linear-gradient(180deg, #cfeaff, #eef7ff); border: 4px solid #b8862b; box-shadow: 0 0 0 3px #fff0b0, 0 0 0 6px #2b2340, 0 10px 24px rgba(20, 10, 50, 0.35); padding: 6px 8px 8px; }
+.bbTabs { display: flex; gap: 6px; margin-bottom: 6px; } .bbTabs button { min-height: 30px; font-size: 13px; padding: 0 12px; background: #e9f3ff !important; color: #3d5fb8 !important; border: 2px solid #7fa6ec !important; border-image: none !important; border-radius: 999px; box-shadow: none !important; }
+.bbTabs button[aria-pressed="true"] { background: #3d5fb8 !important; color: #fff !important; border-color: #2b2340 !important; }
+.bbList { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: thin; }
+.bbCard { position: relative; flex: none; width: 92px; min-height: 0; padding: 4px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; background: #fffaf0 !important; color: #2b2340 !important; border: 3px solid #e8c260 !important; border-image: none !important; box-shadow: 0 3px 0 #b8862b !important; }
+.bbCard canvas { width: 64px; height: 64px; image-rendering: pixelated; } .bbCard span { font-size: 11px; line-height: 1.2; text-align: center; min-height: 2.4em; }
+.bbCard i { position: absolute; right: 4px; top: 4px; font-style: normal; font-size: 12px; min-width: 20px; padding: 0 4px; background: #3d5fb8; color: #fff; border: 2px solid #2b2340; border-radius: 999px; }
+.bbCard em { position: absolute; left: 4px; top: 4px; font-style: normal; font-size: 10px; color: #b8862b; }
+.bbCard.none { opacity: 0.45; } .bbCard.none i { background: #8a7f9a; } .bbCard[aria-pressed="true"] { outline: 4px solid #ffd84d; transform: translateY(-4px); }
+.bbEmpty { margin: 8px; color: #6b6280; }
+body.building #prompt { bottom: calc(250px + env(safe-area-inset-bottom, 0px)); } body.building #chat, body.building #mini, body.building #zoomBox { display: none; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -481,9 +492,8 @@ body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 
   </div>
 </div>
 
-<div id="buildBar" class="hud card" hidden><div class="r"><b>설치 모드</b><button data-k="floor" type="button">▦ 바닥 <small>0</small></button><button data-k="wall" type="button">🧱 방벽 <small>0</small></button><button data-k="trap" type="button">🪤 덫 <small>0</small></button><button id="buildOff" type="button">끄기 (G)</button></div>
-<div class="r"><span>모양</span><button data-shape="1" type="button">1칸</button><button data-shape="h3" type="button">가로 3칸</button><button data-shape="v3" type="button">세로 3칸</button><button data-shape="s3" type="button">3×3</button></div>
-<div class="r" id="buildColors"></div></div>
+<div id="buildBar" hidden><div class="bbTop"><b>🏗 설치 모드</b><span class="bbShapes"><button data-shape="1" type="button">1칸</button><button data-shape="h3" type="button">가로 3</button><button data-shape="v3" type="button">세로 3</button><button data-shape="s3" type="button">3×3</button></span><span class="bbHint">바로 앞 칸에 E · 우리 땅만</span><button id="buildOff" type="button">끄기 (G)</button></div>
+<div class="bbTray"><div class="bbTabs" id="bbTabs"></div><div class="bbList" id="bbList"></div></div></div>
 <div id="storeBox" class="modalbox" hidden><div class="panel card"><h2>📦 우리 저장소</h2><div id="storeBody"></div><div class="seg"><button id="storeBuild" type="button">설치 모드 켜기</button><button id="storeClose" type="button">닫기</button></div></div></div>
 <div id="bailBox" class="modalbox" hidden><div class="panel card"><h2>🔓 면회실 · 보석금</h2><div id="bailBody"></div><div class="seg"><button id="bailClose" type="button">닫기</button></div></div></div>
 <div id="reinBox" class="modalbox" hidden><div class="panel card"><h2>🪖 전선 진지</h2><div id="reinBody"></div><div class="seg"><button id="reinAdd" type="button">충원</button><button id="reinSub" type="button">빼기</button><button id="reinClose" type="button">닫기</button></div></div></div>

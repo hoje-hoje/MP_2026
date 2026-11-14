@@ -99,7 +99,7 @@ const TERR = new Uint16Array(Buffer.from(MAP.territory_u16le_b64, 'base64').buff
 const terrAtPx = (x, y) => { const tx = Math.floor(x / 32), ty = Math.floor(y / 32); if (tx < 0 || ty < 0 || tx >= MAP.width || ty >= MAP.height) return -1; const v = TERR[ty * MAP.width + tx]; return v === 65535 ? -1 : v; };
 const world = new World(MAP, state.world || null);
 const MPRules = require('../client/rules.js');
-const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT } = MPRules;
+const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT, BUILD_BY, normItems, tileItem } = MPRules;
 const MPRulesPortal = (t) => MPRules.portalSpot(t, tileAt);
 { const NM = MPRules.nameAll(MAP.territories); for (const t of MAP.territories) world.t[t.id].name = NM[t.id]; } // 알림에 쓰는 영토 이름 (겹치지 않게)
 world.tileTerr = (i) => terrAtTile(i % MAP.width, Math.floor(i / MAP.width)); // 영역이 넘어갈 때 그 땅의 설치물도 같이
@@ -601,23 +601,23 @@ wss.on('connection', (ws) => {
         const item = String(m.item), cnt = Math.max(1, Math.min(50, m.n | 0));
         let cost, label;
         if (item === 'vaccine') { cost = NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0); label = '백신 1개'; }
-        else if (NUM.price[item]) { cost = NUM.price[item] * cnt; label = `${{ floor: '바닥', wall: '방벽', trap: '덫' }[item]} ${cnt}개`; }
+        else if (BUILD_BY[item]) { cost = NUM.price[BUILD_BY[item].cat] * cnt; label = `${BUILD_BY[item].name} ${cnt}개`; }
         else return;
         if (n.coin < cost) return send(ws, { t: 'err', text: `우리 저장소 코인이 ${cost - n.coin} 모자라요` });
         n.coin -= cost;
         if (item === 'vaccine') { n.vaccine = (n.vaccine || 0) + 1; n.vaccBought = (n.vaccBought || 0) + 1; }
-        else { n.items = n.items || {}; n.items[item] = (n.items[item] || 0) + cnt; }
+        else { n.items = normItems(n.items); n.items[item] = (n.items[item] || 0) + cnt; }
         dirty = true; sendViews([n.id]);
         notifyNation(n.id, `🛒 ${s.acc.name}님이 ${label} 구매 (코인 −${cost})`);
         break;
       }
-      case 'place': case 'pickup': { // 우리 땅에 바닥·방벽·덫 놓기 / 거두기. 바닥·방벽은 한 번에 최대 9칸 (1칸·가로3·세로3·3×3)
+      case 'place': case 'pickup': { // 우리 땅에 건축물 놓기 / 거두기. 바닥·벽은 한 번에 최대 9칸 (1칸·가로3·세로3·3×3)
         const n = world.nationOfPlayer(s.token); if (!n) return send(ws, { t: 'err', text: '나라가 있어야 설치할 수 있어요' });
-        const k = ['floor', 'wall', 'trap'].includes(m.k) ? m.k : null;
+        const B = BUILD_BY[String(m.id || '')] || (m.k === 'trap' ? BUILD_BY.trap : null), k = B ? B.cat : null; // k: floor·wall·deco·trap
         let list = Array.isArray(m.tiles) ? m.tiles.slice(0, 9) : [[m.x, m.y]];
-        if (k === 'trap' && m.t === 'place') list = list.slice(0, 1);
+        if ((k === 'trap' || k === 'deco') && m.t === 'place') list = list.slice(0, 1);
         list = list.map((p) => [p[0] | 0, p[1] | 0]);
-        n.items = n.items || {};
+        n.items = normItems(n.items);
         let done = 0, why = '';
         for (const [x, y] of list) {
           const i = tileIdx(x, y);
@@ -625,27 +625,39 @@ wss.on('connection', (ws) => {
           if (world.ownerOf(terrAtTile(x, y)) !== n.id) { why = '우리 나라 땅에만 놓을 수 있어요'; continue; }
           if (m.t === 'pickup') {
             const e = world.s.tiles[i];
-            if (e && e.n === n.id) { delete world.s.tiles[i]; n.items[e.k] = (n.items[e.k] || 0) + 1; sendTile(i); done++; }
+            if (e && e.n === n.id) { const id = tileItem(e); delete world.s.tiles[i]; if (id) n.items[id] = (n.items[id] || 0) + 1; sendTile(i); done++; }
             else if (world.s.traps[i] === n.id) { delete world.s.traps[i]; n.items.trap = (n.items.trap || 0) + 1; sendTrap(n.id, i, false); done++; }
             continue;
           }
           if (!k) return;
-          if (!(n.items[k] > 0)) { why = '저장소에 남은 게 없어요 (하늘 거래소에서 사요)'; break; }
+          if (!(n.items[B.id] > 0)) { why = '저장소에 남은 게 없어요 (하늘 건축 상점에서 사요)'; break; }
           if (!walkableTerrain(tileAt(x, y)) || treeHere(x, y) && !world.s.chopped[i]) { why = '놓을 수 없는 칸이 있어요'; continue; }
           if (reservedTile(x, y)) { why = '제단·포털·저장소 바로 옆엔 못 놓아요'; continue; }
-          const cur = world.s.tiles[i];
-          if (world.s.traps[i] || (cur && !(k === 'floor' && cur.k === 'floor' && cur.n === n.id))) { why = '이미 뭔가 놓인 칸이 있어요'; continue; }
-          if (k === 'wall' && Object.values(world.s.tiles).filter((e) => e.n === n.id && e.k === 'wall').length >= NUM.maxWalls) { why = `방벽은 나라당 ${NUM.maxWalls}개까지예요`; break; }
+          const cur = world.s.tiles[i], mineFloor = cur && cur.k === 'floor' && cur.n === n.id;
+          if (world.s.traps[i] || (cur && !(k === 'floor' && mineFloor))) { why = '이미 뭔가 놓인 칸이 있어요'; continue; }
+          if (k === 'wall' && Object.values(world.s.tiles).filter((e) => e.n === n.id && e.k === 'wall').length >= NUM.maxWalls) { why = `벽·기둥은 나라당 ${NUM.maxWalls}개까지예요`; break; }
+          if (k === 'deco' && Object.values(world.s.tiles).filter((e) => e.n === n.id && e.k === 'deco').length >= NUM.maxDeco) { why = `장식은 나라당 ${NUM.maxDeco}개까지예요`; break; }
           if (k === 'trap' && trapsOf(n.id).length >= NUM.maxTraps) { why = `덫은 나라당 ${NUM.maxTraps}개까지예요`; break; }
           if (k === 'wall' && [...online.values()].some((o) => o.scene === 'ground' && o.x != null && Math.floor(o.x / 32) === x && Math.floor(o.y / 32) === y)) { why = '사람이 서 있는 칸은 빼고 놓았어요'; continue; }
-          if (cur) { cur.c = Math.max(0, Math.min(5, m.c | 0)); sendTile(i); continue; } // 우리 바닥 위에 바닥: 색만 바꿈 (무료)
-          n.items[k]--; done++;
+          if (mineFloor) { const old = tileItem(cur); if (old === B.id) continue; n.items[old] = (n.items[old] || 0) + 1; } // 우리 바닥 위에 다른 디자인: 바꿔 깔기 (원래 바닥은 돌려받음)
+          n.items[B.id]--; done++;
           if (k === 'trap') { world.s.traps[i] = n.id; sendTrap(n.id, i, true); }
-          else { world.s.tiles[i] = k === 'floor' ? { k, n: n.id, c: Math.max(0, Math.min(5, m.c | 0)) } : { k, n: n.id }; sendTile(i); }
+          else { world.s.tiles[i] = k === 'wall' ? { k, n: n.id, id: B.id, hp: NUM.buildHp } : { k, n: n.id, id: B.id }; sendTile(i); }
         }
         if (done || m.t === 'place') { dirty = true; sendViews([n.id]); }
         if (!done && why) send(ws, { t: 'err', text: why });
         else if (done && why && list.length > 1) send(ws, { t: 'ok', text: `${done}칸 ${m.t === 'pickup' ? '거둠' : '놓음'} · ${why}` });
+        break;
+      }
+      case 'hitB': { // 남의 벽·기둥 때리기: 한 번에 내구도 −10, 0이 되면 부서짐 (내구도는 맞을 때만 보임)
+        const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y), e = world.s.tiles[i];
+        const n = world.nationOfPlayer(s.token);
+        if (!e || e.k !== 'wall' || (n && n.id === e.n) || !nextTo(s, x, y)) return;
+        if (now() - (s.lastHitB || 0) < NUM.hitCdMs) return; s.lastHitB = now();
+        if (now() - (s.lastBreakAlert || 0) > 15000) { s.lastBreakAlert = now(); notifyNation(e.n, `🧱 ${(BUILD_BY[tileItem(e)] || {}).name || '벽'}이(가) 공격받고 있어요! (${(world.t[terrAtTile(x, y)] || {}).name} · ${n ? n.name + '의 ' : ''}${s.acc.name})`); }
+        e.hp = (e.hp ?? NUM.buildHp) - NUM.hitDmg; dirty = true;
+        if (e.hp <= 0) { delete world.s.tiles[i]; sendTile(i); notifyNation(e.n, `🧱 ${(world.t[terrAtTile(x, y)] || {}).name}의 ${(BUILD_BY[tileItem(e)] || {}).name || '벽'}이(가) 부서졌어요!`); send(ws, { t: 'ok', text: '부쉈어요!' }); }
+        else sendTile(i);
         break;
       }
       case 'moveB': { // 설치 모드: 우리 저장소·우리 땅 금광 옮기기

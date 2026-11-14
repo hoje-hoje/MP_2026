@@ -508,7 +508,7 @@
             break;
         }
         { const gf = GFLOOR.get(y * W + x); if (gf) drawSheetTile(g, gf, px, py, TILE, x * TILE, y * TILE); } // 관리자가 깐 타일
-        { const e = TILES[y * W + x]; if (e && e.k === 'floor') g.drawImage(floorArt(e.c | 0), px, py, TILE, TILE); }
+        { const e = TILES[y * W + x]; if (e && e.k === 'floor') g.drawImage(floorArtId(tileItem(e)), px, py, TILE, TILE); }
         // 영토 색 + 국경선: 우리 나라는 진하게, 경계는 우리 나라 색 띠 / 나머지 경계는 흰 선
         const o = terrAt(x, y);
         const own = o > 0 ? ownerOf(o) : null;
@@ -822,7 +822,7 @@
   // ------------------------------------------------------------ NPC 말 걸기 (대화창) · 천상 상점 · 영역전 규칙서
   const NPCS = {
     priest: { name: '신의 사제 루미엘', ch: 'Monk', color: '#6b4fb3', lines: ['어서 오세요, 하늘 신전에.', '신탁 제단에 신들의 말씀이 내려와요. 멸망이 선포되면 균열이 어디를 삼킬지 알려 주지요.', '땅으로 내려가려면 남쪽 구름 문으로 가세요. 올라온 수도로 돌아가요.'] },
-    build: { name: '건축 천사 아라엘', ch: 'Woman', color: '#3d5fb8', shop: 'build', lines: ['어서 와요! 바닥·방벽·덫이 다 있어요.', '산 물건은 나라 저장소로 바로 가요. 설치 모드(G)로 우리 땅에 놓아요.'] },
+    build: { name: '건축 천사 아라엘', ch: 'Woman', color: '#3d5fb8', shop: 'build', lines: ['어서 와요! 천상·숲·겨울·돌 테마로 바닥·벽·기둥·장식이 있어요.', '테마는 모양만 달라요. 효과는 종류마다 똑같아요!', '산 물건은 나라 저장소로 바로 가요. 설치 모드(G)로 우리 땅에 놓아요.', '벽과 기둥은 내구도가 100이에요. 적이 때리면 조금씩 닳아요.'] },
     vaccine: { name: '치유 천사 세라', ch: 'Princess', color: '#d64f86', shop: 'vaccine', lines: ['균열이 무서운가요? 백신 하나면 영토 하나를 지킬 수 있어요.', '많이 살수록 비싸져요. 꼭 필요한 만큼만!'] },
     seed: { name: '정원 천사 플로라', ch: 'Villager2', color: '#3fa37a', shop: 'seed', lines: ['씨앗이랑 비료는 곧 들어와요!', '조금만 기다려 줘요. 밭을 갈 준비를 해 두세요.'] },
     war: { name: '전쟁의 천사 미카', ch: 'KnightGold', color: '#c22f53', rules: true, lines: ['나는 전쟁의 규칙을 지키는 천사.', '3일차부터 영역전이 열린다. 그때 규칙서를 보여 주지.'] },
@@ -881,7 +881,8 @@
   function renderShop() {
     const me = myView && myView.me; if (!me) return;
     const P = MPRules.NUM.price;
-    const tabs = SHOP_KIND === 'build' ? [['all', '전체'], ['floor', '▦ 바닥'], ['wall', '🧱 방벽'], ['trap', '🪤 덫']] : [];
+    const tabs = SHOP_KIND === 'build' ? [['heaven', '☁ 천상'], ['forest', '🌲 숲'], ['winter', '❄ 겨울'], ['stone', '🪨 돌'], ['trap', '🪤 덫']] : [];
+    if (SHOP_KIND === 'build' && !tabs.some(([k]) => k === SHOP_TAB)) SHOP_TAB = 'heaven';
     $('shopTabs').hidden = !tabs.length;
     $('shopTabs').innerHTML = tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === SHOP_TAB}">${l}</button>`).join('');
     for (const b of $('shopTabs').querySelectorAll('[data-tab]')) b.onclick = () => { SHOP_TAB = b.dataset.tab; renderShop(); };
@@ -889,11 +890,14 @@
     const card = (k, name, desc, price, counts, have) => `<div class="hvCard"><canvas data-ico="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${name}</b><small>${desc}</small>${have != null ? `<i>가진 것 ${have}개</i>` : ''}</div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${price.toLocaleString()}${counts ? '<small>/개</small>' : ''}</span><div>${(counts || [1]).map((c) => `<button type="button" data-buy="${k}" data-n="${c}" ${me.coin < price * c ? 'disabled' : ''}>${counts ? c + '개' : '사기'}</button>`).join('')}</div></div></div>`;
     let html = '';
     const want = (k) => SHOP_TAB === 'all' || SHOP_TAB === k;
-    if (SHOP_KIND === 'build') html = (want('floor') ? card('floor', '황금 바닥', '우리 국민이 1.5배 빨라져요', P.floor, [1, 5, 20], me.items.floor) : '') + (want('wall') ? card('wall', '방벽', '다른 나라 사람을 막아요 (5초 맞으면 부서짐)', P.wall, [1, 5, 10], me.items.wall) : '') + (want('trap') ? card('trap', '덫', '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임', P.trap, [1, 3], me.items.trap) : '');
+    const CAT_DESC = { floor: '우리 국민이 1.5배 빨라져요', wall: `다른 나라 사람을 막아요 · 내구도 ${MPRules.NUM.buildHp}`, deco: '꾸미기 · 밟고 지나갈 수 있어요', trap: '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임' };
+    const CNT = { floor: [1, 5, 20], wall: [1, 5, 10], deco: [1, 5], trap: [1, 3] };
+    if (SHOP_KIND === 'build') html = MPRules.BUILD.filter((b) => (SHOP_TAB === 'trap' ? b.cat === 'trap' : b.theme === SHOP_TAB && b.cat !== 'trap')).map((b) => card(b.id, b.name, CAT_DESC[b.cat], P[b.cat], CNT[b.cat], me.items[b.id] || 0)).join('');
+    else if (false) html = (want('floor') ? card('floor', '황금 바닥', '우리 국민이 1.5배 빨라져요', P.floor, [1, 5, 20], me.items.floor) : '') + (want('wall') ? card('wall', '방벽', '다른 나라 사람을 막아요 (5초 맞으면 부서짐)', P.wall, [1, 5, 10], me.items.wall) : '') + (want('trap') ? card('trap', '덫', '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임', P.trap, [1, 3], me.items.trap) : '');
     else if (SHOP_KIND === 'vaccine') html = card('vaccine', '백신', '균열에서 영토 하나를 지켜요 · 살수록 비싸져요', me.vaccinePrice, null, me.vaccine);
     else html = `<div class="hvSoon">${ICON.seed ? '<canvas data-ico="seed" width="64" height="64"></canvas>' : ''}<p><b>씨앗·비료는 곧 들어와요!</b><br>농사가 열리면 여기서 씨앗을 사고, 비료를 뿌리면 2배로 빨리 자라요.</p></div>`;
     $('shopBody').innerHTML = html;
-    for (const c of $('shopBody').querySelectorAll('[data-ico]')) { const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(ICON[c.dataset.ico], 0, 0, 64, 64); }
+    for (const c of $('shopBody').querySelectorAll('[data-ico]')) { if (BUILD_BY[c.dataset.ico]) { itemIcon(c, c.dataset.ico); continue; } const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(ICON[c.dataset.ico], 0, 0, 64, 64); }
     for (const b of $('shopBody').querySelectorAll('[data-buy]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'buy', item: b.dataset.buy, n: +b.dataset.n })); $('shopSay').textContent = ['고마워요! 저장소로 보냈어요.', '좋은 선택이에요!', '또 와요~'][(Math.random() * 3) | 0]; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
   }
   // 영역전 규칙서 (전쟁의 천사에게서, 3일차부터)
@@ -909,6 +913,83 @@
   ];
   function renderRulebook() {
     $('ruleBody').innerHTML = RULEBOOK.map(([h, items]) => `<section><h3>${h}</h3><ul>${items.map((t) => `<li>${t}</li>`).join('')}</ul></section>`).join('');
+  }
+  // ------------------------------------------------------------ 건축물 그림 (테마별 바닥·벽·기둥·장식, 직접 그림)
+  const BUILD_BY = MPRules.BUILD_BY, tileItem = MPRules.tileItem, BHP = MPRules.NUM.buildHp;
+  const floorIdCache = {};
+  function floorArtId(id) {
+    if (floorIdCache[id]) return floorIdCache[id];
+    const legacy = { f_stone: 0, f_brick: 2, f_sand: 3, f_amethyst: 5 };
+    if (id in legacy) return (floorIdCache[id] = floorArt(legacy[id]));
+    const c = artCanvas(32, 32, (g) => {
+      const gen = { f_gold: 'marble_w', f_cloud: 'cloud', f_sky: 'aisle', f_wood: 'planks' }[id];
+      if (gen) { const big = artCanvas(64, 64, (q) => GEN_FLOOR[gen](q)); g.drawImage(big, 0, 0, 32, 32, 0, 0, 32, 32); if (id === 'f_gold') { g.fillStyle = '#e8c260'; g.fillRect(0, 0, 32, 2); g.fillRect(0, 0, 2, 32); } return; }
+      if (id === 'f_moss') { const big = artCanvas(64, 64, (q) => GEN_FLOOR.cobble(q)); g.drawImage(big, 0, 0, 32, 32, 0, 0, 32, 32); g.fillStyle = 'rgba(80,160,70,0.45)'; for (const [x, y, w, h] of [[0, 12, 6, 4], [14, 0, 4, 6], [20, 26, 8, 4], [28, 8, 4, 8], [8, 24, 4, 2]]) g.fillRect(x, y, w, h); g.fillStyle = '#6fbf5f'; for (const [x, y] of [[2, 14], [16, 2], [24, 28], [30, 10]]) g.fillRect(x, y, 2, 2); }
+      if (id === 'f_ice') { g.fillStyle = '#bfe6ff'; g.fillRect(0, 0, 32, 32); g.fillStyle = '#d9f1ff'; g.fillRect(2, 2, 13, 13); g.fillRect(17, 17, 13, 13); g.fillStyle = '#a6d8f5'; g.fillRect(0, 15, 32, 2); g.fillRect(15, 0, 2, 32); g.fillStyle = '#ffffff'; g.fillRect(4, 4, 6, 2); g.fillRect(4, 6, 2, 2); g.fillRect(19, 19, 6, 2); g.fillStyle = '#8fc8ec'; g.fillRect(22, 6, 6, 2); g.fillRect(26, 8, 2, 4); g.fillRect(6, 22, 2, 6); }
+      if (id === 'f_snow') { g.fillStyle = '#c9d6ea'; g.fillRect(0, 0, 32, 32); for (let y = 0; y < 32; y += 8) for (let x = (y / 8 % 2) * 8 - 8; x < 32; x += 16) { g.fillStyle = '#f6f9ff'; g.fillRect(x + 1, y + 1, 14, 6); g.fillStyle = '#ffffff'; g.fillRect(x + 1, y + 1, 14, 2); } }
+    });
+    return (floorIdCache[id] = c);
+  }
+  function natRibbon(g, x, y, nid) { g.fillStyle = natColor(nid); g.fillRect(x - 6, y, 12, 6); g.fillStyle = 'rgba(255,255,255,0.4)'; g.fillRect(x - 6, y, 12, 2); g.fillStyle = '#2b2340'; g.fillRect(x - 7, y - 1, 1, 8); g.fillRect(x + 6, y - 1, 1, 8); }
+  function wallBlock(g, x, y, top, body, line, hi) { // 32×40 덩어리 벽
+    g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(x - 17, y - 4, 34, 6);
+    g.fillStyle = '#2b2340'; g.fillRect(x - 17, y - 48, 34, 46);
+    g.fillStyle = body; g.fillRect(x - 15, y - 40, 30, 36); g.fillStyle = top; g.fillRect(x - 15, y - 46, 30, 8);
+    g.fillStyle = line; g.fillRect(x - 15, y - 26, 30, 2); g.fillRect(x - 1, y - 38, 2, 12); g.fillRect(x - 9, y - 24, 2, 18); g.fillRect(x + 7, y - 24, 2, 18);
+    g.fillStyle = hi; g.fillRect(x - 15, y - 46, 30, 2); g.fillRect(x - 15, y - 40, 2, 34);
+  }
+  function drawBuild(g, x, y, e) { // e = 칸 정보 {k, n, id, hp}
+    const id = tileItem(e), t = performance.now() / 1000;
+    switch (id) {
+      case 'w_brick': drawWall(g, x, y, e.n); return;
+      case 'w_marble': wallBlock(g, x, y, '#e8c260', '#fbf8f1', '#e3d9c6', '#ffffff'); natRibbon(g, x, y - 34, e.n); return;
+      case 'w_ice': g.globalAlpha = 0.92; wallBlock(g, x, y, '#e6f6ff', '#a9dcf7', '#8cc6ea', '#ffffff'); g.globalAlpha = 1; g.fillStyle = '#ffffff'; g.fillRect(x - 10, y - 34, 4, 10); natRibbon(g, x, y - 34, e.n); return;
+      case 'w_fence': {
+        g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(x - 17, y - 4, 34, 5);
+        for (const px of [x - 14, x + 8]) { g.fillStyle = '#2b2340'; g.fillRect(px - 1, y - 40, 8, 38); g.fillStyle = '#b07a44'; g.fillRect(px, y - 38, 6, 36); g.fillStyle = '#d39a5c'; g.fillRect(px, y - 38, 2, 36); g.fillStyle = '#2b2340'; g.fillRect(px, y - 42, 6, 2); g.fillRect(px + 2, y - 44, 2, 2); }
+        for (const ry of [y - 32, y - 18]) { g.fillStyle = '#2b2340'; g.fillRect(x - 17, ry - 1, 34, 8); g.fillStyle = '#c58a50'; g.fillRect(x - 16, ry, 32, 6); g.fillStyle = '#e0aa6a'; g.fillRect(x - 16, ry, 32, 2); }
+        natRibbon(g, x, y - 30, e.n); return;
+      }
+      case 'p_marble': { g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, x, y, 14, 4); blit(g, ART_COL, x, y + 2, 1.5); natRibbon(g, x, y - 40, e.n); return; }
+      case 'p_stone': case 'p_ice': case 'p_wood': {
+        const P = { p_stone: ['#8c8a96', '#b3b0bc', '#6e6c78', '#cfccd6'], p_ice: ['#9fd3f2', '#d9f1ff', '#7fbfe6', '#ffffff'], p_wood: ['#9a6a3a', '#c98f55', '#7a4f28', '#e0aa6a'] }[id];
+        g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, x, y, 14, 4);
+        g.fillStyle = '#2b2340'; g.fillRect(x - 11, y - 66, 22, 66);
+        g.fillStyle = P[0]; g.fillRect(x - 9, y - 58, 18, 52); g.fillStyle = P[1]; g.fillRect(x - 9, y - 58, 5, 52); g.fillStyle = P[2]; g.fillRect(x + 5, y - 58, 4, 52);
+        g.fillStyle = P[3]; g.fillRect(x - 11, y - 66, 22, 8); g.fillRect(x - 11, y - 8, 22, 8); g.fillStyle = P[2]; g.fillRect(x - 11, y - 60, 22, 2); g.fillRect(x - 11, y - 8, 22, 2);
+        if (id === 'p_wood') { g.fillStyle = '#7a4f28'; g.fillRect(x - 4, y - 64, 8, 4); g.fillStyle = '#e0aa6a'; g.fillRect(x - 2, y - 63, 4, 2); for (const yy of [y - 46, y - 30, y - 18]) { g.fillStyle = P[2]; g.fillRect(x - 7, yy, 6, 2); } }
+        if (id === 'p_ice') { g.fillStyle = '#ffffff'; g.fillRect(x - 6, y - 52, 2, 18); g.fillRect(x - 6, y - 30, 2, 6); }
+        natRibbon(g, x, y - 40, e.n); return;
+      }
+      case 'd_lantern': lantern(g, x, y); return;
+      case 'd_urn': urn(g, x, y); return;
+      case 'd_flower': pix(g, 'flower_r', x - 8, y - 2, 2); pix(g, 'flower_y', x + 8, y, 2); pix(g, 'fern', x, y + 4, 2); return;
+      case 'd_mush': pix(g, 'mushroom', x - 6, y, 2); pix(g, 'mushroom', x + 8, y + 2, 1.5); return;
+      case 'd_torch': { g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, x, y, 8, 3); g.fillStyle = '#2b2340'; g.fillRect(x - 3, y - 34, 6, 34); g.fillStyle = '#8a5a2b'; g.fillRect(x - 2, y - 32, 4, 32); g.fillStyle = '#5a3416'; g.fillRect(x - 5, y - 36, 10, 4);
+        const f = Math.sin(t * 12 + x) > 0 ? 2 : 0, grd = g.createRadialGradient(x, y - 42, 2, x, y - 42, 26); grd.addColorStop(0, 'rgba(255,190,90,0.5)'); grd.addColorStop(1, 'rgba(255,190,90,0)'); g.fillStyle = grd; g.fillRect(x - 26, y - 68, 52, 52);
+        g.fillStyle = '#ff7b22'; g.fillRect(x - 5, y - 46 - f, 10, 10); g.fillStyle = '#ffd35a'; g.fillRect(x - 3, y - 50 - f, 6, 10); g.fillStyle = '#fff2a8'; g.fillRect(x - 1, y - 46, 2, 4); return; }
+      case 'd_snowman': { g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, 14, 4); g.fillStyle = '#c9d6ea'; pxDisc(g, x, y - 12, 12); pxDisc(g, x, y - 32, 9); g.fillStyle = '#ffffff'; pxDisc(g, x - 1, y - 13, 10); pxDisc(g, x - 1, y - 33, 7);
+        g.fillStyle = '#2b2340'; g.fillRect(x - 4, y - 36, 2, 2); g.fillRect(x + 2, y - 36, 2, 2); g.fillRect(x - 1, y - 16, 2, 2); g.fillRect(x - 1, y - 10, 2, 2); g.fillStyle = '#ff8a2a'; g.fillRect(x, y - 33, 5, 2); g.fillStyle = '#d6455b'; g.fillRect(x - 8, y - 26, 16, 4); g.fillRect(x + 4, y - 24, 4, 8);
+        g.fillStyle = '#2b2340'; g.fillRect(x - 7, y - 46, 14, 4); g.fillRect(x - 5, y - 54, 10, 8); return; }
+      case 'd_crystal': { const b = Math.round(Math.sin(t * 2 + x) * 1) * 2; g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, 12, 4);
+        const grd = g.createRadialGradient(x, y - 22, 2, x, y - 22, 26); grd.addColorStop(0, 'rgba(190,235,255,0.5)'); grd.addColorStop(1, 'rgba(190,235,255,0)'); g.fillStyle = grd; g.fillRect(x - 26, y - 48, 52, 52);
+        for (const [dx, h, w] of [[-8, 22, 6], [0, 34, 8], [8, 18, 6]]) { g.fillStyle = '#2b2340'; g.fillRect(x + dx - w / 2 - 1, y - h - 1 + b, w + 2, h + 1); g.fillStyle = '#9fd8ff'; g.fillRect(x + dx - w / 2, y - h + b, w, h); g.fillStyle = '#e6f6ff'; g.fillRect(x + dx - w / 2, y - h + b, 2, h); g.fillStyle = '#6fb6e6'; g.fillRect(x + dx + w / 2 - 2, y - h + b, 2, h); }
+        return; }
+    }
+  }
+  const HPSEEN = new Map(); // 칸 → 마지막으로 맞은 시각 (내구도 바는 맞은 뒤 3초만 보임)
+  function drawHpBar(g, x, y, e, i) {
+    const at = HPSEEN.get(i); if (!at || performance.now() - at > 3000 || e.hp == null || e.hp >= BHP) return;
+    const r = Math.max(0, e.hp / BHP), w = 34, L = Math.round(x - w / 2), T = Math.round(y - 76);
+    g.fillStyle = '#2b2340'; g.fillRect(L - 2, T - 2, w + 4, 9); g.fillStyle = '#4a3f5e'; g.fillRect(L, T, w, 5);
+    g.fillStyle = r > 0.5 ? '#5ad16a' : r > 0.25 ? '#ffd34d' : '#ff5a4a'; g.fillRect(L, T, Math.round(w * r), 5); g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(L, T, Math.round(w * r), 2);
+  }
+  function itemIcon(cv, id) { // 상점·설치 카드 그림
+    const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height; g.clearRect(0, 0, W2, H2); g.imageSmoothingEnabled = false;
+    const B = BUILD_BY[id]; if (!B) return;
+    if (B.cat === 'trap') { g.drawImage(ICON.trap, 0, 0, 16, 16, (W2 - 48) / 2, (H2 - 48) / 2, 48, 48); return; }
+    if (B.cat === 'floor') { const c = floorArtId(id); g.fillStyle = '#2b2340'; g.fillRect(W2 / 2 - 26, H2 / 2 - 26, 52, 52); g.drawImage(c, 0, 0, 32, 32, W2 / 2 - 24, H2 / 2 - 24, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2, H2 / 2 - 24, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2 - 24, H2 / 2, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2, H2 / 2, 24, 24); return; }
+    const k = B.id.startsWith('p_') ? 0.8 : 1; g.save(); g.translate(W2 / 2, H2 - 6); g.scale(k, k); drawBuild(g, 0, 0, { k: B.cat, n: MY_NID, id }); g.restore();
   }
   function heavenWall(g, w, R) { // 하늘 방 윗벽: 흰 벽 + 금 띠 + 하늘이 보이는 아치 창 + 기둥
     const top = 18, bot = 2 * TILE;
@@ -1549,10 +1630,12 @@
       for (const q of nodes) if (ownerOf(q.id) === MY_NID && Math.hypot(q.tx + 0.5 - ptx, q.ty + 0.5 - pty) < 1.6) return { kind: 'pickB', what: { kind: 'mine', terr: q.id }, text: '금광 옮기기 (E) → 옮길 자리에서 E' };
     }
     if (build.on && myView) {
-      const tiles = shapeTiles(), shape = build.k === 'trap' ? '1' : build.shape;
-      if ((e && e.n === MY_NID && !(build.k === 'floor' && e.k === 'floor' && (e.c | 0) !== build.c)) || MY_TRAPS.has(i)) return { kind: 'pickup', tiles, text: `${SHAPE_NAME[shape]} 거두기 (E) · 바로 앞: ${ITEM_NAME[e ? e.k : 'trap']}` };
+      const B = BUILD_BY[build.id] || BUILD_BY.f_stone, tiles = shapeTiles(), shape = B.cat === 'trap' || B.cat === 'deco' ? '1' : build.shape;
+      if ((e && e.n === MY_NID && !(B.cat === 'floor' && e.k === 'floor' && tileItem(e) !== B.id)) || MY_TRAPS.has(i)) return { kind: 'pickup', tiles, text: `${SHAPE_NAME[shape]} 거두기 (E) · 바로 앞: ${e ? (BUILD_BY[tileItem(e)] || {}).name : '덫'}` };
       if (ownerOf(terrAt(fx, fy)) !== MY_NID) return { kind: 'info', text: '설치 모드 · 우리 땅에만 놓을 수 있어요' };
-      return { kind: 'place', tiles, text: `${build.k === 'floor' ? FLOOR_COLORS[build.c][0] + ' ' : ''}${ITEM_NAME[build.k]} ${SHAPE_NAME[shape]} 놓기 · 남은 ${myView.me.items[build.k]}개` };
+      const have = myView.me.items[B.id] || 0;
+      if (!have) return { kind: 'info', text: `${B.name}이(가) 없어요 · 하늘 건축 상점에서 사요` };
+      return { kind: 'place', tiles, text: `${B.name} ${SHAPE_NAME[shape]} 놓기 · 남은 ${have}개` };
     }
     if (MY_NID) for (const [id, r] of remotes) { // 우리 땅에 들어온 적 → 체포
       if (r.x == null || !r.nid || r.nid === MY_NID || Math.hypot(r.x - player.x, r.y - player.y) > 52) continue;
@@ -1571,14 +1654,15 @@
       return { kind: 'steal', nid, hold: MPRules.NUM.stealSec * 1000, text: `${natName(nid)} 저장소 털기 · E 꾹 ${MPRules.NUM.stealSec}초` };
     }
     if (treeAt(fx, fy) && MY_NID && ownerOf(terrAt(fx, fy)) === MY_NID) return { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '나무 베기 · E 꾹 누르기' };
-    if (e && e.k === 'wall' && e.n !== MY_NID) return { kind: 'break', x: fx, y: fy, hold: MPRules.NUM.wallBreakSec * 1000, text: `${natName(e.n)} 방벽 부수기 · E 꾹 ${MPRules.NUM.wallBreakSec}초` };
+    if (e && e.k === 'wall' && e.n !== MY_NID) return { kind: 'hitB', x: fx, y: fy, text: `${natName(e.n)} ${(BUILD_BY[tileItem(e)] || {}).name || '벽'} 때리기 · E (꾹 = 계속) · 내구도 ${e.hp ?? MPRules.NUM.buildHp}/${MPRules.NUM.buildHp}` };
     return null;
   }
   // 꾹 누르기 (나무 베기 2초, 방벽 부수기 5초)
   const hold = { on: false, t0: 0, ms: 0, kind: '', x: 0, y: 0 };
   let stunUntil = 0, jailUntil = 0;
-  function pressE() { if (near && near.hold) startHold(near); else interact(); }
-  function releaseE() { if (hold.on) cancelHold(); }
+  let hitTimer = 0;
+  function pressE() { if (near && near.kind === 'hitB') { const n = near, go = () => { if (netOn) ws.send(JSON.stringify({ t: 'hitB', x: n.x, y: n.y })); player.atkT = 0.2; }; go(); clearInterval(hitTimer); hitTimer = setInterval(go, 420); return; } if (near && near.hold) startHold(near); else interact(); }
+  function releaseE() { clearInterval(hitTimer); if (hold.on) cancelHold(); }
   function startHold(n) {
     Object.assign(hold, { on: true, t0: performance.now(), ms: n.hold, kind: n.kind, x: n.x, y: n.y });
     hold.nid = n.nid;
@@ -1592,32 +1676,36 @@
     if (netOn) ws.send(JSON.stringify(hold.kind === 'steal' ? { t: 'steal', nid: hold.nid } : { t: hold.kind === 'chop' ? 'chop' : 'breakWall', x: hold.x, y: hold.y }));
   }
   // 설치 모드 (G): 저장소의 바닥·방벽·덫을 바로 앞 칸에 놓기
-  const build = { on: false, k: 'floor', shape: '1', c: 0 };
+  const build = { on: false, id: 'f_stone', tab: 'all', shape: '1' };
   const SHAPE_NAME = { 1: '1칸', h3: '가로 3칸', v3: '세로 3칸', s3: '3×3' };
   // 설치 모양: 바라보는 방향으로는 앞으로 뻗고, 옆 방향은 가운데 맞춤
   function shapeTiles() {
     const d = FACE_D[player.face | 0] || [0, 1], [fx, fy] = facingTile();
-    const shape = build.k === 'trap' ? '1' : build.shape;
+    const cat = (BUILD_BY[build.id] || {}).cat, shape = cat === 'trap' || cat === 'deco' ? '1' : build.shape;
     const wx = shape === 'h3' || shape === 's3' ? 3 : 1, wy = shape === 'v3' || shape === 's3' ? 3 : 1;
     const xs = wx === 1 ? [fx] : d[0] ? [0, 1, 2].map((k) => fx + k * d[0]) : [fx - 1, fx, fx + 1];
     const ys = wy === 1 ? [fy] : d[1] ? [0, 1, 2].map((k) => fy + k * d[1]) : [fy - 1, fy, fy + 1];
     const out = []; for (const y of ys) for (const x of xs) out.push([x, y]); return out;
   }
-  function setBuild(on, k) {
+  const BB_TABS = [['all', '전체'], ['floor', '바닥'], ['wall', '벽·기둥'], ['deco', '장식'], ['trap', '덫']];
+  function setBuild(on, id) {
     if (on && !myView) { toast('나라가 있어야 설치할 수 있어요'); return; }
     if (on && player.scene === 'sky') { toast('설치 모드는 땅에서만 쓸 수 있어요'); return; }
-    build.on = on; if (k) build.k = k; if (!on) build.moving = null;
-    $('buildBar').hidden = !on;
-    for (const b of document.querySelectorAll('#buildBar [data-k]')) { b.setAttribute('aria-pressed', String(b.dataset.k === build.k)); b.querySelector('small').textContent = myView ? myView.me.items[b.dataset.k] : 0; }
-    for (const b of document.querySelectorAll('#buildBar [data-shape]')) { b.setAttribute('aria-pressed', String(b.dataset.shape === build.shape)); b.disabled = build.k === 'trap'; }
-    for (const b of document.querySelectorAll('#buildBar [data-c]')) b.setAttribute('aria-pressed', String(+b.dataset.c === build.c));
-    $('buildColors').hidden = build.k !== 'floor';
+    build.on = on; if (id) build.id = id; if (!on) build.moving = null;
+    document.body.classList.toggle('building', on);
+    $('buildBar').hidden = !on; if (on) renderBuildTray();
     near = null;
   }
-  for (const b of document.querySelectorAll('#buildBar [data-shape]')) b.addEventListener('click', () => { build.shape = b.dataset.shape; setBuild(true); });
-  $('buildColors').innerHTML = FLOOR_COLORS.map(([name, col], i) => `<button type="button" data-c="${i}" title="${name}" style="background:${col || '#9a958c'}">${name}</button>`).join('');
-  for (const b of document.querySelectorAll('#buildBar [data-c]')) b.addEventListener('click', () => { build.c = +b.dataset.c; setBuild(true); });
-  for (const b of document.querySelectorAll('#buildBar [data-k]')) b.addEventListener('click', () => setBuild(true, b.dataset.k));
+  function renderBuildTray() { // 쿠킹덤식 보관함: 위에 종류 탭, 아래 카드 줄 (그림 + 남은 개수)
+    const items = (myView && myView.me.items) || {}, cat = (BUILD_BY[build.id] || {}).cat;
+    $('bbTabs').innerHTML = BB_TABS.map(([k, l]) => `<button type="button" data-bt="${k}" aria-pressed="${k === build.tab}">${l}</button>`).join('');
+    for (const b of $('bbTabs').querySelectorAll('[data-bt]')) b.onclick = () => { build.tab = b.dataset.bt; renderBuildTray(); };
+    const list = MPRules.BUILD.filter((b) => build.tab === 'all' || b.cat === build.tab).sort((a, b) => (items[b.id] > 0) - (items[a.id] > 0));
+    $('bbList').innerHTML = list.map((b) => `<button type="button" class="bbCard${items[b.id] ? '' : ' none'}" data-bid="${b.id}" aria-pressed="${b.id === build.id}"><canvas width="64" height="64"></canvas><span>${b.name}</span><i>${items[b.id] || 0}</i><em>${MPRules.THEMES[b.theme]}</em></button>`).join('') || '<p class="bbEmpty">아직 없어요 · 하늘 건축 상점에서 사요</p>';
+    for (const c of $('bbList').querySelectorAll('[data-bid]')) { itemIcon(c.querySelector('canvas'), c.dataset.bid); c.onclick = () => { build.id = c.dataset.bid; renderBuildTray(); near = null; }; }
+    for (const b of document.querySelectorAll('#buildBar [data-shape]')) { b.setAttribute('aria-pressed', String(b.dataset.shape === build.shape)); b.disabled = cat === 'trap' || cat === 'deco'; }
+  }
+  for (const b of document.querySelectorAll('#buildBar [data-shape]')) b.addEventListener('click', () => { build.shape = b.dataset.shape; renderBuildTray(); near = null; });
   $('buildOff').addEventListener('click', () => setBuild(false));
   // 우리 저장소 창
   function openStore() {
@@ -1625,7 +1713,7 @@
     const row = (icon, name, v) => `<div class="row"><span>${icon} ${name}</span><b>${(v || 0).toLocaleString()}</b></div>`;
     $('storeBody').innerHTML = `<p class="msg">우리 나라 모두가 같이 쓰는 저장소예요. 개인 소지품은 없어요.</p>` +
       row('🪙', '코인', me.coin) + row('⚔', '병력', me.army) + row('🪵', '목재', me.wood) + row('💉', '백신', me.vaccine) +
-      row('▦', '바닥', me.items.floor) + row('🧱', '방벽', me.items.wall) + row('🪤', '덫', me.items.trap) +
+      Object.entries(me.items || {}).filter(([, v]) => v > 0).map(([k, v]) => row('🏗', (BUILD_BY[k] || {}).name || k, v)).join('') +
       `<p class="msg">바닥·방벽·덫은 하늘 거래소에서 사요. <b>설치 모드(G)</b>를 켜고 우리 땅에서 바로 앞 칸에 E로 놓아요. 바닥 위에선 우리 국민이 빨라지고, 방벽은 다른 나라 사람을 막고, 덫은 밟은 적을 3초 묶어요.</p>`;
     $('storeBox').hidden = false;
   }
@@ -1643,7 +1731,7 @@
     if (near.kind === 'hit') { HITFX.set(near.t.id, performance.now() + 120); if (netOn) ws.send(JSON.stringify({ t: 'hit', terr: near.t.id })); return; }
     if (near.kind === 'pickB') { build.moving = near.what; near = null; toast('옮길 자리 바로 앞에서 E를 누르세요 (우리 땅, 다른 건물과 2칸 이상)'); return; }
     if (near.kind === 'dropB') { if (netOn) ws.send(JSON.stringify(Object.assign({ t: 'moveB', x: near.x, y: near.y }, build.moving))); build.moving = null; near = null; return; }
-    if (near.kind === 'place' || near.kind === 'pickup') { if (netOn) ws.send(JSON.stringify({ t: near.kind, tiles: near.tiles, k: build.k, c: build.c })); return; }
+    if (near.kind === 'place' || near.kind === 'pickup') { if (netOn) ws.send(JSON.stringify({ t: near.kind, tiles: near.tiles, id: build.id })); return; }
     if (near.kind === 'info') { toast(near.text); return; }
     if (near.kind === 'reinforce') { openReinforce(near.battle); return; }
     if (near.kind === 'deposit') { if (netOn) ws.send(JSON.stringify({ t: 'deposit' })); return; }
@@ -1968,7 +2056,7 @@
         break;
       }
       case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
-      case 'tile': { if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); if (m.e && m.e.n === MY_NID) SND.play('place'); break; }
+      case 'tile': { const prev = TILES[m.i]; if (m.e && prev && m.e.hp != null && m.e.hp < (prev.hp ?? MPRules.NUM.buildHp)) { HPSEEN.set(m.i, performance.now()); SND.play('hit'); } else if (m.e && m.e.n === MY_NID && !prev) SND.play('place'); if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); break; }
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
@@ -2110,6 +2198,7 @@
     if (o) owners = o;
     if (n) nationsPub = n;
     if (v !== undefined) myView = v;
+    if (v !== undefined && build.on) renderBuildTray(); // 설치 모드: 남은 개수 갱신
     MY_NID = myView ? myView.me.id : null;
     STORE_AT = new Map();
     for (const n of Object.values(nationsPub)) if (!n.dead && terrs[n.capital]) for (const [sx, sy] of (n.stores && n.stores.length ? n.stores : [n.store || MPRules.storageSpot(terrs[n.capital], tileAt)])) { STORE_AT.set(sy * W + sx, n.id); clearTrees(sx, sy, 1); } // 저장소 입구 (여러 개일 수 있음)
@@ -2459,7 +2548,7 @@
       if (!v.reports.length) h += '<p class="msg">아직 전투 기록이 없어요.</p>';
       h += v.reports.slice().reverse().map((r) => {
         const weAtt = r.att === me.id, won = (r.winner === 'att') === weAtt, F = r.F || r.fronts.length;
-        const lootTxt = r.loot ? Object.entries(r.loot).filter(([, x]) => x > 0).map(([k, x]) => `${{ coin: '코인', wood: '목재', vaccine: '백신', floor: '바닥', wall: '방벽', trap: '덫' }[k] || k} ${x}`).join(', ') : '';
+        const lootTxt = r.loot ? Object.entries(r.loot).filter(([, x]) => x > 0).map(([k, x]) => `${({ coin: '코인', wood: '목재', vaccine: '백신' }[k] || (BUILD_BY[k] || {}).name || k)} ${x}`).join(', ') : '';
         return `<div class="report ${won ? 'won' : 'lost'}"><div class="row"><b>${won ? '승리' : '패배'}</b><span>${r.night}번째 전투 · ${esc(terrLabel(r.target))} · 전선 ${r.attWon != null ? r.attWon : r.fronts.filter((x) => x === 'att').length}:${r.defWon != null ? r.defWon : r.fronts.filter((x) => x === 'def').length}</span></div>
           <div class="msg">${esc(r.attName)}(공격) → ${esc(r.defName)}(방어)${r.autoDef ? ' · 방어 자동 배치' : ''}</div>
           <div class="fgrid">${r.fronts.map((w, i) => `<span class="${w}"><b>${FN(i)}</b>${r.effA[i]}<i>vs</i>${r.effD[i]}</span>`).join('')}</div>
@@ -2876,7 +2965,7 @@
     }
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const i = ty * W + tx, e = TILES[i];
-      if (e && e.k === 'wall') list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawWall(g, X, Y, e.n) });
+      if (e && (e.k === 'wall' || e.k === 'deco')) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => { drawBuild(g, X, Y, e); drawHpBar(g, X, Y, e, i); } });
       if (MY_TRAPS.has(i)) list.push({ x: tx * TILE + 16, y: ty * TILE + 4, draw: (g, X, Y) => drawTrap(g, X, Y + 24) });
       const pr = GPROPS.get(i); if (pr) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawProp(g, pr.r, X, Y) });
     }

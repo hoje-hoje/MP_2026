@@ -11,6 +11,27 @@
   'use strict';
 
   // 기본 수치 (docs/GAME_DESIGN.md 10장)
+  // 건축물 목록: 종류(cat)마다 효과가 같고, 테마는 모양만 다름. 바닥 = 우리 국민 1.5배 빠름 · 벽/기둥 = 다른 나라 사람 막음(내구도) · 장식 = 밟고 지나감 · 덫
+  const THEMES = { heaven: '천상', forest: '숲', winter: '겨울', stone: '돌' };
+  const BUILD = [
+    ['f_gold', 'floor', 'heaven', '황금 대리석'], ['f_cloud', 'floor', 'heaven', '구름 바닥'], ['f_sky', 'floor', 'heaven', '하늘 융단'], ['f_amethyst', 'floor', 'heaven', '자수정 타일'],
+    ['f_wood', 'floor', 'forest', '나무 판자'], ['f_moss', 'floor', 'forest', '이끼 돌길'],
+    ['f_ice', 'floor', 'winter', '얼음 바닥'], ['f_snow', 'floor', 'winter', '눈 벽돌'],
+    ['f_stone', 'floor', 'stone', '돌 바닥'], ['f_brick', 'floor', 'stone', '붉은 벽돌'], ['f_sand', 'floor', 'stone', '모래 타일'],
+    ['w_marble', 'wall', 'heaven', '대리석 벽'], ['p_marble', 'wall', 'heaven', '황금 기둥'],
+    ['w_fence', 'wall', 'forest', '나무 울타리'], ['p_wood', 'wall', 'forest', '통나무 기둥'],
+    ['w_ice', 'wall', 'winter', '얼음 벽'], ['p_ice', 'wall', 'winter', '얼음 기둥'],
+    ['w_brick', 'wall', 'stone', '벽돌 방벽'], ['p_stone', 'wall', 'stone', '돌 기둥'],
+    ['d_lantern', 'deco', 'heaven', '빛 수정 등불'], ['d_urn', 'deco', 'heaven', '꽃 화분'],
+    ['d_flower', 'deco', 'forest', '꽃밭'], ['d_mush', 'deco', 'forest', '버섯'],
+    ['d_snowman', 'deco', 'winter', '눈사람'], ['d_crystal', 'deco', 'winter', '얼음 수정'],
+    ['d_torch', 'deco', 'stone', '횃불'],
+    ['trap', 'trap', 'stone', '덫'],
+  ].map(([id, cat, theme, name]) => ({ id, cat, theme, name }));
+  const BUILD_BY = Object.fromEntries(BUILD.map((b) => [b.id, b]));
+  const LEGACY_FLOOR = ['f_stone', 'f_wood', 'f_brick', 'f_sand', 'f_sky', 'f_amethyst']; // 예전 바닥 색 번호 → 디자인
+  function normItems(items) { const o = {}; for (const [k, v] of Object.entries(items || {})) { const id = k === 'floor' ? 'f_stone' : k === 'wall' ? 'w_brick' : k; if (BUILD_BY[id] && v > 0) o[id] = (o[id] || 0) + v; } return o; }
+  function tileItem(e) { return !e ? null : e.id || (e.k === 'floor' ? LEGACY_FLOOR[e.c | 0] || 'f_stone' : e.k === 'wall' ? 'w_brick' : null); }
   const NUM = {
     startArmy: 50, startCoin: 1000,
     maxDeclare: 2,                 // 하룻밤 선전포고 최대
@@ -32,7 +53,8 @@
     sudokuSec: 300, slideSec: 180, sudokuGivens: 46, // 퍼즐 시간 제한(초), 스도쿠 쉬운 난이도(처음 보이는 칸 수)
     // 영지 (나라 공용 저장소)
     woodPerTree: 2,                // 나무 1그루 목재
-    price: { floor: 20, wall: 60, trap: 150 }, // 하늘 거래소 가격 (코인, 1개)
+    price: { floor: 20, wall: 60, deco: 30, trap: 150 }, // 건축 상점 가격 (코인, 1개 · 종류별로 같음, 테마는 모양만 다름)
+    buildHp: 100, hitDmg: 10, hitCdMs: 380, maxDeco: 80, // 벽·기둥 내구도: 한 번 때리면 −10 (E 꾹 = 0.4초마다)
     vaccineBase: 3000, vaccineStep: 500,       // 백신: 나라가 살 때마다 비싸짐 (쓰면 영역 하나 침식 0%)
     erodeStep: 10, erodeFall: 50,  // 균열: 멸망 선포 다음 날부터 매일 아침 영역마다 침식 +10%, 나라 전체 침식 50% 이상이면 멸망 (수도는 침식 안 됨)
     maxWalls: 60, maxTraps: 12,    // 나라당 설치 한도
@@ -442,8 +464,8 @@
           const share = lost.length / k, loot = {};
           const take = (obj, key) => { const v = Math.floor((obj[key] || 0) * share); obj[key] = (obj[key] || 0) - v; return v; };
           for (const key of ['coin', 'wood', 'vaccine']) { const v = take(D, key); const g = Math.floor(v * NUM.lootPct); A[key] = (A[key] || 0) + g; loot[key] = g; }
-          D.items = D.items || {}; A.items = A.items || {};
-          for (const key of ['floor', 'wall', 'trap']) { const v = take(D.items, key); const g = Math.floor(v * NUM.lootPct); A.items[key] = (A.items[key] || 0) + g; loot[key] = g; }
+          D.items = normItems(D.items); A.items = normItems(A.items);
+          for (const key of Object.keys(D.items)) { const v = take(D.items, key); const g = Math.floor(v * NUM.lootPct); A.items[key] = (A.items[key] || 0) + g; loot[key] = g; }
           rep.loot = loot;
           // 빼앗은 영역의 저장소 입구·설치물은 공격팀 것
           for (const [ti, e] of Object.entries(this.s.tiles || {})) if (e.n === D.id && lost.includes(this.tileTerr ? this.tileTerr(+ti) : -1)) e.n = A.id;
@@ -499,7 +521,7 @@
           vaxed: this.s.riftNext ? Object.keys(this.s.vax).filter((t) => this.s.vax[t] === this.s.riftNext.wave && this.s.owner[t] === n.id).map(Number) : [],
           erosion: this.nationErosion(n.id),
           defaultDef: n.defaultDef || null, intelAny: n.intelAny || 0, intel: n.intel || {},
-          wood: n.wood || 0, vaccine: n.vaccine || 0, items: Object.assign({ floor: 0, wall: 0, trap: 0 }, n.items), vaccinePrice: NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0),
+          wood: n.wood || 0, vaccine: n.vaccine || 0, items: normItems(n.items), vaccinePrice: NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0),
           isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length,
           declaresLeft: this.declaresLeft(n.id, this.s.curSlot), provinces: n.provinces, code: n.code,
           // 접속 열쇠(토큰)는 절대 내보내지 않는다: 순번만
@@ -603,5 +625,5 @@
   const notorietyTier = (v) => { const T2 = NUM.notorietyTiers; let k = 0; for (let i = 0; i < T2.length; i++) if ((v || 0) >= T2[i].min) k = i; return k; };
   // 이름 옆 표시: 마이너스 = 체포왕 👮, 1~199 💀, 200~499 💀💀, 500 이상 💀💀💀
   const notorietyBadge = (v) => (v < 0 ? '👮' : v <= 0 ? '' : v < 200 ? '💀' : v < 500 ? '💀💀' : '💀💀💀');
-  return { World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
