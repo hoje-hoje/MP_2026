@@ -298,6 +298,7 @@
     const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
     const users = fetch('assets/user/users.json').then((r) => r.json()).then((j) => {
       USER.chars = j.chars; USER.animals = j.animals; USER.monsters = j.monsters;
+      if ((player.look.char | 0) < USER.chars.length) { player.look.char = USER.chars.length + 25; setTimeout(saveLook, 0); } // 싸움 모션 없는 동아리 캐릭터 → 기사로
       return Promise.all([...j.chars, ...j.animals, ...j.monsters].map(async (k) => { ART['u_' + k] = await loadImg('assets/user/' + k + '.png'); }));
     });
     for (const k of EXTRA) names['x_' + k] = 'extra/' + k + '.png';
@@ -831,13 +832,27 @@
   };
   const npcProp = (id, x, y) => ({ x, y, w: 1, h: 1, npc: id, draw: (g, X, Y) => { drawAngel(g, NPCS[id].ch, X, Y); nameTag(g, X, Y - 64, NPCS[id].name.split(' ').pop(), NPCS[id].color); } });
   const TALK = { npc: null, i: 0 };
+  const faceCache = {};
+  function cleanFace(k) { // 얼굴 그림의 검은 배경을 지우고 테두리 한 줄 (가장자리에서 같은 색만 지움)
+    if (faceCache[k]) return faceCache[k];
+    const c = artCanvas(40, 40, (g) => g.drawImage(ART.faces, (k % CHARS.cols) * 38, Math.floor(k / CHARS.cols) * 38, 38, 38, 1, 1, 38, 38));
+    const g = c.getContext('2d'), im = g.getImageData(0, 0, 40, 40), d = im.data, bg = [d[(1 * 40 + 1) * 4], d[(1 * 40 + 1) * 4 + 1], d[(1 * 40 + 1) * 4 + 2]];
+    const same = (i) => d[i * 4 + 3] === 0 || (Math.abs(d[i * 4] - bg[0]) < 8 && Math.abs(d[i * 4 + 1] - bg[1]) < 8 && Math.abs(d[i * 4 + 2] - bg[2]) < 8);
+    const seen = new Uint8Array(1600), st = [];
+    for (let i = 0; i < 40; i++) st.push(i, 1560 + i, i * 40, i * 40 + 39);
+    while (st.length) { const i = st.pop(); if (seen[i] || !same(i)) continue; seen[i] = 1; d[i * 4 + 3] = 0; const x = i % 40, y = (i / 40) | 0; if (x > 0) st.push(i - 1); if (x < 39) st.push(i + 1); if (y > 0) st.push(i - 40); if (y < 39) st.push(i + 40); }
+    const out = new Uint8ClampedArray(d);
+    for (let i = 0; i < 1600; i++) if (!d[i * 4 + 3]) { const x = i % 40, y = (i / 40) | 0; if ((x > 0 && d[(i - 1) * 4 + 3]) || (x < 39 && d[(i + 1) * 4 + 3]) || (y > 0 && d[(i - 40) * 4 + 3]) || (y < 39 && d[(i + 40) * 4 + 3])) { out[i * 4] = 43; out[i * 4 + 1] = 35; out[i * 4 + 2] = 64; out[i * 4 + 3] = 255; } }
+    g.putImageData(new ImageData(out, 40, 40), 0, 0);
+    return (faceCache[k] = c);
+  }
   function facePortrait(cv, npc) { // 큰 얼굴: 하늘 배경 + 날개 + 얼굴 + 고리
     const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height; g.imageSmoothingEnabled = false;
     const grd = g.createLinearGradient(0, 0, 0, H2); grd.addColorStop(0, '#bfe6ff'); grd.addColorStop(1, '#fff6e0'); g.fillStyle = grd; g.fillRect(0, 0, W2, H2);
     g.fillStyle = '#ffffff'; for (const [x, y, r] of [[18, 96, 16], [40, 104, 14], [100, 98, 18], [80, 108, 12]]) pxDisc(g, x * W2 / 120, y * H2 / 120, r);
     g.drawImage(WING, 0, 0, 14, 11, 2, 34, 42, 33); g.save(); g.translate(W2, 0); g.scale(-1, 1); g.drawImage(WING, 0, 0, 14, 11, 2, 34, 42, 33); g.restore();
     const k = Math.max(0, CHARS.names.indexOf(npc.ch));
-    if (ART.faces) g.drawImage(ART.faces, (k % CHARS.cols) * 38, Math.floor(k / CHARS.cols) * 38, 38, 38, 22, 26, 76, 76);
+    if (ART.faces) g.drawImage(cleanFace(k), 0, 0, 40, 40, 20, 24, 80, 80);
     else if (ART.chars) g.drawImage(ART.chars, (k % CHARS.cols) * 64, Math.floor(k / CHARS.cols) * 112, 16, 16, 28, 34, 64, 64);
     g.drawImage(HALO, 0, 0, 8, 3, 36, 8, 48, 18);
   }
@@ -846,21 +861,21 @@
     $('talkName').textContent = npc.name; $('talkName').style.background = npc.color;
     facePortrait($('talkFace'), npc); showTalkLine(); $('talk').hidden = false; SND.play('ok');
   }
-  function showTalkLine() {
-    const npc = NPCS[TALK.npc]; let text = npc.lines[TALK.i % npc.lines.length];
-    if (npc.rules && DAY >= 3) text = TALK.i === 0 ? '영역전이 열렸다. 규칙을 모르고 싸우면 진다. 규칙서를 읽어 보아라.' : text;
+  function showTalkLine() { // 스페이스(또는 E·클릭)로 다음 줄, 마지막 줄에서 누르면 대화 끝 (다시 말 걸면 처음부터)
+    const npc = NPCS[TALK.npc], lines = npc.rules && DAY >= 3 ? ['영역전이 열렸다. 규칙을 모르고 싸우면 진다.', '아래 버튼으로 규칙서를 읽어 보아라.'] : npc.lines;
+    TALK.lines = lines; const text = lines[Math.min(TALK.i, lines.length - 1)], last = TALK.i >= lines.length - 1;
     $('talkText').textContent = text;
+    $('talkMore').textContent = last ? '■ Space 닫기' : `▼ Space (${TALK.i + 1}/${lines.length})`;
     const btn = [];
-    if (npc.shop) btn.push(['물건 보기', () => { closeTalk(); openShop(npc.shop, TALK.last); }]);
+    if (npc.shop) btn.push(['물건 보기', () => { const id = TALK.npc; closeTalk(); openShop(npc.shop, id); }]);
     if (npc.rules && DAY >= 3) btn.push(['📜 영역전 규칙서', () => { closeTalk(); $('rulebook').hidden = false; }]);
     if (npc.desk) btn.push(['등록 창구', () => { closeTalk(); $('wanderMsg').textContent = '나라가 없다면 여기서 등록하세요.'; renderWander(); $('wanderBox').hidden = false; }]);
-    if (npc.lines.length > 1) btn.push(['다음 이야기', () => { TALK.i++; showTalkLine(); }]);
     btn.push(['잘 있어요', closeTalk]);
-    TALK.last = TALK.npc;
-    const box = $('talkBtns'); box.innerHTML = ''; btn.forEach(([label, fn], i) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (i === 0) b.className = 'main'; b.onclick = fn; box.appendChild(b); });
+    const box = $('talkBtns'); box.innerHTML = ''; btn.forEach(([label, fn], k) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (k === 0 && btn.length > 1) b.className = 'main'; b.onclick = (e) => { e.stopPropagation(); fn(); }; box.appendChild(b); });
   }
+  function talkNext() { if (!TALK.npc) return; if (TALK.i >= TALK.lines.length - 1) closeTalk(); else { TALK.i++; showTalkLine(); SND.play('ok'); } }
   function closeTalk() { $('talk').hidden = true; TALK.npc = null; }
-  function talkPrimary() { const b = $('talkBtns').querySelector('button'); if (b) b.click(); }
+  $('talk').addEventListener('click', talkNext);
   // 상점 물건 그림 (16×16 도트)
   const ICON = {
     floor: pxRows(['................', '.CCCCCCCCCCCCCC.', '.CccCccCccCccCC.', '.CcCCcCCcCCcCcC.', '.CCCCCCCCCCCCCC.', '.CccCccCccCccCC.', '.CcCCcCCcCCcCcC.', '.CCCCCCCCCCCCCC.', '.CccCccCccCccCC.', '.CcCCcCCcCCcCcC.', '.CCCCCCCCCCCCCC.', '.CccCccCccCccCC.', '.CcCCcCCcCCcCcC.', '.CCCCCCCCCCCCCC.', '.dddddddddddddd.', '................'], { C: '#e8c260', c: '#fff0b0', d: '#b8862b' }),
@@ -1483,7 +1498,8 @@
     if (k === 'm') toggleMap();
     if (k === 'b') toggleWar();
     if (k === 't') { if (player.carry) toast('훔친 걸 들고 있으면 순간이동할 수 없어요'); else goHome(); }
-    if (k === 'e' && !e.repeat) { if (!$('talk').hidden) talkPrimary(); else pressE(); }
+    if ((k === 'e' || k === ' ') && !$('talk').hidden) { e.preventDefault(); if (!e.repeat) talkNext(); return; }
+    if (k === 'e' && !e.repeat) pressE();
     if (k === 'g' && ONLINE) setBuild(!build.on);
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
@@ -1720,6 +1736,9 @@
   $('storeBuild').addEventListener('click', () => { $('storeBox').hidden = true; setBuild(true); });
   $('storeClose').addEventListener('click', () => { $('storeBox').hidden = true; });
   $('shopClose').addEventListener('click', () => { $('shopBox').hidden = true; });
+  const setChatTuck = (on) => { document.body.classList.toggle('chatTuck', on); $('chatTab').hidden = !on; store('mp2026.chatTuck', on ? 1 : 0); };
+  $('chatHide').addEventListener('click', () => setChatTuck(true)); $('chatTab').addEventListener('click', () => setChatTuck(false));
+  if (store('mp2026.chatTuck')) setTimeout(() => setChatTuck(true), 0);
   $('ruleClose').addEventListener('click', () => { $('rulebook').hidden = true; });
   renderRulebook();
   function interact() {
@@ -1895,13 +1914,13 @@
   // 꾸미기
   function closetUI() {
     const cw = $('hairSw'); cw.textContent = ''; cw.classList.add('facegrid');
-    const all = [...USER.chars.map((k) => ['u', k]), ...CHARS.names.map((n, j) => ['na', n, j])];
-    all.forEach(([kind, name, j], i) => {
+    const all = CHARS.names.map((n, j) => ['na', n, j]); // 싸움 모션(걷기 4방향 + 공격)이 있는 캐릭터만
+    all.forEach(([kind, name, j]) => { const i = j + USER.chars.length;
       const b = document.createElement('button'); b.type = 'button'; b.className = 'facebtn';
       b.setAttribute('aria-label', name);
       const cv = document.createElement('canvas'); cv.width = 38; cv.height = 38; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
       if (kind === 'u') { const im = userSprite(name, player.look.hue | 0); const sc = Math.min(36 / im.width, 36 / im.height); g.drawImage(im, (38 - im.width * sc) / 2, 38 - im.height * sc, im.width * sc, im.height * sc); }
-      else g.drawImage(ART.faces, (j % CHARS.cols) * 38, Math.floor(j / CHARS.cols) * 38, 38, 38, 0, 0, 38, 38);
+      else g.drawImage(cleanFace(j), 0, 0, 40, 40, -1, -1, 40, 40);
       b.appendChild(cv);
       b.setAttribute('aria-pressed', String((player.look.char | 0) === i));
       b.addEventListener('click', () => { player.look.char = i; closetUI(); saveLook(); });
@@ -1917,6 +1936,14 @@
       hw.appendChild(b);
     });
   }
+  function closetPreview() { // 고른 캐릭터를 크게: 4방향 걷기 + 공격 동작이 돌아가며
+    const cv = $('closetPrev'); if (!cv || $('closet').hidden) return;
+    const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, cv.width, cv.height);
+    const c = (player.look.char | 0) - USER.chars.length, t = performance.now() / 1000;
+    if (c < 0) drawSprite(g, 64, 104, Object.assign({}, player.look, { me: false }), t, true, 0);
+    else { const sheet = charSheet(c, player.look.hue | 0), ph = Math.floor(t / 1.2) % 5, dir = [0, 3, 1, 2, 3][ph], row = ph === 4 ? 4 : Math.floor(t * 8) % 4; g.drawImage(sheet, dir * 16, row * 16, 16, 16, 16, 8, 96, 96); }
+    requestAnimationFrame(closetPreview);
+  }
   function saveLook() {
     store('mp2026.look', { name: player.name, char: player.look.char | 0, hue: player.look.hue | 0, hair: player.look.hair, outfit: player.look.outfit, long: player.look.long });
     if (window.MP_ONLINE && ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'look', name: player.name, look: lookPayload() }));
@@ -1930,7 +1957,7 @@
     if (renamesLeft <= 0) { toast('이름은 더 바꿀 수 없어요'); return; }
     $('closet').hidden = true; startOpening('rename');
   });
-  $('btnCloset').addEventListener('click', () => { $('nick').value = player.name; $('nickMsg').textContent = ''; renderNameBox(); closetUI(); $('closet').hidden = false; });
+  $('btnCloset').addEventListener('click', () => { $('nick').value = player.name; $('nickMsg').textContent = ''; renderNameBox(); closetUI(); $('closet').hidden = false; closetPreview(); });
   $('btnClosetDone').addEventListener('click', () => { $('closet').hidden = true; });
 
   // 쿠폰 (오프라인에서 받은 1회용 코드). 실제 게임에서는 서버가 확인하고, 한 번 쓰면 모두에게 사라진다.
