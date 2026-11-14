@@ -99,7 +99,7 @@ const TERR = new Uint16Array(Buffer.from(MAP.territory_u16le_b64, 'base64').buff
 const terrAtPx = (x, y) => { const tx = Math.floor(x / 32), ty = Math.floor(y / 32); if (tx < 0 || ty < 0 || tx >= MAP.width || ty >= MAP.height) return -1; const v = TERR[ty * MAP.width + tx]; return v === 65535 ? -1 : v; };
 const world = new World(MAP, state.world || null);
 const MPRules = require('../client/rules.js');
-const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT, BUILD_BY, normItems, tileItem, CROPS } = MPRules;
+const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT, BUILD_BY, normItems, tileItem, CROPS, FISH, weatherOf } = MPRules;
 const MPRulesPortal = (t) => MPRules.portalSpot(t, tileAt);
 { const NM = MPRules.nameAll(MAP.territories); for (const t of MAP.territories) world.t[t.id].name = NM[t.id]; } // 알림에 쓰는 영토 이름 (겹치지 않게)
 world.tileTerr = (i) => terrAtTile(i % MAP.width, Math.floor(i / MAP.width)); // 영역이 넘어갈 때 그 땅의 설치물도 같이
@@ -586,12 +586,14 @@ wss.on('connection', (ws) => {
         send(ws, { t: 'ok', text: `🪵 목재 +${NUM.woodPerTree} (우리 저장소)` });
         break;
       }
-      case 'mine': { // 금광: 영토마다 하루 1번, 사람마다
+      case 'mineStart': { s.mining = { tid: m.terr | 0, at: now() }; return; } // 곡괭이질 시작 (꾹 누르기)
+      case 'mine': { // 금광: 영토마다 하루 1번, 사람마다 · 곡괭이로 꾹 눌러야 함
         const n = world.nationOfPlayer(s.token); const tid = m.terr | 0;
         if (!n) return send(ws, { t: 'err', text: '나라가 있어야 캔 코인을 모을 수 있어요' });
         const mp = mineOf(tid); if (!mp || !nextTo(s, mp[0], mp[1], 2.2)) return send(ws, { t: 'err', text: '금광 바로 옆에서 캐요' });
         const day = gameDayKey(); s.acc.mined = s.acc.mined && s.acc.mined.day === day ? s.acc.mined : { day, ids: [] };
         if (s.acc.mined.ids.includes(tid)) return send(ws, { t: 'err', text: '이 금광은 오늘 이미 캤어요' });
+        if (!s.mining || s.mining.tid !== tid || now() - s.mining.at < NUM.mineHoldMs - 300) return; s.mining = null;
         const got = 300 + Math.floor(Math.random() * 31) * 10;
         s.acc.mined.ids.push(tid); n.coin += got; dirty = true; sendViews([n.id]);
         send(ws, { t: 'mined', terr: tid, text: `금광에서 코인 ${got}을 캤어요 (우리 저장소)` });
@@ -666,6 +668,33 @@ wss.on('connection', (ws) => {
         if (done || m.t === 'place') { dirty = true; sendViews([n.id]); }
         if (!done && why) send(ws, { t: 'err', text: why });
         else if (done && why && list.length > 1) send(ws, { t: 'ok', text: `${done}칸 ${m.t === 'pickup' ? '거둠' : '놓음'} · ${why}` });
+        break;
+      }
+      case 'fishCast': { // 낚시: 물을 바라보고 던짐 → 서버가 입질 시간을 정함
+        const n = world.nationOfPlayer(s.token); if (!n) return send(ws, { t: 'err', text: '나라가 있어야 잡은 물고기를 모을 수 있어요' });
+        const x = m.x | 0, y = m.y | 0, e = world.s.tiles[tileIdx(x, y)];
+        if (!nextTo(s, x, y, 1.8) || !(tileAt(x, y) === TT.WATER || (e && (e.k === 'water' || e.canal)))) return send(ws, { t: 'err', text: '물을 바라보고 던져요' });
+        const day = gameDayKey(); s.acc.fished = s.acc.fished && s.acc.fished.day === day ? s.acc.fished : { day, n: 0 };
+        if (s.acc.fished.n >= NUM.fishPerDay) return send(ws, { t: 'err', text: `오늘은 물고기를 ${NUM.fishPerDay}마리 다 잡았어요 · 내일 또!` });
+        const rain = curWeather() === 'rain', [a, b] = NUM.fishBite, wait = (a + Math.random() * (b - a)) * (rain ? NUM.fishRainK : 1) * 1000;
+        s.fishing = { at: now() + wait, rain }; send(ws, { t: 'fishBite', wait: Math.round(wait), rain });
+        break;
+      }
+      case 'fishCatch': { // 타이밍 결과: perfect / good / miss
+        const n = world.nationOfPlayer(s.token); const F = s.fishing; s.fishing = null;
+        if (!n || !F) return; const late = now() - F.at;
+        if (late < -250 || late > 5000) return send(ws, { t: 'fished', fish: null, text: '물고기가 도망갔어요…' });
+        if (m.grade !== 'perfect' && m.grade !== 'good') return send(ws, { t: 'fished', fish: null, text: '아깝다! 놓쳤어요' });
+        const list = Object.entries(FISH).map(([k, f]) => [k, f.w * (f.rare ? (F.rain ? 1.5 : 1) * (m.grade === 'perfect' ? 1.6 : 1) : 1)]);
+        let r = Math.random() * list.reduce((a, [, w]) => a + w, 0), pick = list[0][0]; for (const [k, w] of list) { if ((r -= w) <= 0) { pick = k; break; } }
+        n.items = normItems(n.items); n.items['fi_' + pick] = (n.items['fi_' + pick] || 0) + 1; s.acc.fished.n++; dirty = true; sendViews([n.id]);
+        send(ws, { t: 'fished', fish: pick, rare: !!FISH[pick].rare, text: `${FISH[pick].rare ? '✨ ' : ''}${FISH[pick].name}을(를) 낚았어요! (오늘 ${s.acc.fished.n}/${NUM.fishPerDay}) → 우리 저장소` });
+        if (pick === 'legend' || pick === 'goldcarp') notifyNation(n.id, `🎣 ${s.acc.name}님이 ${FISH[pick].name}을(를) 낚았어요!`);
+        break;
+      }
+      case 'act': { // 작업 중인 도구를 주변 사람에게 보여 주기 (낚싯대·곡괭이·도끼)
+        const a = ['fish', 'mine', 'chop', 'hit', 'farm'].includes(m.a) ? m.a : null; if (s.act === a) return; s.act = a;
+        for (const o of online.values()) if (o !== s && o.scene === s.scene && o.room === s.room && o.ws.readyState === 1) send(o.ws, { t: 'act', id: s.id, a, fx: m.fx | 0, fy: m.fy | 0 });
         break;
       }
       case 'plant': case 'fert': case 'harvest': { // 농사: 씨앗 심기(여러 칸) · 비료 주기 · 수확
@@ -979,7 +1008,8 @@ setInterval(() => {
 // 시계가 다음 시간대로 넘어갈 때: 점심·밤 → 전투 처리, 아침 → 멸망 선포·균열 예고·균열 웨이브
 const doomDay = () => state.doomDay || 5;
 const waveDay = (k) => doomDay() + 2 * k - 1; // 선포 다음 날부터 이틀마다 (기본 6·8·10·12·14일차)
-function clockMsg() { const c = gameClock(); return { t: 'clock', day: c.day, slot: c.slot, doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
+function curWeather() { const c = gameClock(); return state.weather === 'rain' || state.weather === 'clear' ? state.weather : weatherOf(c.day, c.slot); } // 관리자가 정하면 그 날씨
+function clockMsg() { const c = gameClock(); return { t: 'clock', day: c.day, slot: c.slot, weather: curWeather(), doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
 function onEnter(c) {
   if (c.slot === 'lunch' || c.slot === 'night') resolveNight(`${c.day}일차 ${SLOT_LABEL[c.slot]}`, slotIdx(c.day, c.slot));
   // 멸망 선포: 선포일 점심. 다음 날 아침부터 균열이 매일 영역마다 10%씩 침식
@@ -1155,6 +1185,7 @@ async function adminOp(m) {
       dirty = true; tickClock(); console.log('[관리자] 시계:', JSON.stringify(state.clock));
       return adminStatus();
     }
+    case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
     case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
     case 'nationAdjust': { // 나라 병력·코인 더하기/빼기
       const n = world.nation(String(m.nid || '')); if (!n || n.dead) return { ok: false, err: '없는 나라예요' };

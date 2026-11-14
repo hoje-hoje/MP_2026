@@ -36,6 +36,12 @@
     berry: { name: '딸기', seed: 50, min: 120, yield: 3, sell: 40 },
     pumpkin: { name: '호박', seed: 80, min: 240, yield: 1, sell: 250 },
   };
+  // 낚시: 물고기 (w = 잡힐 무게, 비 오면 귀한 것(rare)이 1.5배)
+  const FISH = {
+    crucian: { name: '붕어', w: 40, sell: 3 }, carp: { name: '잉어', w: 26, sell: 6 }, trout: { name: '송어', w: 16, sell: 10 },
+    salmon: { name: '연어', w: 10, sell: 15, rare: 1 }, goldcarp: { name: '황금 잉어', w: 3, sell: 60, rare: 1 }, legend: { name: '전설의 하늘고래', w: 0.6, sell: 150, rare: 1 },
+  };
+  for (const [k, f] of Object.entries(FISH)) BUILD.push({ id: 'fi_' + k, cat: 'crop', theme: 'stone', name: f.name, sell: f.sell, fish: k });
   BUILD.push({ id: 'b_wood', cat: 'bridge', theme: 'forest', name: '나무 다리', price: 25 }, { id: 'b_stone', cat: 'bridge', theme: 'stone', name: '돌 다리', price: 25 });
   BUILD.push({ id: 'farm', cat: 'farm', theme: 'forest', name: '밭', price: 10 }, { id: 'canal', cat: 'water', theme: 'stone', name: '수로', price: 15 }, { id: 'fert', cat: 'fert', theme: 'forest', name: '비료', price: 40 });
   for (const [k, c] of Object.entries(CROPS)) BUILD.push({ id: 's_' + k, cat: 'seed', theme: 'forest', name: c.name + ' 씨앗', price: c.seed, crop: k }, { id: 'p_' + k, cat: 'crop', theme: 'forest', name: c.name, sell: c.sell, crop: k });
@@ -65,6 +71,7 @@
     // 영지 (나라 공용 저장소)
     woodPerTree: 2,                // 나무 1그루 목재
     price: { floor: 20, wall: 60, deco: 30, trap: 150 }, // 건축 상점 가격 (코인, 1개 · 종류별로 같음, 테마는 모양만 다름)
+    fishPerDay: 40, fishBite: [2.5, 6.5], fishRainK: 0.6, mineHoldMs: 2400,
     canalBoost: 0.8, canalRange: 2, maxFarms: 120, maxCanals: 60,
     buildHp: 100, hitDmg: 10, hitCdMs: 380, maxDeco: 80, // 벽·기둥 내구도: 한 번 때리면 −10 (E 꾹 = 0.4초마다)
     vaccineBase: 3000, vaccineStep: 500,       // 백신: 나라가 살 때마다 비싸짐 (쓰면 영역 하나 침식 0%)
@@ -638,5 +645,7 @@
   const notorietyTier = (v) => { const T2 = NUM.notorietyTiers; let k = 0; for (let i = 0; i < T2.length; i++) if ((v || 0) >= T2[i].min) k = i; return k; };
   // 이름 옆 표시: 마이너스 = 체포왕 👮, 1~199 💀, 200~499 💀💀, 500 이상 💀💀💀
   const notorietyBadge = (v) => (v < 0 ? '👮' : v <= 0 ? '' : v < 200 ? '💀' : v < 500 ? '💀💀' : '💀💀💀');
-  return { COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  // 날씨: 일차·시간대마다 정해짐 (약 30% 비). 비 오면 낚시 입질이 빠르고 귀한 물고기가 잘 잡힘
+  function weatherOf(day, slot) { const h = hash(day * 7 + ({ morning: 1, lunch: 2, night: 3 }[slot] || 0), 991, 17); return h < 0.3 ? 'rain' : 'clear'; }
+  return { weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
