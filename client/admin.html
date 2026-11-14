@@ -543,7 +543,7 @@ const hitsOf = (n) => ((FX[n].act && FX[n].act.hits) || [{ t: 0.08, stop: 0.08, 
 const PAL = { W: '#f4f8ff', L: '#9fb4d8', D: '#5d6f96', G: '#f0c23a', g: '#a8761c', B: '#8a5a2b', b: '#5a3416', R: '#e8423c', s: '#efe6cc', O: '#ff8a2a', o: '#ffd35a', Y: '#fff2a8', K: '#3b3b48', S: '#c8ced8' };
 const SPR = {
   sword: { pv: [2, 11], px: ['..W..', '.WLD.', '.WLD.', '.WLD.', '.WLD.', '.WLD.', '.WLD.', '.WLD.', '.WLD.', 'gGGGg', '..b..', '..b..', '..G..'] },
-  axe: { pv: [4, 12], px: ['.SS.B..', 'SWLSb..', 'SWLSb..', 'SLLSb..', '.SS.b..', '....b..', '....B..', '....b..', '....B..', '....b..', '....B..', '....b..', '....b..', '....g..'] },
+  axe: { pv: [4, 12], px: ['....W....', '.SSDWDSS.', 'SWLSbSLWS', 'SWLSbSLWS', 'SWLSbSLWS', 'SLLSbSLLS', '.SS.b.SS.', '....B....', '....b....', '....B....', '....b....', '....B....', '....b....', '....g....'] }, // 양날 도끼
   spear: { pv: [2, 14], px: ['..W..', '.WLD.', '.WLD.', '.WLD.', '..L..', '.RRR.', '..R..', '..B..', '..b..', '..B..', '..b..', '..B..', '..b..', '..B..', '..b..', '..B..', '..b..', '..g..'] },
   dagger: { pv: [2, 6], px: ['..W..', '.WL..', '.WLD.', '.WLD.', 'gGGGg', '..b..', '..b..', '..G..'] },
   bow: { pv: [3, 6], noRot: true, px: ['sB...', 's.B..', 's..B.', 's...B', 's...B', 's..bB', 's..bB', 's...B', 's...B', 's..B.', 's.B..', 'sB...'] },
@@ -742,9 +742,10 @@ function moveE(e, mx, my, dt, speedK = 1) {
 // 손에 든 도구 그리기: 오른손 기준, 왼쪽을 보면 좌우 뒤집기, 위를 보면 몸 뒤에
 function drawTool(e) {
   const w = W[e.w]; if (!w || e.roll > 0) return; const s = SPR[w.spr]; if (!s) return;
-  const side = e.dir === 2 ? -1 : 1, up = e.dir === 1, down = e.dir === 0;
-  let hx = e.x + (up ? -6 : down ? 6 : 6 * side), hy = e.y - 9 + (e.walk > 0 ? Math.floor(e.walk * 8) % 2 : 0), ang = 0.35, push = 0;
-  if (w.spr === 'bow') { ang = 0; hx = e.x + (up ? -4 : down ? 5 : 8 * side); }
+  const side = e.dir === 2 ? -1 : 1, up = e.dir === 1, down = e.dir === 0, act = !!e.atk || e.chg >= 0;
+  // 손 위치 (캐릭터 도트에서 찾은 손 자리): 옆 보기 = 몸 앞쪽 손, 공격하면 앞으로 뻗은 손 / 앞 보기 = 오른손 / 뒤 보기 = 왼손(몸 뒤)
+  let hx = e.x + (up ? -11 : down ? 12 : (act ? 12 : 5) * side), hy = e.y - (down || up ? 5 : act ? 7 : 6) + (e.walk > 0 ? Math.floor(e.walk * 8) % 2 : 0), ang = 0.35, push = 0;
+  if (w.spr === 'bow') { ang = 0; hx = e.x + (up ? -10 : down ? 11 : 9 * side); }
   if (e.chg >= 0) { ang = w.thrust ? 1.57 : w.spr === 'bow' ? 0 : -0.9; push = w.spr === 'bow' ? -Math.min(3, e.chg * 4) : 0; hy -= 1; } // 차징: 뒤로 젖히기 / 활시위 당기기
   if (e.atk) {
     const a = e.atk, hs = a.hits || w.hits || [{ t: 0.1 }], T = hs[0].t + 0.08, k = Math.min(1, a.t / Math.max(0.08, T));
