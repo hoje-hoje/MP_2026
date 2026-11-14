@@ -1616,10 +1616,9 @@
   let nameSet = false, renamesLeft = 3;
   $('nick').addEventListener('input', (e) => { if (window.MP_ONLINE) { $('nickMsg').textContent = ''; return; } player.name = e.target.value.trim() || '나'; tagW.delete(player.name); saveLook(); });
   function renderNameBox() { if (!window.MP_ONLINE) return; $('nickBtn').hidden = false; $('nickBtn').textContent = `이름 바꾸기 (남은 ${renamesLeft}번)`; $('nickBtn').disabled = renamesLeft <= 0; $('nick').value = player.name; }
-  $('nickBtn').addEventListener('click', () => {
-    const want = $('nick').value.trim(); if (want === player.name) { $('nickMsg').textContent = '지금 이름과 같아요'; return; }
-    if (!confirm(`이름을 '${want}'(으)로 바꿀까요? (남은 변경 ${renamesLeft}번)`)) return;
-    ws.send(JSON.stringify({ t: 'setName', name: want }));
+  $('nickBtn').addEventListener('click', () => { // 이름 바꾸기: 여신이 나와서 새 이름을 물어봄
+    if (renamesLeft <= 0) { toast('이름은 더 바꿀 수 없어요'); return; }
+    $('closet').hidden = true; startOpening('rename');
   });
   $('btnCloset').addEventListener('click', () => { $('nick').value = player.name; $('nickMsg').textContent = ''; renderNameBox(); closetUI(); $('closet').hidden = false; });
   $('btnClosetDone').addEventListener('click', () => { $('closet').hidden = true; });
@@ -3060,6 +3059,9 @@
   $('tStart').addEventListener('click', endTitle);
   $('title').addEventListener('click', (e) => { if (e.target === $('title') || e.target.classList.contains('tstart')) endTitle(); });
   $('tSettings').addEventListener('click', () => { $('tSet').hidden = !$('tSet').hidden; });
+  $('tReplay').addEventListener('click', () => { // 오프닝 다시 보기 (이름은 묻지 않음)
+    TITLE.on = false; document.body.classList.remove('titling'); $('title').hidden = true; SND.bgm((store('mp2026.bgm') ?? 60) > 0); startOpening('replay');
+  });
   $('tBgm').addEventListener('input', () => { SND.setVol('bgm', +$('tBgm').value); $('tBgmV').textContent = $('tBgm').value + '%'; });
   $('tSfx').addEventListener('input', () => { SND.setVol('sfx', +$('tSfx').value); $('tSfxV').textContent = $('tSfx').value + '%'; SND.play('coin'); });
   $('tCoupon').addEventListener('click', () => { $('coupon').hidden = false; $('coupon').style.zIndex = 60; setTimeout(() => $('couponIn').focus(), 50); });
@@ -3080,33 +3082,50 @@
     { who: '여신', text: '그리고…… 아니에요. 그 이야기는 조금 나중에 할게요.' },
     { who: '여신', text: '자, 이제 당신의 나라를 세우러 가 볼까요?' },
   ];
+  // 다시 보기: 이름은 이미 아니까 묻지 않음 / 이름 바꾸기: 여신이 나와서 새 이름을 물어봄
+  const OP_REPLAY = OP_LINES.map((L) => (L.input ? { who: '여신', text: () => `당신의 이름은…… '${player.name}'(이)군요.` } : L)).filter((L, i) => i !== 7);
+  const OP_RENAME = [
+    { who: '여신', text: () => `${player.name}님, 부르셨나요?` },
+    { who: '여신', text: () => `이름을 바꾸고 싶으신가요? 새 이름을 다시 알려주세요. (남은 변경 ${renamesLeft}번)`, input: true },
+    { who: '여신', text: () => `${player.name}님…… 새 이름이 잘 어울려요.` },
+  ];
+  let OPL = OP_LINES, opMode = 'first';
   const opText = (L) => (typeof L.text === 'function' ? L.text() : L.text);
-  function startOpening() { OP.on = true; OP.i = 0; $('opening').hidden = false; showLine(); cancelAnimationFrame(OP.raf); const loop = (n) => { drawOpening(n / 1000); if (OP.on) OP.raf = requestAnimationFrame(loop); }; OP.raf = requestAnimationFrame(loop); }
+  function startOpening(mode = 'first') { opMode = mode; OPL = mode === 'replay' ? OP_REPLAY : mode === 'rename' ? OP_RENAME : OP_LINES; OP.on = true; OP.i = 0; $('opening').hidden = false; showLine(); cancelAnimationFrame(OP.raf); const loop = (n) => { drawOpening(n / 1000); if (OP.on) OP.raf = requestAnimationFrame(loop); }; OP.raf = requestAnimationFrame(loop); }
   function showLine() {
-    const L = OP_LINES[OP.i]; OP.t0 = performance.now(); OP.shown = 0; OP.typing = true;
+    const L = OPL[OP.i]; OP.t0 = performance.now(); OP.shown = 0; OP.typing = true;
     $('opWho').textContent = L.who; $('opInput').hidden = true; $('opNext').hidden = true;
     if (L.shake) { $('opening').classList.remove('shake'); void $('opening').offsetWidth; $('opening').classList.add('shake'); }
   }
   function tickType() {
     if (!OP.on) return;
-    const L = OP_LINES[OP.i]; if (!L) return; const full = opText(L);
+    const L = OPL[OP.i]; if (!L) return; const full = opText(L);
     if (OP.typing) { OP.shown = Math.min(full.length, Math.floor((performance.now() - OP.t0) / 45)); if (OP.shown >= full.length) { OP.typing = false; if (L.input) { $('opInput').hidden = false; $('opNick').value = player.name && player.name !== '나' ? player.name : ''; setTimeout(() => $('opNick').focus(), 30); } else $('opNext').hidden = false; } }
     $('opText').textContent = full.slice(0, OP.shown);
   }
   function opAdvance() {
     if (!OP.on || OP.flash) return;
-    const L = OP_LINES[OP.i];
+    const L = OPL[OP.i];
     if (OP.typing) { OP.typing = false; OP.shown = opText(L).length; tickType(); if (L.input) { $('opInput').hidden = false; setTimeout(() => $('opNick').focus(), 30); } else $('opNext').hidden = false; return; }
     if (L.input) return; // 이름을 정해야 넘어감
-    if (++OP.i < OP_LINES.length) showLine(); else finishOpening();
+    if (++OP.i < OPL.length) showLine(); else finishOpening();
   }
   function opName() {
     const v = $('opNick').value.trim();
     if (v.length < 1) { toast('이름을 적어 주세요'); return; }
+    const go = () => { $('opInput').hidden = true; OP.i++; showLine(); };
+    if (opMode === 'rename') { // 이름 바꾸기: 서버가 확인 (겹치면 안내, 남은 횟수 차감)
+      if (v === player.name) { toast('지금 이름과 같아요'); return; }
+      if (renamesLeft <= 0) { toast('이름은 더 바꿀 수 없어요'); return; }
+      if (!netOn) { toast('서버에 연결하는 중이에요'); return; }
+      nameNext = go; ws.send(JSON.stringify({ t: 'setName', name: v })); return;
+    }
     $('fNick').value = v;
-    withName(() => { $('opInput').hidden = true; OP.i++; showLine(); });
+    withName(go);
   }
-  function finishOpening() { // 로고가 딱 나오고 → 건국 창
+  function finishOpening() { // 로고가 딱 나오고 → 건국 창 (다시 보기면 타이틀로, 이름 바꾸기면 바로 닫힘)
+    if (opMode === 'rename') { OP.on = false; $('opening').hidden = true; toast(`이름을 '${player.name}'(으)로 바꿨어요 · 남은 변경 ${renamesLeft}번`); return; }
+    if (opMode === 'replay') { OP.flash = performance.now(); $('opBox').hidden = true; $('opLogo').hidden = false; setTimeout(() => { OP.on = false; OP.flash = 0; $('opening').hidden = true; $('opLogo').hidden = true; $('opBox').hidden = false; startTitle(); }, 2600); return; }
     OP.flash = performance.now(); $('opBox').hidden = true; $('opLogo').hidden = false;
     setTimeout(() => { OP.on = false; OP.flash = 0; $('opening').hidden = true; $('opLogo').hidden = true; $('opBox').hidden = false; store('mp2026.opened', 1); if (needFound || !ONLINE) openFound('who'); else maybeDoomPopup(); }, 2600);
   }
@@ -3125,7 +3144,7 @@
     tickType();
     const W2 = opCv.clientWidth, H2 = opCv.clientHeight; if (opCv.width !== W2 || opCv.height !== H2) { opCv.width = W2; opCv.height = H2; }
     const g = opCv.getContext('2d'); g.imageSmoothingEnabled = false;
-    const L = OP_LINES[Math.min(OP.i, OP_LINES.length - 1)], dim = OP.flash ? Math.max(0, 1 - (performance.now() - OP.flash) / 300) : L.dim == null ? 1 : L.dim; // 로고가 나오면 여신은 사라짐
+    const L = OPL[Math.min(OP.i, OPL.length - 1)], dim = OP.flash ? Math.max(0, 1 - (performance.now() - OP.flash) / 300) : L.dim == null ? 1 : L.dim; // 로고가 나오면 여신은 사라짐
     const grd = g.createLinearGradient(0, 0, 0, H2); grd.addColorStop(0, '#0b0820'); grd.addColorStop(1, '#2a1a4a'); g.fillStyle = grd; g.fillRect(0, 0, W2, H2);
     for (let i = 0; i < 140; i++) { const x = (hash(i, 1, 5) * W2 + t * (6 + hash(i, 2, 5) * 14)) % W2, y = hash(i, 3, 5) * H2 * 0.85, tw = 0.5 + 0.5 * Math.sin(t * 2 + i); g.fillStyle = `rgba(255,${230 + (i % 25)},255,${(0.25 + 0.6 * tw) * Math.max(0.3, dim)})`; g.fillRect(x | 0, y | 0, i % 7 ? 2 : 3, i % 7 ? 2 : 3); }
     const sc = Math.max(4, Math.min(9, Math.floor(H2 / 110))), cx = W2 / 2, cy = H2 * 0.42 + Math.sin(t * 1.6) * 6;
