@@ -1682,6 +1682,7 @@
     switch (m.t) {
       case 'welcome': {
         myId = m.id; netOn = true; store('mp2026.token', m.token);
+        if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
         player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
         if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
@@ -1725,6 +1726,7 @@
         break;
       }
       case 'chatErr': toast(m.text); break;
+      case 'bgm': SND.setFiles(m.files); BGM_CUR = m.cur && m.cur.startsWith('f:') ? 'f:/bgm/' + m.cur.slice(2) : (m.cur || 'peace'); if (titleDone && !TITLE.on && !OP.on) SND.bgm(BGM_CUR); break;
       case 'emote': { const r = m.id === myId ? player : remotes.get(m.id); if (r) { r.emote = m.text; r.emoteT = 3; } break; }
       case 'wander': wanderList = m.list || []; renderWander(); break;
       case 'owners': setErosion(m.erosion); if ('riftNext' in m) { RIFT_NEXT = m.riftNext; RIFT_SET = new Set(RIFT_NEXT ? RIFT_NEXT.terrs : []); } if (m.gone) setGone(m.gone); if (m.battles) BATTLES = m.battles; if (m.mines) applyMines(m.mines); applyWorld(m.owners, m.nations); if (!$('found').hidden && foundSel !== undefined && !document.querySelector('#found [data-step=found]').hidden) drawFoundMap(); break;
@@ -2957,7 +2959,7 @@
       try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return false; }
       master = ac.createGain(); master.connect(ac.destination);
       sfxBus = ac.createGain(); sfxBus.gain.value = vol('mp2026.sfx', 70) * 0.5; sfxBus.connect(master);
-      bgmBus = ac.createGain(); bgmBus.gain.value = vol('mp2026.bgm', 60) * 0.22; bgmBus.connect(master);
+      bgmBus = ac.createGain(); bgmBus.gain.value = vol('mp2026.bgm', 60) * 0.55; bgmBus.connect(master); // 배경음악 크게
       return true;
     }
     function tone(freq, t0, dur, type = 'square', gain = 0.3, bus = sfxBus, slide = 0) {
@@ -2990,26 +2992,50 @@
       bell: (t) => { tone(1568, t, 1.2, 'sine', 0.2); tone(2093, t, 0.8, 'sine', 0.08); },
     };
     function play(name) { if (!init() || ac.state === 'suspended') { if (ac) ac.resume(); } if (!ac || !FX[name]) return; try { FX[name](ac.currentTime + 0.01); } catch (e) { /* 무시 */ } }
-    // 배경음악: 가-바-다-사 (Am-F-C-G) 진행의 잔잔한 RPG 루프 (8분음표 16개 × 4마디)
-    const CH = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];
-    const MEL = [76, 0, 74, 72, 74, 0, 76, 79, 77, 0, 76, 74, 72, 0, 0, 0, 72, 0, 74, 76, 79, 0, 76, 74, 74, 0, 72, 71, 72, 0, 0, 0,
-      69, 0, 72, 76, 77, 0, 76, 72, 72, 0, 74, 76, 74, 0, 72, 71, 72, 74, 76, 79, 81, 0, 79, 76, 74, 0, 72, 74, 76, 0, 0, 0];
+    // 배경음악 3곡 (8분음표 64칸 = 4마디 × 16): 0 = 쉼표
+    const TRACKS = {
+      peace: { name: '평화로운 들판', bpm: 96, ch: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], lead: 'square',
+        mel: [76, 0, 74, 72, 74, 0, 76, 79, 77, 0, 76, 74, 72, 0, 0, 0, 72, 0, 74, 76, 79, 0, 76, 74, 74, 0, 72, 71, 72, 0, 0, 0,
+          69, 0, 72, 76, 77, 0, 76, 72, 72, 0, 74, 76, 74, 0, 72, 71, 72, 74, 76, 79, 81, 0, 79, 76, 74, 0, 72, 74, 76, 0, 0, 0] },
+      village: { name: '마을 축제', bpm: 120, ch: [[48, 52, 55], [55, 59, 62], [57, 60, 64], [53, 57, 60]], lead: 'square',
+        mel: [72, 0, 76, 0, 79, 0, 76, 0, 74, 0, 79, 0, 83, 0, 79, 0, 81, 0, 79, 76, 72, 0, 76, 0, 77, 0, 76, 74, 72, 0, 0, 0,
+          72, 74, 76, 0, 79, 0, 81, 79, 74, 76, 79, 0, 83, 0, 81, 79, 81, 0, 84, 0, 81, 79, 76, 0, 77, 76, 74, 0, 72, 0, 0, 0] },
+      mystic: { name: '신전의 밤', bpm: 80, ch: [[50, 53, 57], [46, 50, 53], [48, 52, 55], [45, 49, 52]], lead: 'triangle',
+        mel: [74, 0, 0, 77, 76, 0, 74, 0, 72, 0, 0, 0, 74, 0, 0, 0, 70, 0, 0, 74, 72, 0, 70, 0, 69, 0, 0, 0, 0, 0, 0, 0,
+          72, 0, 0, 76, 74, 0, 72, 0, 74, 0, 77, 0, 81, 0, 0, 0, 79, 0, 77, 0, 76, 0, 74, 0, 73, 0, 0, 0, 0, 0, 0, 0] },
+    };
     const mf = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    let cur = null, audio = null;
     function bgmTick() {
-      if (!bgmOn) return;
-      const spb = 60 / 96 / 2, t = ac.currentTime + 0.05; // 96bpm 8분음표
+      if (!bgmOn || !cur) return;
+      const T = TRACKS[cur], spb = 60 / T.bpm / 2, t = ac.currentTime + 0.05;
       for (let k = 0; k < 4; k++) {
-        const i = (step + k) % 64, bar = Math.floor(i / 16), c = CH[bar], tt = t + k * spb;
-        if (i % 4 === 0) tone(mf(c[0] - 12), tt, spb * 3.6, 'triangle', 0.32, bgmBus); // 베이스
-        tone(mf(c[(i % 3)] + 12), tt, spb * 0.9, 'square', 0.05, bgmBus); // 아르페지오
-        if (MEL[i]) tone(mf(MEL[i]), tt, spb * 1.6, 'square', 0.09, bgmBus); // 멜로디
+        const i = (step + k) % 64, c = T.ch[Math.floor(i / 16)], tt = t + k * spb;
+        if (i % 4 === 0) tone(mf(c[0] - 12), tt, spb * 3.6, 'triangle', 0.5, bgmBus); // 베이스
+        tone(mf(c[i % 3] + 12), tt, spb * 0.9, 'square', 0.07, bgmBus); // 아르페지오
+        if (T.mel[i]) tone(mf(T.mel[i]), tt, spb * 1.7, T.lead, T.lead === 'triangle' ? 0.3 : 0.14, bgmBus); // 멜로디
+        if (i % 8 === 4) noise(tt, 0.05, 0.12, 5000, bgmBus); // 작은 박자
       }
       step = (step + 4) % 64;
       bgmTimer = setTimeout(bgmTick, spb * 4 * 1000 - 20);
     }
-    function bgm(on) { if (!init()) return; ac.resume(); if (on && !bgmOn) { bgmOn = true; step = 0; bgmTick(); } else if (!on) { bgmOn = false; clearTimeout(bgmTimer); } }
-    function setVol(kind, v) { store(kind === 'bgm' ? 'mp2026.bgm' : 'mp2026.sfx', v); if (!ac) return; if (kind === 'bgm') bgmBus.gain.value = v / 100 * 0.22; else sfxBus.gain.value = v / 100 * 0.5; }
-    return { play, bgm, setVol };
+    const bgmVol = () => vol('mp2026.bgm', 60);
+    function stopAll() { bgmOn = false; clearTimeout(bgmTimer); if (audio) { audio.pause(); audio = null; } }
+    // which: 'peace' | 'village' | 'mystic' | 'off' | 'f:<파일 주소>' | 'random'
+    function bgm(which) {
+      if (!init()) return; ac.resume();
+      if (which === true) which = 'peace'; if (which === false) which = 'off';
+      if (which === 'random') { const keys = Object.keys(TRACKS).concat((FILES || []).map((f) => 'f:/bgm/' + f.id)); which = keys[Math.floor(Math.random() * keys.length)]; }
+      if (which === playing) return; playing = which; stopAll();
+      if (which === 'off' || bgmVol() <= 0) return;
+      if (which.startsWith('f:')) { audio = new Audio(which.slice(2)); audio.loop = true; audio.volume = Math.min(1, bgmVol()); audio.play().catch(() => {}); return; }
+      if (!TRACKS[which]) return;
+      cur = which; bgmOn = true; step = 0; bgmTick();
+    }
+    let playing = null, FILES = [];
+    function setVol(kind, v) { store(kind === 'bgm' ? 'mp2026.bgm' : 'mp2026.sfx', v); if (!ac) return; if (kind === 'bgm') { bgmBus.gain.value = v / 100 * 0.55; if (audio) audio.volume = Math.min(1, v / 100); if (v > 0 && !bgmOn && !audio && playing && playing !== 'off') { const p = playing; playing = null; bgm(p); } } else sfxBus.gain.value = v / 100 * 0.5; }
+    function setFiles(f) { FILES = f || []; }
+    return { play, bgm, setVol, setFiles, tracks: TRACKS };
   })();
   // 버튼 누를 때 딸깍
   document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('button')) SND.play('click'); }, true);
@@ -3018,7 +3044,7 @@
   // 들어올 때마다: 로고 + 뒤에 지도 아무 곳이 천천히 흘러감 → Enter 로 시작
   // 처음 온 사람(이름 없음): 여신이 부르고 → 이름 → 세계 설명 → 로고 → 건국 창
   const EDIT_MODE = /[?&]edit=1/.test(location.search);
-  let needFound = false, titleDone = false;
+  let needFound = false, titleDone = false, BGM_CUR = 'peace'; // 관리자가 고른 게임 안 배경음악
   const TITLE = { on: false, x: 0, y: 0, vx: 0, vy: 0 };
   let lastDt = 0.016; const dt0 = () => lastDt;
   // 로고: 작게 그린 글자에 도트 테두리·그림자를 붙인 뒤 크게 키움 (MP + 이세계)
@@ -3046,12 +3072,15 @@
     const t = cand[Math.floor(Math.random() * cand.length)] || home;
     TITLE.x = t.center[0] * TILE; TITLE.y = t.center[1] * TILE; const a = Math.random() * Math.PI * 2; TITLE.vx = Math.cos(a) * 22; TITLE.vy = Math.sin(a) * 14;
     TITLE.on = true; document.body.classList.add('titling'); $('title').hidden = false; $('tSet').hidden = true;
+    // 타이틀 음악: 아무 곡이나 (브라우저는 처음 클릭·키를 누른 뒤에만 소리를 냄)
+    const startTitleMusic = () => { if (TITLE.on) SND.bgm('random'); removeEventListener('pointerdown', startTitleMusic, true); removeEventListener('keydown', startTitleMusic, true); };
+    addEventListener('pointerdown', startTitleMusic, true); addEventListener('keydown', startTitleMusic, true);
     try { $('tBgm').value = store('mp2026.bgm') ?? 60; $('tSfx').value = store('mp2026.sfx') ?? 70; $('tBgmV').textContent = $('tBgm').value + '%'; $('tSfxV').textContent = $('tSfx').value + '%'; } catch (e) { /* 없음 */ }
   }
   function endTitle() {
     if (!TITLE.on) return;
     TITLE.on = false; document.body.classList.remove('titling'); $('title').hidden = true; titleDone = true;
-    SND.bgm((store('mp2026.bgm') ?? 60) > 0); SND.play('open');
+    SND.bgm(BGM_CUR); SND.play('open');
     invalidateChunks(); mapSig = '';
     const firstTime = ONLINE ? !nameSet : !store('mp2026.opened');
     if (firstTime) startOpening(); else { if (needFound) openFound('who'); maybeDoomPopup(); }
@@ -3060,7 +3089,7 @@
   $('title').addEventListener('click', (e) => { if (e.target === $('title') || e.target.classList.contains('tstart')) endTitle(); });
   $('tSettings').addEventListener('click', () => { $('tSet').hidden = !$('tSet').hidden; });
   $('tReplay').addEventListener('click', () => { // 오프닝 다시 보기 (이름은 묻지 않음)
-    TITLE.on = false; document.body.classList.remove('titling'); $('title').hidden = true; SND.bgm((store('mp2026.bgm') ?? 60) > 0); startOpening('replay');
+    TITLE.on = false; document.body.classList.remove('titling'); $('title').hidden = true; SND.bgm('mystic'); startOpening('replay');
   });
   $('tBgm').addEventListener('input', () => { SND.setVol('bgm', +$('tBgm').value); $('tBgmV').textContent = $('tBgm').value + '%'; });
   $('tSfx').addEventListener('input', () => { SND.setVol('sfx', +$('tSfx').value); $('tSfxV').textContent = $('tSfx').value + '%'; SND.play('coin'); });
@@ -3127,7 +3156,7 @@
     if (opMode === 'rename') { OP.on = false; $('opening').hidden = true; toast(`이름을 '${player.name}'(으)로 바꿨어요 · 남은 변경 ${renamesLeft}번`); return; }
     if (opMode === 'replay') { OP.flash = performance.now(); $('opBox').hidden = true; $('opLogo').hidden = false; setTimeout(() => { OP.on = false; OP.flash = 0; $('opening').hidden = true; $('opLogo').hidden = true; $('opBox').hidden = false; startTitle(); }, 2600); return; }
     OP.flash = performance.now(); $('opBox').hidden = true; $('opLogo').hidden = false;
-    setTimeout(() => { OP.on = false; OP.flash = 0; $('opening').hidden = true; $('opLogo').hidden = true; $('opBox').hidden = false; store('mp2026.opened', 1); if (needFound || !ONLINE) openFound('who'); else maybeDoomPopup(); }, 2600);
+    setTimeout(() => { OP.on = false; OP.flash = 0; $('opening').hidden = true; $('opLogo').hidden = true; $('opBox').hidden = false; store('mp2026.opened', 1); SND.bgm(BGM_CUR); if (needFound || !ONLINE) openFound('who'); else maybeDoomPopup(); }, 2600);
   }
   $('opening').addEventListener('click', (e) => { if (!e.target.closest('#opInput')) opAdvance(); });
   $('opOk').addEventListener('click', opName);

@@ -61,6 +61,7 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/admin/api') return adminHttp(req, res);
   if (url.pathname.startsWith('/puzzle-img/')) return puzzleImage(url.pathname.slice(12), res);
+  if (url.pathname.startsWith('/bgm/')) return bgmFile(url.pathname.slice(5), res);
   if (url.pathname === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ ok: true, players: online.size })); }
   let file = STATIC[url.pathname];
   if (!file && url.pathname.startsWith('/assets/')) {
@@ -299,7 +300,7 @@ wss.on('connection', (ws) => {
       const nat = world.nationOfPlayer(token); // 나라는 건국 화면에서 세우거나 초대 코드로 들어간다
       if (nat) { world.refreshActions(nat, actionDayKey()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       send(ws, {
-        t: 'welcome', id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
+        t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
         roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
@@ -930,7 +931,7 @@ function adminHttp(req, res) {
   const f = adminFails.get(ip);
   if (f && f.until > Date.now()) return out(429, { ok: false, err: '비밀번호를 여러 번 틀렸어요. 30초 뒤에 다시 해 주세요' });
   let body = '';
-  req.on('data', (c) => { body += c; if (body.length > 4e6) req.destroy(); }); // 문제 그림 때문에 넉넉하게
+  req.on('data', (c) => { body += c; if (body.length > 14e6) req.destroy(); }); // 문제 그림·배경음악 파일 때문에 넉넉하게
   req.on('end', async () => {
     let m; try { m = JSON.parse(body); } catch (e) { return out(400, { ok: false, err: '잘못된 요청' }); }
     if (!keyOk(m.key)) {
@@ -957,7 +958,7 @@ function adminStatus() {
   })).sort((a, b) => a.dead - b.dead || b.territories - a.territories);
   const coupons = Object.entries(state.coupons).map(([code, c]) => ({ code, r: c.r, memo: c.memo || '', at: c.at, used: c.used || null }));
   return {
-    ok: true, now: Date.now(), kstDay: kstDay(), clock: gameClock(), clockMode: (state.clock || {}).mode || 'auto', doomDay: doomDay(), riftNext: world.s.riftNext, goneCount: Object.keys(world.s.gone).length, waveDays: [1, 2, 3, 4, 5].map(waveDay), uptimeSec: Math.round((Date.now() - BOOT_AT) / 1000), storage: store ? store.kind : '없음',
+    ok: true, now: Date.now(), bgm: state.settings.bgm || 'peace', bgmFiles: state.bgmFiles || [], kstDay: kstDay(), clock: gameClock(), clockMode: (state.clock || {}).mode || 'auto', doomDay: doomDay(), riftNext: world.s.riftNext, goneCount: Object.keys(world.s.gone).length, waveDays: [1, 2, 3, 4, 5].map(waveDay), uptimeSec: Math.round((Date.now() - BOOT_AT) / 1000), storage: store ? store.kind : '없음',
     online: online.size, accounts: Object.keys(state.accounts).length, nations, battles: world.s.battles.length, night: world.s.night,
     lastResolved: state.lastResolved || null, testMode: testMode(), envTestMode: ENV_TEST_MODE, settings: state.settings, foundingOpen: foundingOpen(),
     foundingLastDay: FOUNDING_LAST_DAY, puzzles: bank().length, puzzleFile: path.basename(PUZZLE_FILE), samplePuzzlesOnly: SAMPLE_FILE && !state.puzzles.length, notice: state.notice || null, coupons,
@@ -1000,6 +1001,17 @@ async function puzzleImage(id, res) {
   if (!img && store && store.getImage) { img = await store.getImage(id).catch(() => null); if (img) imgCache.set(id, img); }
   if (!img) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': img.mime, 'Cache-Control': 'public, max-age=86400, immutable' }); res.end(img.buf);
+}
+// 배경음악: 관리자가 고르는 곡 (만들어 둔 곡 peace·village·mystic, 올린 파일 f:<id>, off) — 타이틀 화면은 아무 곡이나
+const BGM_BUILTIN = ['peace', 'village', 'mystic'];
+const bgmMsg = () => ({ t: 'bgm', cur: state.settings.bgm || 'peace', files: state.bgmFiles || [] });
+const AUDIO_TYPES = { 'audio/mpeg': 1, 'audio/mp3': 1, 'audio/ogg': 1, 'audio/wav': 1, 'audio/x-wav': 1, 'audio/mp4': 1, 'audio/aac': 1 };
+async function bgmFile(id, res) {
+  if (!/^snd[0-9a-f]{16}$/.test(id)) { res.writeHead(404); return res.end(); }
+  let f = imgCache.get(id);
+  if (!f && store && store.getImage) { f = await store.getImage(id).catch(() => null); if (f) imgCache.set(id, f); }
+  if (!f) { res.writeHead(404); return res.end(); }
+  res.writeHead(200, { 'Content-Type': f.mime, 'Cache-Control': 'public, max-age=604800, immutable', 'Content-Length': f.buf.length }); res.end(f.buf);
 }
 async function adminOp(m) {
   switch (m.op) {
@@ -1083,6 +1095,31 @@ async function adminOp(m) {
       const msg = JSON.stringify({ t: 'settings', testMode: testMode(), foundingOpen: foundingOpen() });
       for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
       console.log(`[관리자] 설정: 테스트 모드 ${testMode()}, 건국 ${foundingOpen() ? '가능' : '마감'}`);
+      return adminStatus();
+    }
+    case 'bgmSet': { // 게임 안 배경음악 바꾸기
+      const v = String(m.bgm || '');
+      if (!(BGM_BUILTIN.includes(v) || v === 'off' || (v.startsWith('f:') && (state.bgmFiles || []).some((f) => 'f:' + f.id === v)))) return { ok: false, err: '그런 곡이 없어요' };
+      state.settings.bgm = v; dirty = true;
+      const msg = JSON.stringify(bgmMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+      console.log(`[관리자] 배경음악: ${v}`); return Object.assign(adminStatus(), { say: '배경음악을 바꿨어요' });
+    }
+    case 'bgmUpload': { // 음악 파일 올리기 (mp3·ogg·wav, 8MB까지)
+      const mm = /^data:([a-z0-9/+-]+);base64,(.+)$/.exec(String(m.data || ''));
+      if (!mm || !AUDIO_TYPES[mm[1]]) return { ok: false, err: 'mp3·ogg·wav 파일만 올릴 수 있어요' };
+      const buf = Buffer.from(mm[2], 'base64'); if (buf.length > 8e6) return { ok: false, err: '음악 파일이 너무 커요 (8MB 이하)' };
+      const id = 'snd' + crypto.randomBytes(8).toString('hex');
+      if (store && store.putImage) await store.putImage(id, buf, mm[1] === 'audio/mp3' ? 'audio/mpeg' : mm[1]);
+      imgCache.set(id, { buf, mime: mm[1] });
+      state.bgmFiles = (state.bgmFiles || []).concat({ id, name: clean(m.name, 40) || '음악' }); dirty = true;
+      const msg = JSON.stringify(bgmMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+      return Object.assign(adminStatus(), { say: '음악을 올렸어요' });
+    }
+    case 'bgmDelete': {
+      const id = String(m.id || ''); state.bgmFiles = (state.bgmFiles || []).filter((f) => f.id !== id);
+      if (state.settings.bgm === 'f:' + id) state.settings.bgm = 'peace';
+      imgCache.delete(id); if (store && store.delImage && /^snd[0-9a-f]{16}$/.test(id)) await store.delImage(id).catch(() => {});
+      dirty = true; const msg = JSON.stringify(bgmMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
       return adminStatus();
     }
     case 'puzzleList': {
