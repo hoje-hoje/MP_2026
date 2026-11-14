@@ -869,11 +869,11 @@
     vaccine: pxRows(['......WWWW......', '......WggW......', '.......gg.......', '......GGGG......', '.....GwwwwG.....', '....GwwPPwwG....', '....GwPPPPwG....', '....GwwPPwwG....', '....GPPPPPPG....', '....GPPPPPPG....', '....GPPPPPPG....', '....GPPPPPPG....', '....GPPPPPPG....', '.....GPPPPG.....', '......GGGG......', '................'], { W: '#e8c260', g: '#b8862b', G: '#5a4a6e', w: '#ffffff', P: '#ff8fb1' }),
     seed: pxRows(['................', '.....TTTTTT.....', '......TttT......', '.....BBBBBB.....', '....BbbbbbbB....', '...BbbbbbbbbB...', '...BbbSbbSbbB...', '..BbbbbSSbbbbB..', '..BbbbSSSSbbbB..', '..BbbbbSSbbbbB..', '..BbbbbbbbbbbB..', '..BbbbbbbbbbbB..', '...BbbbbbbbbB...', '....BBBBBBBB....', '................', '................'], { T: '#5a3416', t: '#8a5a2b', B: '#8a5a2b', b: '#d9a066', S: '#5fbf6a' }),
   };
-  let SHOP_TAB = 'build', SHOP_NPC = 'build';
+  let SHOP_KIND = 'build', SHOP_TAB = 'all', SHOP_NPC = 'build'; // 상점마다 자기 물건만 (건축 상점 안의 탭은 종류: 전체·바닥·방벽·덫, 나중에 테마)
   function openShop(tab = 'build', npcId) {
     const me = myView && myView.me;
     if (!me) { toast('나라가 있어야 살 수 있어요 (나라 공용 저장소에서 내요)'); return; }
-    SHOP_TAB = tab; SHOP_NPC = npcId || ({ build: 'build', vaccine: 'vaccine', seed: 'seed' })[tab] || 'build';
+    SHOP_KIND = tab; SHOP_TAB = 'all'; SHOP_NPC = npcId || tab;
     const npc = NPCS[SHOP_NPC]; $('shopWho').textContent = npc.name; facePortrait($('shopFace'), npc);
     $('shopSay').textContent = npc.lines[0];
     renderShop(); $('shopBox').hidden = false;
@@ -881,13 +881,16 @@
   function renderShop() {
     const me = myView && myView.me; if (!me) return;
     const P = MPRules.NUM.price;
-    $('shopTabs').innerHTML = [['build', '🏗 건축'], ['vaccine', '💉 백신'], ['seed', '🌱 씨앗·비료']].map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === SHOP_TAB}">${l}</button>`).join('');
+    const tabs = SHOP_KIND === 'build' ? [['all', '전체'], ['floor', '▦ 바닥'], ['wall', '🧱 방벽'], ['trap', '🪤 덫']] : [];
+    $('shopTabs').hidden = !tabs.length;
+    $('shopTabs').innerHTML = tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === SHOP_TAB}">${l}</button>`).join('');
     for (const b of $('shopTabs').querySelectorAll('[data-tab]')) b.onclick = () => { SHOP_TAB = b.dataset.tab; renderShop(); };
     $('shopCoin').innerHTML = `<span class="coinIco"></span> 우리 저장소 <b>${me.coin.toLocaleString()}</b> 코인 <small>· 산 물건은 나라 저장소로 가요</small>`;
     const card = (k, name, desc, price, counts, have) => `<div class="hvCard"><canvas data-ico="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${name}</b><small>${desc}</small>${have != null ? `<i>가진 것 ${have}개</i>` : ''}</div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${price.toLocaleString()}${counts ? '<small>/개</small>' : ''}</span><div>${(counts || [1]).map((c) => `<button type="button" data-buy="${k}" data-n="${c}" ${me.coin < price * c ? 'disabled' : ''}>${counts ? c + '개' : '사기'}</button>`).join('')}</div></div></div>`;
     let html = '';
-    if (SHOP_TAB === 'build') html = card('floor', '황금 바닥', '우리 국민이 1.5배 빨라져요', P.floor, [1, 5, 20], me.items.floor) + card('wall', '방벽', '다른 나라 사람을 막아요 (5초 맞으면 부서짐)', P.wall, [1, 5, 10], me.items.wall) + card('trap', '덫', '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임', P.trap, [1, 3], me.items.trap);
-    else if (SHOP_TAB === 'vaccine') html = card('vaccine', '백신', '균열에서 영토 하나를 지켜요 · 살수록 비싸져요', me.vaccinePrice, null, me.vaccine);
+    const want = (k) => SHOP_TAB === 'all' || SHOP_TAB === k;
+    if (SHOP_KIND === 'build') html = (want('floor') ? card('floor', '황금 바닥', '우리 국민이 1.5배 빨라져요', P.floor, [1, 5, 20], me.items.floor) : '') + (want('wall') ? card('wall', '방벽', '다른 나라 사람을 막아요 (5초 맞으면 부서짐)', P.wall, [1, 5, 10], me.items.wall) : '') + (want('trap') ? card('trap', '덫', '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임', P.trap, [1, 3], me.items.trap) : '');
+    else if (SHOP_KIND === 'vaccine') html = card('vaccine', '백신', '균열에서 영토 하나를 지켜요 · 살수록 비싸져요', me.vaccinePrice, null, me.vaccine);
     else html = `<div class="hvSoon">${ICON.seed ? '<canvas data-ico="seed" width="64" height="64"></canvas>' : ''}<p><b>씨앗·비료는 곧 들어와요!</b><br>농사가 열리면 여기서 씨앗을 사고, 비료를 뿌리면 2배로 빨리 자라요.</p></div>`;
     $('shopBody').innerHTML = html;
     for (const c of $('shopBody').querySelectorAll('[data-ico]')) { const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(ICON[c.dataset.ico], 0, 0, 64, 64); }

@@ -365,7 +365,7 @@ body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 
 .hvSay b { display: block; font-family: var(--font-display); font-weight: 400; font-size: 18px; color: #b8862b; } .hvSay p { margin: 4px 0 0; font-size: 15px; line-height: 1.5; }
 .hvX { position: absolute; right: -6px; top: -8px; min-height: 0; width: 38px; height: 38px; padding: 0; font-size: 18px; background: #fffaf0 !important; color: #5a3d10 !important; border: 3px solid #b8862b !important; }
 .hv .hvX:hover { background: #fff0b0 !important; }
-.hvTabs { display: flex; gap: 6px; border-bottom: 4px solid #e8c260; } .hvTabs button { min-height: 40px; font-size: 15px; background: #efe3c4 !important; color: #7a5a20 !important; border: 3px solid #b8862b !important; border-bottom: 0 !important; margin-bottom: -4px; }
+.hvTabs[hidden] { display: none; } .hvTabs { display: flex; gap: 6px; border-bottom: 4px solid #e8c260; } .hvTabs button { min-height: 40px; font-size: 15px; background: #efe3c4 !important; color: #7a5a20 !important; border: 3px solid #b8862b !important; border-bottom: 0 !important; margin-bottom: -4px; }
 .hvTabs button[aria-pressed="true"] { background: #fffaf0 !important; color: #2b2340 !important; box-shadow: 0 -3px 0 #ffd84d inset; }
 .hvCoin { margin: 10px 0; font-size: 14px; display: flex; align-items: center; gap: 6px; } .hvCoin b { font-family: var(--font-display); font-size: 20px; font-weight: 400; color: #b8862b; } .hvCoin small { color: #8a7f9a; }
 .coinIco { display: inline-block; width: 14px; height: 14px; background: radial-gradient(circle at 40% 35%, #fff6c8 0 2px, #ffd84d 3px 5px, #b8862b 6px 7px, transparent 7.5px); vertical-align: -2px; }
