@@ -102,7 +102,7 @@
     return h < 0.004 ? 'midA' : null;
   }
   function clearTrees(cx, cy, r) { for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) if (x >= 0 && y >= 0 && x < W && y < H) noTree[y * W + x] = 1; }
-  function speedAt(x, y) { const e = TILES[y * W + x]; if (e && e.k === 'floor' && e.n === MY_NID) return MPRules.NUM.floorSpeed; const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
+  function speedAt(x, y) { const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under) && e.n === MY_NID) return MPRules.NUM.floorSpeed; const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
 
   const terrName = (t) => MPRules.terrName(t); // 영토 이름 (rules.js 와 같은 규칙)
 
@@ -509,7 +509,7 @@
             break;
         }
         { const gf = GFLOOR.get(y * W + x); if (gf) drawSheetTile(g, gf, px, py, TILE, x * TILE, y * TILE); } // 관리자가 깐 타일
-        { const e = TILES[y * W + x]; if (e && e.k === 'floor') g.drawImage(floorArtId(tileItem(e)), px, py, TILE, TILE); }
+        { const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under)) g.drawImage(floorArtId(e.k === 'floor' ? tileItem(e) : e.under), px, py, TILE, TILE); } // 벽·장식 밑의 바닥도
         // 영토 색 + 국경선: 우리 나라는 진하게, 경계는 우리 나라 색 띠 / 나머지 경계는 흰 선
         const o = terrAt(x, y);
         const own = o > 0 ? ownerOf(o) : null;
@@ -784,17 +784,23 @@
   }
   function urn(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); blit(g, ART_URN, x, y + 2, 2); }
   function column(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); blit(g, ART_COL, x, y + 4, 2); }
-  function lightFountain(g, x, y) { // 빛의 분수: 대리석 둥근 못 + 물 + 빛 기둥
+  function lightFountain(g, x, y) { // 2단 분수: 아래 큰 못 + 가운데 기둥 위 작은 그릇 + 물줄기가 아치로 떨어짐
     const t = performance.now() / 1000;
-    g.fillStyle = 'rgba(40,40,90,0.15)'; ell(g, x, y + 2, 76, 20);
-    g.fillStyle = '#d9d0c0'; ell(g, x, y - 6, 74, 24); g.fillStyle = '#fffdf8'; ell(g, x, y - 10, 72, 22); g.fillStyle = '#e8c260'; ell(g, x, y - 12, 64, 18);
-    g.fillStyle = '#7fd0f4'; ell(g, x, y - 12, 58, 15); g.fillStyle = '#a9e4ff'; ell(g, x - 8, y - 15, 40, 9);
-    for (let i = 0; i < 6; i++) { const a = t * 1.3 + i; g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(Math.round(x + Math.cos(a) * 44), Math.round(y - 12 + Math.sin(a) * 10), 4, 2); }
-    g.fillStyle = '#fffdf8'; g.fillRect(x - 8, y - 46, 16, 34); g.fillStyle = '#e8c260'; g.fillRect(x - 10, y - 50, 20, 6); g.fillRect(x - 10, y - 16, 20, 4);
-    const h = 70 + Math.sin(t * 3) * 6, grd = g.createLinearGradient(0, y - 50 - h, 0, y - 50); grd.addColorStop(0, 'rgba(255,250,210,0)'); grd.addColorStop(1, 'rgba(255,250,210,0.75)');
-    g.fillStyle = grd; g.fillRect(x - 6, y - 50 - h, 12, h);
-    for (let i = 0; i < 10; i++) { const k = (t * 0.7 + i / 10) % 1, px = x + Math.sin(i * 2.3 + t) * 14, py = y - 54 - k * 90; g.globalAlpha = 1 - k; g.fillStyle = i % 3 ? '#fff6c8' : '#bfe9ff'; g.fillRect(Math.round(px), Math.round(py), 4, 4); }
-    g.globalAlpha = 1;
+    g.fillStyle = 'rgba(40,40,90,0.15)'; ell(g, x, y + 2, 78, 20);
+    // 아래 못
+    g.fillStyle = '#cfc4b0'; ell(g, x, y - 4, 74, 22); g.fillStyle = '#fffdf8'; ell(g, x, y - 8, 72, 21); g.fillStyle = '#e8c260'; ell(g, x, y - 10, 66, 18); g.fillStyle = '#fffaf0'; ell(g, x, y - 11, 62, 16);
+    g.fillStyle = '#6cc4ee'; ell(g, x, y - 11, 58, 14); g.fillStyle = '#9fdcff'; ell(g, x - 10, y - 14, 36, 7);
+    for (let i = 0; i < 3; i++) { const k = (t * 0.6 + i / 3) % 1; g.strokeStyle = `rgba(255,255,255,${0.7 * (1 - k)})`; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y - 11, 14 + k * 40, 4 + k * 10, 0, 0, Math.PI * 2); g.stroke(); }
+    // 기둥
+    g.fillStyle = '#2b2340'; g.fillRect(x - 9, y - 46, 18, 36); g.fillStyle = '#fffdf8'; g.fillRect(x - 7, y - 44, 14, 34); g.fillStyle = '#e9e3f2'; g.fillRect(x + 3, y - 44, 4, 34); g.fillStyle = '#e8c260'; g.fillRect(x - 9, y - 28, 18, 3);
+    // 위 그릇
+    g.fillStyle = '#2b2340'; ell(g, x, y - 48, 26, 9); g.fillStyle = '#fffdf8'; ell(g, x, y - 50, 25, 8); g.fillStyle = '#e8c260'; ell(g, x, y - 51, 22, 6); g.fillStyle = '#7fd0f4'; ell(g, x, y - 52, 19, 5);
+    // 물줄기: 꼭대기에서 솟아 네 방향 아치로 아래 못에 떨어짐
+    const top = y - 72 + Math.sin(t * 6) * 2;
+    g.fillStyle = '#bfe9ff'; g.fillRect(x - 2, top, 4, y - 52 - top); g.fillStyle = '#ffffff'; g.fillRect(x - 1, top, 2, y - 52 - top);
+    for (const s2 of [-1, 1]) for (let k = 0; k < 14; k++) { const u = ((t * 1.4 + k / 14) % 1), px = x + s2 * (6 + u * 46), py = top + 4 - Math.sin(u * Math.PI) * 6 + u * u * 66; g.fillStyle = k % 3 ? '#a9e4ff' : '#ffffff'; g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3); }
+    for (let k = 0; k < 6; k++) { const a = t * 2 + k, px = x + Math.cos(a) * 18, py = y - 52 + Math.sin(a) * 4; g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(Math.round(px), Math.round(py), 2, 2); }
+    if (Math.sin(t * 3) > 0.7) { g.fillStyle = '#fff6c8'; g.fillRect(x + 22, y - 30, 2, 6); g.fillRect(x + 20, y - 28, 6, 2); }
   }
   function cloudBench(g, x, y) { // 구름 의자
     g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 40, 6);
@@ -1004,7 +1010,7 @@
     const B = BUILD_BY[id]; if (!B) return;
     if (B.cat === 'trap') { g.drawImage(ICON.trap, 0, 0, 16, 16, (W2 - 48) / 2, (H2 - 48) / 2, 48, 48); return; }
     if (B.cat === 'floor') { const c = floorArtId(id); g.fillStyle = '#2b2340'; g.fillRect(W2 / 2 - 26, H2 / 2 - 26, 52, 52); g.drawImage(c, 0, 0, 32, 32, W2 / 2 - 24, H2 / 2 - 24, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2, H2 / 2 - 24, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2 - 24, H2 / 2, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2, H2 / 2, 24, 24); return; }
-    const k = B.id.startsWith('p_') ? 0.8 : 1; g.save(); g.translate(W2 / 2, H2 - 6); g.scale(k, k); drawBuild(g, 0, 0, { k: B.cat, n: MY_NID, id }); g.restore();
+    const k = B.id.startsWith('p_') ? 0.8 : B.cat === 'wall' ? 0.78 : 1; g.save(); g.translate(W2 / 2, H2 - 6); g.scale(k, k); drawBuild(g, 0, 0, { k: B.cat, n: MY_NID, id }); g.restore();
   }
   function heavenWall(g, w, R) { // 하늘 방 윗벽: 흰 벽 + 금 띠 + 하늘이 보이는 아치 창 + 기둥
     const top = 18, bot = 2 * TILE;
@@ -1499,7 +1505,7 @@
     if (k === 'b') toggleWar();
     if (k === 't') { if (player.carry) toast('훔친 걸 들고 있으면 순간이동할 수 없어요'); else goHome(); }
     if ((k === 'e' || k === ' ') && !$('talk').hidden) { e.preventDefault(); if (!e.repeat) talkNext(); return; }
-    if (k === 'e' && !e.repeat) pressE();
+    if (k === 'e' && !e.repeat && !document.querySelector('.modalbox:not([hidden]), #closet:not([hidden])')) pressE(); // 창이 열려 있으면 E 무시 (상점 연 뒤 대화창이 또 뜨던 버그)
     if (k === 'g' && ONLINE) setBuild(!build.on);
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
@@ -1647,7 +1653,15 @@
     }
     if (build.on && myView) {
       const B = BUILD_BY[build.id] || BUILD_BY.f_stone, tiles = shapeTiles(), shape = B.cat === 'trap' || B.cat === 'deco' ? '1' : build.shape;
-      if ((e && e.n === MY_NID && !(B.cat === 'floor' && e.k === 'floor' && tileItem(e) !== B.id)) || MY_TRAPS.has(i)) return { kind: 'pickup', tiles, text: `${SHAPE_NAME[shape]} 거두기 (E) · 바로 앞: ${e ? (BUILD_BY[tileItem(e)] || {}).name : '덫'}` };
+      if (B.cat === 'floor') { // 바닥은 내 발밑 기준
+        const [mx, my] = [Math.floor(player.x / TILE), Math.floor(player.y / TILE)], me2 = TILES[my * W + mx];
+        if (ownerOf(terrAt(mx, my)) !== MY_NID) return { kind: 'info', text: '설치 모드 · 우리 땅에서만 깔 수 있어요' };
+        if (me2 && me2.n === MY_NID && me2.k === 'floor' && tileItem(me2) === B.id) return { kind: 'pickup', tiles, text: `발밑 ${SHAPE_NAME[shape]} 거두기 (E)` };
+        const have = myView.me.items[B.id] || 0;
+        if (!have) return { kind: 'info', text: `${B.name}이(가) 없어요 · 하늘 건축 상점에서 사요` };
+        return { kind: 'place', tiles, text: `발밑에 ${B.name} ${SHAPE_NAME[shape]} 깔기 · 남은 ${have}개` };
+      }
+      if ((e && e.n === MY_NID && e.k !== 'floor') || MY_TRAPS.has(i)) return { kind: 'pickup', tiles, text: `${SHAPE_NAME[shape]} 거두기 (E) · 바로 앞: ${e ? (BUILD_BY[tileItem(e)] || {}).name : '덫'}` };
       if (ownerOf(terrAt(fx, fy)) !== MY_NID) return { kind: 'info', text: '설치 모드 · 우리 땅에만 놓을 수 있어요' };
       const have = myView.me.items[B.id] || 0;
       if (!have) return { kind: 'info', text: `${B.name}이(가) 없어요 · 하늘 건축 상점에서 사요` };
@@ -1696,13 +1710,25 @@
   const SHAPE_NAME = { 1: '1칸', h3: '가로 3칸', v3: '세로 3칸', s3: '3×3' };
   // 설치 모양: 바라보는 방향으로는 앞으로 뻗고, 옆 방향은 가운데 맞춤
   function shapeTiles() {
-    const d = FACE_D[player.face | 0] || [0, 1], [fx, fy] = facingTile();
     const cat = (BUILD_BY[build.id] || {}).cat, shape = cat === 'trap' || cat === 'deco' ? '1' : build.shape;
+    if (cat === 'floor') { // 바닥: 내가 선 칸에 (모양은 내 칸을 가운데로)
+      const mx = Math.floor(player.x / TILE), my = Math.floor(player.y / TILE), wx = shape === 'h3' || shape === 's3' ? 1 : 0, wy = shape === 'v3' || shape === 's3' ? 1 : 0, out = [];
+      for (let y = my - wy; y <= my + wy; y++) for (let x = mx - wx; x <= mx + wx; x++) out.push([x, y]); return out;
+    }
+    const d = FACE_D[player.face | 0] || [0, 1], [fx, fy] = facingTile();
     const wx = shape === 'h3' || shape === 's3' ? 3 : 1, wy = shape === 'v3' || shape === 's3' ? 3 : 1;
     const xs = wx === 1 ? [fx] : d[0] ? [0, 1, 2].map((k) => fx + k * d[0]) : [fx - 1, fx, fx + 1];
     const ys = wy === 1 ? [fy] : d[1] ? [0, 1, 2].map((k) => fy + k * d[1]) : [fy - 1, fy, fy + 1];
     const out = []; for (const y of ys) for (const x of xs) out.push([x, y]); return out;
   }
+  function placeBuildBar() { // 채팅창 오른쪽 ~ 미니맵 왼쪽 사이에 딱 맞게
+    const bb = $('buildBar'); if (bb.hidden) return;
+    const ch = $('chat'), mi = $('mini'), vwid = innerWidth;
+    const L = !ch.hidden && !document.body.classList.contains('chatTuck') ? ch.getBoundingClientRect().right + 10 : 44;
+    const R = !mi.hidden ? vwid - mi.getBoundingClientRect().left + 10 : 8;
+    if (vwid - L - R < 360) { bb.style.left = '8px'; bb.style.right = '8px'; } else { bb.style.left = L + 'px'; bb.style.right = R + 'px'; }
+  }
+  addEventListener('resize', placeBuildBar);
   const BB_TABS = [['all', '전체'], ['floor', '바닥'], ['wall', '벽·기둥'], ['deco', '장식'], ['trap', '덫']];
   function setBuild(on, id) {
     if (on && !myView) { toast('나라가 있어야 설치할 수 있어요'); return; }
@@ -1714,6 +1740,8 @@
   }
   function renderBuildTray() { // 쿠킹덤식 보관함: 위에 종류 탭, 아래 카드 줄 (그림 + 남은 개수)
     const items = (myView && myView.me.items) || {}, cat = (BUILD_BY[build.id] || {}).cat;
+    $('buildBar').dataset.theme = (BUILD_BY[build.id] || {}).theme || 'heaven'; // 보관함 색 = 고른 물건의 테마
+    placeBuildBar();
     $('bbTabs').innerHTML = BB_TABS.map(([k, l]) => `<button type="button" data-bt="${k}" aria-pressed="${k === build.tab}">${l}</button>`).join('');
     for (const b of $('bbTabs').querySelectorAll('[data-bt]')) b.onclick = () => { build.tab = b.dataset.bt; renderBuildTray(); };
     const list = MPRules.BUILD.filter((b) => build.tab === 'all' || b.cat === build.tab).sort((a, b) => (items[b.id] > 0) - (items[a.id] > 0));
@@ -1736,7 +1764,7 @@
   $('storeBuild').addEventListener('click', () => { $('storeBox').hidden = true; setBuild(true); });
   $('storeClose').addEventListener('click', () => { $('storeBox').hidden = true; });
   $('shopClose').addEventListener('click', () => { $('shopBox').hidden = true; });
-  const setChatTuck = (on) => { document.body.classList.toggle('chatTuck', on); $('chatTab').hidden = !on; store('mp2026.chatTuck', on ? 1 : 0); };
+  const setChatTuck = (on) => { document.body.classList.toggle('chatTuck', on); $('chatTab').hidden = !on; store('mp2026.chatTuck', on ? 1 : 0); setTimeout(placeBuildBar, 280); };
   $('chatHide').addEventListener('click', () => setChatTuck(true)); $('chatTab').addEventListener('click', () => setChatTuck(false));
   if (store('mp2026.chatTuck')) setTimeout(() => setChatTuck(true), 0);
   $('ruleClose').addEventListener('click', () => { $('rulebook').hidden = true; });
@@ -2845,8 +2873,7 @@
     // 플레이어 이동
     stepPlayer(dt); tickHold();
     if (player.scene === 'sky' && !(player.room.id === 'jail' && jailUntil > Date.now()) && !EDIT.on) {
-      player.skyLeft -= dt;
-      if (player.skyLeft <= 0) { descend(); toast('하늘에 머물 수 있는 5분이 끝나 땅으로 내려왔어요'); }
+      // 하늘 체류 시간 제한 없음 (나갔다 들어오면 어차피 초기화돼서 없앰)
     }
     for (const b of bots) updateBot(b, dt);
     netTick(dt);
@@ -2857,7 +2884,7 @@
     if (hudT <= 0) {
       hudT = 0.15;
       const sky = player.scene === 'sky';
-      $('skyTimer').hidden = !sky || EDIT.on;
+      $('skyTimer').hidden = !(sky && player.room.id === 'jail' && jailUntil > Date.now()) || EDIT.on; // 감옥 남은 시간만
       if (sky && player.room.id === 'jail' && jailUntil > Date.now()) { const l = Math.max(0, Math.ceil((jailUntil - Date.now()) / 1000)); $('skyTimer').firstChild.textContent = '감옥 '; $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.remove('warn'); }
       else if (sky) { $('skyTimer').firstChild.textContent = '하늘 체류 '; const l = Math.max(0, Math.ceil(player.skyLeft)); $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.toggle('warn', l <= 60); }
       $('miniCap').textContent = canTp() ? (EDIT.on ? '누르면 순간이동 (맵 고치기)' : '누르면 순간이동 (테스트용)') : '미니맵';
@@ -2892,7 +2919,7 @@
       step.on = false;
       if (player.scene === 'sky') { checkDoor(); if (step.on) return; }
     }
-    const d = wantDir();
+    const d = $('talk').hidden ? wantDir() : null; // 대화 중엔 못 움직임
     if (!d) { player.moving = false; return; }
     if (performance.now() < stunUntil) { player.moving = false; return; }
     if (hold.on) cancelHold();

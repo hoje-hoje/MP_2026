@@ -625,7 +625,7 @@ wss.on('connection', (ws) => {
           if (world.ownerOf(terrAtTile(x, y)) !== n.id) { why = '우리 나라 땅에만 놓을 수 있어요'; continue; }
           if (m.t === 'pickup') {
             const e = world.s.tiles[i];
-            if (e && e.n === n.id) { const id = tileItem(e); delete world.s.tiles[i]; if (id) n.items[id] = (n.items[id] || 0) + 1; sendTile(i); done++; }
+            if (e && e.n === n.id) { const id = tileItem(e); if (e.under) world.s.tiles[i] = { k: 'floor', n: n.id, id: e.under }; else delete world.s.tiles[i]; if (id) n.items[id] = (n.items[id] || 0) + 1; sendTile(i); done++; } // 위에 놓인 것부터 거둠 (밑의 바닥은 남음)
             else if (world.s.traps[i] === n.id) { delete world.s.traps[i]; n.items.trap = (n.items.trap || 0) + 1; sendTrap(n.id, i, false); done++; }
             continue;
           }
@@ -634,15 +634,16 @@ wss.on('connection', (ws) => {
           if (!walkableTerrain(tileAt(x, y)) || treeHere(x, y) && !world.s.chopped[i]) { why = '놓을 수 없는 칸이 있어요'; continue; }
           if (reservedTile(x, y)) { why = '제단·포털·저장소 바로 옆엔 못 놓아요'; continue; }
           const cur = world.s.tiles[i], mineFloor = cur && cur.k === 'floor' && cur.n === n.id;
-          if (world.s.traps[i] || (cur && !(k === 'floor' && mineFloor))) { why = '이미 뭔가 놓인 칸이 있어요'; continue; }
+          if (world.s.traps[i] || (cur && !mineFloor)) { why = '이미 뭔가 놓인 칸이 있어요'; continue; } // 우리 바닥 위엔 벽·기둥·장식을 올릴 수 있음
           if (k === 'wall' && Object.values(world.s.tiles).filter((e) => e.n === n.id && e.k === 'wall').length >= NUM.maxWalls) { why = `벽·기둥은 나라당 ${NUM.maxWalls}개까지예요`; break; }
           if (k === 'deco' && Object.values(world.s.tiles).filter((e) => e.n === n.id && e.k === 'deco').length >= NUM.maxDeco) { why = `장식은 나라당 ${NUM.maxDeco}개까지예요`; break; }
           if (k === 'trap' && trapsOf(n.id).length >= NUM.maxTraps) { why = `덫은 나라당 ${NUM.maxTraps}개까지예요`; break; }
           if (k === 'wall' && [...online.values()].some((o) => o.scene === 'ground' && o.x != null && Math.floor(o.x / 32) === x && Math.floor(o.y / 32) === y)) { why = '사람이 서 있는 칸은 빼고 놓았어요'; continue; }
-          if (mineFloor) { const old = tileItem(cur); if (old === B.id) continue; n.items[old] = (n.items[old] || 0) + 1; } // 우리 바닥 위에 다른 디자인: 바꿔 깔기 (원래 바닥은 돌려받음)
+          const under = mineFloor && (k === 'wall' || k === 'deco') ? tileItem(cur) : null;
+          if (mineFloor && k === 'floor') { const old = tileItem(cur); if (old === B.id) continue; n.items[old] = (n.items[old] || 0) + 1; } // 우리 바닥 위에 다른 디자인: 바꿔 깔기 (원래 바닥은 돌려받음)
           n.items[B.id]--; done++;
           if (k === 'trap') { world.s.traps[i] = n.id; sendTrap(n.id, i, true); }
-          else { world.s.tiles[i] = k === 'wall' ? { k, n: n.id, id: B.id, hp: NUM.buildHp } : { k, n: n.id, id: B.id }; sendTile(i); }
+          else { world.s.tiles[i] = k === 'wall' ? { k, n: n.id, id: B.id, hp: NUM.buildHp } : { k, n: n.id, id: B.id }; if (under) world.s.tiles[i].under = under; sendTile(i); }
         }
         if (done || m.t === 'place') { dirty = true; sendViews([n.id]); }
         if (!done && why) send(ws, { t: 'err', text: why });
@@ -656,7 +657,7 @@ wss.on('connection', (ws) => {
         if (now() - (s.lastHitB || 0) < NUM.hitCdMs) return; s.lastHitB = now();
         if (now() - (s.lastBreakAlert || 0) > 15000) { s.lastBreakAlert = now(); notifyNation(e.n, `🧱 ${(BUILD_BY[tileItem(e)] || {}).name || '벽'}이(가) 공격받고 있어요! (${(world.t[terrAtTile(x, y)] || {}).name} · ${n ? n.name + '의 ' : ''}${s.acc.name})`); }
         e.hp = (e.hp ?? NUM.buildHp) - NUM.hitDmg; dirty = true;
-        if (e.hp <= 0) { delete world.s.tiles[i]; sendTile(i); notifyNation(e.n, `🧱 ${(world.t[terrAtTile(x, y)] || {}).name}의 ${(BUILD_BY[tileItem(e)] || {}).name || '벽'}이(가) 부서졌어요!`); send(ws, { t: 'ok', text: '부쉈어요!' }); }
+        if (e.hp <= 0) { if (e.under) world.s.tiles[i] = { k: 'floor', n: e.n, id: e.under }; else delete world.s.tiles[i]; sendTile(i); notifyNation(e.n, `🧱 ${(world.t[terrAtTile(x, y)] || {}).name}의 ${(BUILD_BY[tileItem(e)] || {}).name || '벽'}이(가) 부서졌어요!`); send(ws, { t: 'ok', text: '부쉈어요!' }); }
         else sendTile(i);
         break;
       }

@@ -425,6 +425,19 @@ body.building #prompt { bottom: calc(196px + env(safe-area-inset-bottom, 0px)); 
 .clSoon { display: flex; justify-content: space-between; align-items: center; background: #fff; border: 2px dashed #e8c260; padding: 6px 10px; font-size: 13px; } .clSoon span { color: #8a7f9a; font-size: 12px; }
 .clRight .facegrid { max-height: 380px; background: #fff; border: 3px solid #e8c260; padding: 6px; }
 .clRight .facebtn { background: radial-gradient(circle at 50% 60%, #fffaf0, #e3f2ff); border-color: #efe0b8; }
+
+/* 설치 보관함 v3: 한 상자 안에 탭·모양·끄기, 테마 색 */
+#buildBar { transform: none; } .bbTray { padding: 6px 8px 6px; }
+.bbHead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; } .bbHead > b { font-family: var(--font-display); font-weight: 400; font-size: 15px; color: #2b2340; margin-right: 2px; }
+.bbHead .bbTabs { margin: 0; flex: 1; } .bbShapes { display: flex; gap: 0; border: 2px solid #2b2340; background: #fff; }
+.bbShapes button, #buildOff { min-height: 26px; height: 26px; font-size: 12px; padding: 0 8px; border: 0 !important; border-image: none !important; background: #fff !important; color: #2b2340 !important; text-shadow: none !important; box-shadow: none !important; }
+.bbShapes button + button { border-left: 2px solid #2b2340 !important; } .bbShapes button[aria-pressed="true"] { background: #2b2340 !important; color: #ffd84d !important; outline: 0; } .bbShapes button:disabled { opacity: 0.35; }
+#buildOff { border: 2px solid #2b2340 !important; width: 28px; padding: 0; }
+.bbTabs button, .bbCard, .hvTabs button, .hvX, .clSoon, #chatHide { text-shadow: none !important; }
+#buildBar[data-theme="forest"] .bbTray { background: linear-gradient(180deg, #cdeec0, #effae8); } #buildBar[data-theme="forest"] .bbTabs button { color: #2f7a46 !important; border-color: #6fbf5f !important; background: #effae8 !important; } #buildBar[data-theme="forest"] .bbTabs button[aria-pressed="true"] { background: #2f7a46 !important; color: #fff !important; }
+#buildBar[data-theme="winter"] .bbTray { background: linear-gradient(180deg, #e6f6ff, #ffffff); } #buildBar[data-theme="winter"] .bbTabs button { color: #3f7fb0 !important; border-color: #9fd3f2 !important; background: #fff !important; } #buildBar[data-theme="winter"] .bbTabs button[aria-pressed="true"] { background: #3f7fb0 !important; color: #fff !important; }
+#buildBar[data-theme="stone"] .bbTray { background: linear-gradient(180deg, #e6ddcc, #f6f0e4); } #buildBar[data-theme="stone"] .bbTabs button { color: #6b5a44 !important; border-color: #b8a88c !important; background: #f6f0e4 !important; } #buildBar[data-theme="stone"] .bbTabs button[aria-pressed="true"] { background: #6b5a44 !important; color: #fff !important; }
+body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -523,8 +536,10 @@ body.building #prompt { bottom: calc(196px + env(safe-area-inset-bottom, 0px)); 
   </div>
 </div>
 
-<div id="buildBar" hidden><div class="bbTop"><b>🏗 설치 모드</b><span class="bbShapes"><button data-shape="1" type="button">1칸</button><button data-shape="h3" type="button">가로 3</button><button data-shape="v3" type="button">세로 3</button><button data-shape="s3" type="button">3×3</button></span><span class="bbHint">바로 앞 칸에 E · 우리 땅만</span><button id="buildOff" type="button">끄기 (G)</button></div>
-<div class="bbTray"><div class="bbTabs" id="bbTabs"></div><div class="bbList" id="bbList"></div></div></div>
+<div id="buildBar" hidden><div class="bbTray">
+  <div class="bbHead"><b>🏗 설치</b><div class="bbTabs" id="bbTabs"></div><span class="bbShapes"><button data-shape="1" type="button">1칸</button><button data-shape="h3" type="button">가로3</button><button data-shape="v3" type="button">세로3</button><button data-shape="s3" type="button">3×3</button></span><button id="buildOff" type="button" title="끄기 (G)">✕</button></div>
+  <div class="bbList" id="bbList"></div>
+</div></div>
 <div id="storeBox" class="modalbox" hidden><div class="panel card"><h2>📦 우리 저장소</h2><div id="storeBody"></div><div class="seg"><button id="storeBuild" type="button">설치 모드 켜기</button><button id="storeClose" type="button">닫기</button></div></div></div>
 <div id="bailBox" class="modalbox" hidden><div class="panel card"><h2>🔓 면회실 · 보석금</h2><div id="bailBody"></div><div class="seg"><button id="bailClose" type="button">닫기</button></div></div></div>
 <div id="reinBox" class="modalbox" hidden><div class="panel card"><h2>🪖 전선 진지</h2><div id="reinBody"></div><div class="seg"><button id="reinAdd" type="button">충원</button><button id="reinSub" type="button">빼기</button><button id="reinClose" type="button">닫기</button></div></div></div>
