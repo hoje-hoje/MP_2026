@@ -56,6 +56,7 @@
     if (x < 0 || y < 0 || x >= W || y >= H) return true;
     const t = tileAt(x, y), o = terr[y * W + x];
     if (o !== 65535 && o > 0 && gone[o]) return true;
+    if (t === T.WATER && TILES[y * W + x] && TILES[y * W + x].k === 'bridge') return false; // 다리 위는 걸을 수 있음
     if (t === T.VOID || t === T.HOLY || t === T.WATER || t === T.MOUNTAIN || t === T.WALL || solid[y * W + x] === 1 || treeAt(x, y) !== null) return true;
     if (GWALL.has(y * W + x)) return true; // 관리자가 칠한 장벽
     if (GFLOOR.size && isWater(GFLOOR.get(y * W + x))) return true; // 관리자가 깐 물 타일
@@ -147,13 +148,7 @@
       const [ax, ay] = t.altar;
       block(ax, ay, 1, 1);
       sprites.push({ x: P(ax) + 16, y: P(ay) + 28, draw: (g, x, y) => drawAltar(g, x, y, t) });
-      if (t.capitalCandidate) {
-        let fx = ax + 2, fy = ay;
-        if (blocked(fx, fy)) { fx = ax - 2; }
-        if (!blocked(fx, fy)) { block(fx, fy, 1, 1); sprites.push({ x: P(fx) + 16, y: P(fy) + 28, draw: (g, x, y) => drawFlag(g, x, y, t === home) }); }
-        const [qx, qy] = t.portal;
-        sprites.push({ x: P(qx) + 16, y: P(qy) + 20, portal: t, draw: (g, x, y) => drawPortal(g, x, y, t === home) });
-      }
+      // 깃발은 없앰 (영토마다 의미가 없어서). 하늘 포털은 나라마다 옮길 수 있어서 drawGround 에서 그때그때 그림
       // 금광 (온라인 자원 지점): 영토마다 1곳, 하루 1번 캘 수 있음
       // 위치는 서버와 같은 규칙(MPRules.mineSpot), 옮긴 금광은 MINES 로 바뀜 → 그림은 drawGround 에서
       const ms = MPRules.mineSpot(t, tileAt, terrAt);
@@ -171,21 +166,23 @@
   }
 
   // 하늘로 가는 빛기둥
-  function drawPortal(g, x, y, mine) {
-    const now = performance.now() / 1000;
-    const pulse = 0.5 + Math.sin(now * 3) * 0.15;
-    g.fillStyle = `rgba(255,236,140,${0.35 * pulse + 0.15})`; ell(g, x, y, 30, 11);
-    const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
-    g.drawImage(ART.towers, 192, 64, 32, 32, x - 32, y - 58, 64, 64);
-    g.imageSmoothingEnabled = prev;
-    y -= 40;
-    const grd = g.createLinearGradient(0, y - 220, 0, y);
-    grd.addColorStop(0, 'rgba(255,248,200,0)'); grd.addColorStop(1, `rgba(255,240,170,${0.55 * pulse + 0.2})`);
-    g.fillStyle = grd; g.fillRect(x - 16, y - 220, 32, 220);
-    g.fillStyle = 'rgba(255,255,255,0.9)';
-    for (let i = 0; i < 4; i++) { const k = (now * 0.6 + i / 4) % 1; circ(g, x + Math.sin(i * 2.1 + now) * 10, y - k * 200, 2.2); }
-    pix(g, 'burst', x, y - 196, 0, 46 + Math.sin(now * 3) * 8, 0.85);
-    if (mine) sign(g, x, y - 236, '우리 수도 · 하늘 포털');
+  function drawPortal(g, x, y, mine) { // 하늘 포털: 구름 받침 위에 떠 있는 금빛 고리 문 + 안쪽 하늘 소용돌이 + 위로 오르는 빛 알갱이
+    const t = performance.now() / 1000, bob = Math.round(Math.sin(t * 1.6) * 2), cy = y - 46 + bob;
+    g.fillStyle = 'rgba(255,236,140,0.28)'; ell(g, x, y, 34, 10);
+    g.fillStyle = '#dbe7fb'; for (const [dx, r] of [[-22, 9], [-8, 12], [8, 12], [22, 9]]) pxDisc(g, x + dx, y - 6, r); g.fillStyle = '#ffffff'; for (const [dx, r] of [[-22, 7], [-8, 10], [8, 10], [22, 7]]) pxDisc(g, x + dx, y - 9, r);
+    const grd = g.createRadialGradient(x, cy, 4, x, cy, 30); grd.addColorStop(0, 'rgba(255,250,210,0.95)'); grd.addColorStop(0.5, 'rgba(150,215,255,0.85)'); grd.addColorStop(1, 'rgba(110,170,240,0.75)');
+    g.fillStyle = grd; g.beginPath(); g.ellipse(x, cy, 22, 28, 0, 0, Math.PI * 2); g.fill();
+    g.save(); g.beginPath(); g.ellipse(x, cy, 22, 28, 0, 0, Math.PI * 2); g.clip(); // 소용돌이
+    for (let k = 0; k < 3; k++) { g.strokeStyle = `rgba(255,255,255,${0.55 - k * 0.12})`; g.lineWidth = 2; g.beginPath(); for (let a = 0; a < 5.5; a += 0.25) { const r = 3 + a * 3.4, an = a + t * (1.6 + k * 0.4) + k * 2.1; const px = x + Math.cos(an) * r * 0.8, py = cy + Math.sin(an) * r; if (a === 0) g.moveTo(px, py); else g.lineTo(px, py); } g.stroke(); }
+    g.restore();
+    g.strokeStyle = '#2b2340'; g.lineWidth = 8; g.beginPath(); g.ellipse(x, cy, 25, 31, 0, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = '#e8c260'; g.lineWidth = 5; g.beginPath(); g.ellipse(x, cy, 25, 31, 0, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = '#fff0b0'; g.lineWidth = 2; g.beginPath(); g.ellipse(x, cy, 25, 31, 0, Math.PI * 1.1, Math.PI * 1.6); g.stroke();
+    for (let k = 0; k < 8; k++) { const an = k / 8 * Math.PI * 2 + t * 0.5, px = x + Math.cos(an) * 25, py = cy + Math.sin(an) * 31; g.fillStyle = k % 2 ? '#7fd0ff' : '#ffffff'; g.fillRect(Math.round(px) - 2, Math.round(py) - 2, 4, 4); } // 고리의 보석
+    g.fillStyle = '#ffd84d'; g.fillRect(x - 3, cy - 40, 6, 6); g.fillStyle = '#fff6c8'; g.fillRect(x - 1, cy - 44, 2, 14); g.fillRect(x - 7, cy - 38, 14, 2); // 꼭대기 별
+    for (let k = 0; k < 6; k++) { const u = (t * 0.5 + k / 6) % 1; g.globalAlpha = 1 - u; g.fillStyle = k % 2 ? '#fff6c8' : '#bfe9ff'; g.fillRect(Math.round(x + Math.sin(k * 2.3 + t) * 16), Math.round(cy - 10 - u * 70), 3, 3); }
+    g.globalAlpha = 1;
+    if (mine) { g.font = `700 15px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 4; g.strokeStyle = '#2b2340'; g.strokeText('수도', x, cy - 58); g.fillStyle = '#fff6c8'; g.fillText('수도', x, cy - 58); }
   }
 
   function drawTower(g, x, y) {
@@ -509,7 +506,7 @@
             break;
         }
         { const gf = GFLOOR.get(y * W + x); if (gf) drawSheetTile(g, gf, px, py, TILE, x * TILE, y * TILE); } // 관리자가 깐 타일
-        { const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under)) g.drawImage(floorArtId(e.k === 'floor' ? tileItem(e) : e.under), px, py, TILE, TILE); else if (e && e.k === 'farm') g.drawImage(farmArt(nearCanal(x, y)), px, py, TILE, TILE); else if (e && e.k === 'water') g.drawImage(canalArt(canalMask(x, y)), px, py, TILE, TILE); } // 벽·장식 밑의 바닥도 · 밭 · 수로
+        { const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under)) g.drawImage(floorArtId(e.k === 'floor' ? tileItem(e) : e.under), px, py, TILE, TILE); else if (e && e.k === 'farm') g.drawImage(farmArt(nearCanal(x, y)), px, py, TILE, TILE); else if (e && e.k === 'water') g.drawImage(canalArt(canalMask(x, y)), px, py, TILE, TILE); else if (e && e.k === 'bridge') { if (e.canal) g.drawImage(canalArt(canalMask(x, y)), px, py, TILE, TILE); drawBridgeTile(g, x, y, px, py, e.id); } } // 벽·장식 밑의 바닥도 · 밭 · 수로
         // 영토 색 + 국경선: 우리 나라는 진하게, 경계는 우리 나라 색 띠 / 나머지 경계는 흰 선
         const o = terrAt(x, y);
         const own = o > 0 ? ownerOf(o) : null;
@@ -912,8 +909,8 @@
     const card = (k, name, desc, price, counts, have) => `<div class="hvCard"><canvas data-ico="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${name}</b><small>${desc}</small>${have != null ? `<i>가진 것 ${have}개</i>` : ''}</div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${price.toLocaleString()}${counts ? '<small>/개</small>' : ''}</span><div>${(counts || [1]).map((c) => `<button type="button" data-buy="${k}" data-n="${c}" ${me.coin < price * c ? 'disabled' : ''}>${counts ? c + '개' : '사기'}</button>`).join('')}</div></div></div>`;
     let html = '';
     const want = (k) => SHOP_TAB === 'all' || SHOP_TAB === k;
-    const CAT_DESC = { floor: '우리 국민이 1.5배 빨라져요', wall: `다른 나라 사람을 막아요 · 내구도 ${MPRules.NUM.buildHp}`, deco: '꾸미기 · 밟고 지나갈 수 있어요', trap: '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임' };
-    const CNT = { floor: [1, 5, 20], wall: [1, 5, 10], deco: [1, 5], trap: [1, 3] };
+    const CAT_DESC = { floor: '우리 국민이 1.5배 빨라져요', wall: `다른 나라 사람을 막아요 · 내구도 ${MPRules.NUM.buildHp}`, deco: '꾸미기 · 밟고 지나갈 수 있어요', bridge: '물 위에 놓으면 누구나 건널 수 있어요 · 이어 놓을수록 다리가 길고 멋있어져요', trap: '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임' };
+    const CNT = { floor: [1, 5, 20], wall: [1, 5, 10], deco: [1, 5], trap: [1, 3], bridge: [1, 5, 10] };
     if (SHOP_KIND === 'build') html = MPRules.BUILD.filter((b) => !FARM_CATS.has(b.cat) && b.cat !== 'crop' && (SHOP_TAB === 'trap' ? b.cat === 'trap' : b.theme === SHOP_TAB && b.cat !== 'trap')).map((b) => card(b.id, b.name, CAT_DESC[b.cat], P[b.cat], CNT[b.cat], me.items[b.id] || 0)).join('');
     else if (false) html = (want('floor') ? card('floor', '황금 바닥', '우리 국민이 1.5배 빨라져요', P.floor, [1, 5, 20], me.items.floor) : '') + (want('wall') ? card('wall', '방벽', '다른 나라 사람을 막아요 (5초 맞으면 부서짐)', P.wall, [1, 5, 10], me.items.wall) : '') + (want('trap') ? card('trap', '덫', '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임', P.trap, [1, 3], me.items.trap) : '');
     else if (SHOP_KIND === 'vaccine') html = card('vaccine', '백신', '균열에서 영토 하나를 지켜요 · 살수록 비싸져요', me.vaccinePrice, null, me.vaccine);
@@ -1031,8 +1028,8 @@
       if (!(mask & 1)) edge(0, 0, 32, 5); if (!(mask & 4)) edge(0, 27, 32, 5); if (!(mask & 8)) edge(0, 0, 5, 32); if (!(mask & 2)) edge(27, 0, 5, 32);
     }));
   }
-  function canalMask(x, y) { const w = (dx, dy) => { const e = TILES[(y + dy) * W + x + dx]; return e && e.k === 'water'; }; return (w(0, -1) ? 1 : 0) | (w(1, 0) ? 2 : 0) | (w(0, 1) ? 4 : 0) | (w(-1, 0) ? 8 : 0); }
-  function nearCanal(x, y) { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const e = TILES[(y + dy) * W + x + dx]; if (e && e.k === 'water') return true; } return false; }
+  function canalMask(x, y) { const w = (dx, dy) => { const e = TILES[(y + dy) * W + x + dx]; return e && (e.k === 'water' || e.canal); }; return (w(0, -1) ? 1 : 0) | (w(1, 0) ? 2 : 0) | (w(0, 1) ? 4 : 0) | (w(-1, 0) ? 8 : 0); }
+  function nearCanal(x, y) { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const e = TILES[(y + dy) * W + x + dx]; if (e && (e.k === 'water' || e.canal)) return true; } return false; }
   const cropStage = (cr) => { const k = (Date.now() - cr.at) / cr.d; return k >= 1 ? 3 : k >= 0.6 ? 2 : k >= 0.25 ? 1 : 0; };
   function px2(g, x, y, c, w = 2, h = 2) { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), w, h); }
   function drawCrop(g, x, y, c, st, t = 0) { // x = 칸 가운데, y = 칸 아래쪽
@@ -1057,12 +1054,30 @@
     if (B.cat === 'seed') { g.drawImage(ICON.seed, 0, 0, 16, 16, W2 / 2 - 24, H2 / 2 - 22, 48, 48); g.save(); g.translate(W2 / 2 + 14, H2 - 6); drawCrop(g, 0, 0, B.crop, 3, 0); g.restore(); return; }
     if (B.cat === 'crop') { g.save(); g.translate(W2 / 2, H2 / 2 + 18); g.scale(1.6, 1.6); drawCrop(g, 0, 0, B.crop, 3, 0); g.restore(); }
   }
+  // ------------------------------------------------------------ 다리: 이웃을 보고 저절로 이어짐 (양 끝은 큰 기둥, 가운데는 2칸마다 기둥, 길면 한가운데 등불)
+  const isBridge = (x, y) => { const e = TILES[y * W + x]; return !!e && e.k === 'bridge'; };
+  function bridgeRun(x, y, dx, dy) { let a = 0, b = 0; while (a < 30 && isBridge(x - dx * (a + 1), y - dy * (a + 1))) a++; while (b < 30 && isBridge(x + dx * (b + 1), y + dy * (b + 1))) b++; return [a, b]; } // 내 앞뒤로 몇 칸 이어졌는지
+  function drawBridgeTileIcon(g, first, last, id) { const P = id === 'b_stone' ? ['#a9a6b4', '#bdbac8', '#8c8a96', '#6e6c78', '#cfccd6'] : ['#b07a44', '#c58a50', '#9a6a3a', '#7a4f28', '#e0aa6a']; g.fillStyle = '#2b2340'; g.fillRect(0, 7, 32, 18); for (let k = 0; k < 8; k++) { g.fillStyle = P[k % 3]; g.fillRect(k * 4, 8, 3, 16); } g.fillStyle = P[3]; g.fillRect(0, 4, 32, 3); g.fillRect(0, 25, 32, 3); for (const X of [first ? 0 : -99, last ? 26 : -99]) { if (X < 0) continue; g.fillStyle = '#2b2340'; g.fillRect(X, 0, 6, 8); g.fillRect(X, 23, 6, 8); g.fillStyle = P[2]; g.fillRect(X + 1, 1, 4, 6); g.fillRect(X + 1, 24, 4, 6); g.fillStyle = P[4]; g.fillRect(X + 1, 1, 4, 1); } }
+  function drawBridgeTile(g, x, y, px, py, id) {
+    const P = id === 'b_stone' ? { deck: ['#a9a6b4', '#bdbac8', '#8c8a96'], rail: '#6e6c78', post: '#8c8a96', cap: '#cfccd6', gap: '#5e5c68' } : { deck: ['#b07a44', '#c58a50', '#9a6a3a'], rail: '#7a4f28', post: '#8a5a2b', cap: '#e0aa6a', gap: '#5a3416' };
+    const horiz = isBridge(x - 1, y) || isBridge(x + 1, y) || !(isBridge(x, y - 1) || isBridge(x, y + 1)) && (tileAt(x - 1, y) !== T.WATER || tileAt(x + 1, y) !== T.WATER);
+    const [a, b] = horiz ? bridgeRun(x, y, 1, 0) : bridgeRun(x, y, 0, 1), len = a + b + 1, startEnd = a === 0, endEnd = b === 0, mid = len >= 5 && a === Math.floor((len - 1) / 2);
+    const R = (X, Y, w, h, c) => { g.fillStyle = c; if (horiz) g.fillRect(px + X, py + Y, w, h); else g.fillRect(px + Y, py + X, h, w); }; // 가로 기준으로 그리고 세로 다리는 돌려서
+    R(0, 7, 32, 18, P.gap); for (let k = 0; k < 8; k++) R(k * 4, 8, 3, 16, P.deck[k % 3]); R(0, 8, 32, 2, 'rgba(255,255,255,0.18)');
+    R(0, 4, 32, 3, P.rail); R(0, 25, 32, 3, P.rail); R(0, 4, 32, 1, P.cap); R(0, 25, 32, 1, P.cap);
+    const post = (X, big) => { const w = big ? 6 : 4, h = big ? 8 : 6; R(X, 3 - (big ? 3 : 1), w, h, '#2b2340'); R(X + 1, 4 - (big ? 3 : 1), w - 2, h - 2, P.post); R(X + 1, 4 - (big ? 3 : 1), w - 2, 1, P.cap); R(X, 23, w, h, '#2b2340'); R(X + 1, 24, w - 2, h - 2, P.post); R(X + 1, 24, w - 2, 1, P.cap); };
+    if (startEnd) post(0, true); if (endEnd) post(26, true);
+    if (!startEnd && !endEnd && (a % 2 === 0)) post(14, false);
+    if (mid) { for (const Y of [0, 26]) { R(13, Y - 2, 6, 6, '#2b2340'); R(14, Y - 1, 4, 4, '#ffd35a'); R(15, Y, 2, 2, '#fff6c8'); } } // 긴 다리 한가운데 등불
+    if (startEnd || endEnd) { R(startEnd ? 0 : 28, 7, 4, 18, 'rgba(0,0,0,0.12)'); }
+  }
   const FARM_CATS = new Set(['farm', 'water', 'seed', 'fert']);
   const fmtLeft = (ms) => { const m = Math.ceil(ms / 60e3); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60 ? (m % 60) + '분' : ''}` : `${m}분`; };
   function itemIcon(cv, id) { // 상점·설치 카드 그림
     const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height; g.clearRect(0, 0, W2, H2); g.imageSmoothingEnabled = false;
     const B = BUILD_BY[id]; if (!B) return;
     if (FARM_CATS.has(B.cat) || B.cat === 'crop') { farmIcon(g, id, W2, H2); return; }
+    if (B.cat === 'bridge') { g.fillStyle = '#5fb6e6'; g.fillRect(4, H2 / 2 - 16, W2 - 8, 32); for (let k = 0; k < 2; k++) { g.save(); g.translate(W2 / 2 - 28 + k * 28, H2 / 2 - 14); g.scale(28 / 32, 28 / 32); drawBridgeTileIcon(g, k === 0, k === 1, id); g.restore(); } return; }
     if (B.cat === 'trap') { g.drawImage(ICON.trap, 0, 0, 16, 16, (W2 - 48) / 2, (H2 - 48) / 2, 48, 48); return; }
     if (B.cat === 'floor') { const c = floorArtId(id); g.fillStyle = '#2b2340'; g.fillRect(W2 / 2 - 26, H2 / 2 - 26, 52, 52); g.drawImage(c, 0, 0, 32, 32, W2 / 2 - 24, H2 / 2 - 24, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2, H2 / 2 - 24, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2 - 24, H2 / 2, 24, 24); g.drawImage(c, 0, 0, 32, 32, W2 / 2, H2 / 2, 24, 24); return; }
     const k = B.id.startsWith('p_') ? 0.8 : B.cat === 'wall' ? 0.78 : 1; g.save(); g.translate(W2 / 2, H2 - 6); g.scale(k, k); drawBuild(g, 0, 0, { k: B.cat, n: MY_NID, id }); g.restore();
@@ -1387,7 +1402,7 @@
   function descend() {
     const t = player.entry || home;
     player.scene = 'ground'; player.room = null; fadeT = 0.35; lastTerr = null; netTp = true; step.on = false;
-    const tp = MPRules.portalSpot(t, tileAt);
+    const tp = portalOf(t) || MPRules.portalSpot(t, tileAt);
     player.x = tp[0] * TILE + 16; player.y = (tp[1] + 1) * TILE + 16;
     if (!free(player.x, player.y, null)) teleportTo(tp[0], tp[1] + 1);
     toast(`${t.name} 포털로 내려왔어요`);
@@ -1674,7 +1689,7 @@
         const t = terrs[o];
         let n = null, nd = 52; for (const q of nodes) { const d = Math.hypot(q.x - player.x, q.y - player.y); if (d < nd) { nd = d; n = q; } }
         for (const [i] of STORE_AT) if (n && Math.hypot((i % W) * TILE + 16 - player.x, Math.floor(i / W) * TILE + 16 - player.y) < nd) n = null; // 저장소가 더 가까우면 저장소
-        const tp = t.portal || (t === home ? homePortal() : null);
+        const tp = portalOf(t);
         if (tp && Math.hypot(tp[0] + 0.5 - tx, tp[1] + 0.5 - ty) < 1.8) best = { kind: 'portal', t, text: '하늘로 올라가기' };
         else if (n && !build.on) best = { kind: 'node', n, text: mined.has(n.id) ? '오늘은 다 캤어요 (내일 다시)' : '금광 캐기 · 코인' };
         else if (Math.hypot(t.altar[0] + 0.5 - tx, t.altar[1] + 0.5 - ty) < 2.4) {
@@ -1707,11 +1722,12 @@
     const ptx = player.x / TILE, pty = player.y / TILE;
     const [fx, fy] = facingTile(), i = fy * W + fx, e = TILES[i];
     if (build.on && myView && build.moving) { // 옮기는 중: 앞 칸에 놓기
-      return { kind: 'dropB', x: fx, y: fy, text: `여기에 ${build.moving.kind === 'store' ? '저장소' : '금광'} 놓기 (E) · 취소는 G` };
+      return { kind: 'dropB', x: fx, y: fy, text: `여기에 ${build.moving.kind === 'store' ? '저장소' : build.moving.kind === 'portal' ? '하늘 포털' : '금광'} 놓기 (E) · 취소는 G` };
     }
     if (build.on && myView) { // 우리 저장소·우리 땅 금광 옆이면 옮기기
       for (const [i, nid] of STORE_AT) if (nid === MY_NID && Math.hypot((i % W) + 0.5 - ptx, Math.floor(i / W) + 0.5 - pty) < 1.9) return { kind: 'pickB', what: { kind: 'store' }, text: '저장소 옮기기 (E) → 옮길 자리에서 E' };
       for (const q of nodes) if (ownerOf(q.id) === MY_NID && Math.hypot(q.tx + 0.5 - ptx, q.ty + 0.5 - pty) < 1.6) return { kind: 'pickB', what: { kind: 'mine', terr: q.id }, text: '금광 옮기기 (E) → 옮길 자리에서 E' };
+      { const hp = homePortal(); if (hp && Math.hypot(hp[0] + 0.5 - ptx, hp[1] + 0.5 - pty) < 1.6) return myView.me.isKing ? { kind: 'pickB', what: { kind: 'portal' }, text: '하늘 포털 옮기기 (왕) (E) → 수도 안 옮길 자리에서 E' } : { kind: 'info', text: '하늘 포털은 왕만 옮길 수 있어요' }; }
     }
     if (build.on && myView) {
       const B = BUILD_BY[build.id] || BUILD_BY.f_stone, tiles = shapeTiles(), shape = B.cat === 'trap' || B.cat === 'deco' || B.cat === 'fert' ? '1' : build.shape;
@@ -1738,6 +1754,7 @@
         return { kind: 'place', tiles, text: `${shape === '1' ? '발밑에' : '앞에'} ${B.name} ${SHAPE_NAME[shape]} 깔기 · 남은 ${have}개` };
       }
       if ((e && e.n === MY_NID && e.k !== 'floor') || MY_TRAPS.has(i)) return { kind: 'pickup', tiles, text: `${SHAPE_NAME[shape]} 거두기 (E) · 바로 앞: ${e ? (BUILD_BY[tileItem(e)] || {}).name : '덫'}` };
+      if (B.cat === 'bridge') { const have = myView.me.items[B.id] || 0, f2 = TILES[fy * W + fx]; if (!(tileAt(fx, fy) === T.WATER && !f2) && !(f2 && f2.k === 'water' && f2.n === MY_NID)) return { kind: 'info', text: '다리는 물(강·호수·우리 수로) 위에 놓아요 · 물을 바라보고 E' }; if (!have) return { kind: 'info', text: `${B.name}가 없어요 · 하늘 건축 상점에서 사요` }; return { kind: 'place', tiles, text: `${B.name} ${SHAPE_NAME[shape]} 놓기 · 남은 ${have}개 (우리 땅·다리에 이어서)` }; }
       if (ownerOf(terrAt(fx, fy)) !== MY_NID) return { kind: 'info', text: '설치 모드 · 우리 땅에만 놓을 수 있어요' };
       const have = myView.me.items[B.id] || 0;
       if (!have) return { kind: 'info', text: `${B.name}이(가) 없어요 · 하늘 건축 상점에서 사요` };
@@ -1807,7 +1824,7 @@
     if (vwid - L - R < 360) { bb.style.left = '8px'; bb.style.right = '8px'; } else { bb.style.left = L + 'px'; bb.style.right = R + 'px'; }
   }
   addEventListener('resize', placeBuildBar);
-  const BB_TABS = [['all', '전체'], ['floor', '바닥'], ['wall', '벽·기둥'], ['deco', '장식'], ['trap', '덫'], ['farm', '🌱 농사']];
+  const BB_TABS = [['all', '전체'], ['floor', '바닥'], ['wall', '벽·기둥'], ['deco', '장식'], ['trap', '덫'], ['bridge', '🌉 다리'], ['farm', '🌱 농사']];
   function setBuild(on, id) {
     if (on && !myView) { toast('나라가 있어야 설치할 수 있어요'); return; }
     if (on && player.scene === 'sky') { toast('설치 모드는 땅에서만 쓸 수 있어요'); return; }
@@ -1901,7 +1918,12 @@
     }
   }
 
-  const homePortal = () => MPRules.portalSpot(home, tileAt); // 천도한 수도는 지도에 정해진 포털이 없을 수 있음
+  function portalOf(t) { // 하늘 포털 자리: 나라 수도면 왕이 옮긴 자리(없으면 기본), 주인 없는 수도 후보면 기본 자리
+    if (!t) return null; const nid = ownerOf(t.id), n = nid && nationsPub[nid];
+    if (n && n.capital === t.id) return n.portal || MPRules.portalSpot(t, tileAt);
+    return !nid && t.capitalCandidate ? t.portal : null;
+  }
+  const homePortal = () => portalOf(home) || MPRules.portalSpot(home, tileAt);
   function goHome() {
     if (player.scene === 'sky') { descend(); return; }
     const hp = homePortal();
@@ -2011,7 +2033,7 @@
     const k = big.width / W;
     bg.fillStyle = '#ffffff';
     if (player.scene === 'ground') for (const b of others('ground', null)) bg.fillRect(b.x / TILE * k - 1.5, b.y / TILE * k - 1.5, 3, 3);
-    for (const t of terrs) if (t && t.portal && !gone[t.id]) { bg.fillStyle = '#ffec8c'; bg.beginPath(); bg.arc(t.portal[0] * k, t.portal[1] * k, 3, 0, Math.PI * 2); bg.fill(); }
+    for (const t of terrs) { const q = t && !gone[t.id] && portalOf(t); if (q) { bg.fillStyle = '#ffec8c'; bg.beginPath(); bg.arc(q[0] * k, q[1] * k, 3, 0, Math.PI * 2); bg.fill(); } }
     const px = player.scene === 'sky' ? MPRules.portalSpot(player.entry || home, tileAt)[0] * TILE : player.x, py = player.scene === "sky" ? MPRules.portalSpot(player.entry || home, tileAt)[1] * TILE : player.y;
     pix(bg, 'pin', px / TILE * k, py / TILE * k + 2, 0, 40);
   }
@@ -2207,7 +2229,7 @@
         break;
       }
       case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
-      case 'tile': { const prev = TILES[m.i]; if (m.e && prev && m.e.hp != null && m.e.hp < (prev.hp ?? MPRules.NUM.buildHp)) { HPSEEN.set(m.i, performance.now()); SND.play('hit'); } else if (m.e && m.e.n === MY_NID && !prev) SND.play('place'); const wasW = prev && prev.k === 'water', isW = m.e && m.e.k === 'water'; if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); if (wasW || isW) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx || dy) dirtyTile(m.i + dy * W + dx); break; } // 수로가 바뀌면 이웃 밭·수로 다시 그림
+      case 'tile': { const prev = TILES[m.i]; if (m.e && prev && m.e.hp != null && m.e.hp < (prev.hp ?? MPRules.NUM.buildHp)) { HPSEEN.set(m.i, performance.now()); SND.play('hit'); } else if (m.e && m.e.n === MY_NID && !prev) SND.play('place'); const wasW = prev && (prev.k === 'water' || prev.k === 'bridge'), isW = m.e && (m.e.k === 'water' || m.e.k === 'bridge'); if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); if (wasW || isW) { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx || dy) dirtyTile(m.i + dy * W + dx); if ((m.e || prev).k === 'bridge') for (let k = 3; k <= 16; k++) { dirtyTile(m.i + k); dirtyTile(m.i - k); dirtyTile(m.i + k * W); dirtyTile(m.i - k * W); } } break; } // 수로가 바뀌면 이웃 밭·수로 다시 그림
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
@@ -2764,7 +2786,13 @@
   for (const b of document.querySelectorAll('#warTabs button')) b.addEventListener('click', () => { warTab = b.dataset.tab; renderWar(); });
 
   // ------------------------------------------------------------ 건국 화면
-  let foundingOpen = true, foundSel = null;
+  let foundingOpen = true, foundSel = null, foundColor = null;
+  function renderFoundColors() { // 건국할 때 나라 색 고르기 (다른 나라가 쓰는 색은 못 고름)
+    const used = new Set(Object.values(nationsPub).filter((n) => !n.dead).map((n) => n.color));
+    if (!foundColor || used.has(foundColor)) foundColor = MPRules.COLORS.find((c) => !used.has(c)) || MPRules.COLORS[0];
+    $('fColors').innerHTML = MPRules.COLORS.map((c) => `<button type="button" class="sw" data-fc="${c}" style="background:${c}" aria-pressed="${c === foundColor}" ${used.has(c) ? 'disabled title="다른 나라가 쓰는 색"' : ''}></button>`).join('');
+    for (const b of $('fColors').querySelectorAll('[data-fc]')) b.onclick = () => { foundColor = b.dataset.fc; renderFoundColors(); };
+  }
   function capOptions() {
     const capOf = {};
     for (const n of Object.values(nationsPub)) if (!n.dead) capOf[n.capital] = n.id;
@@ -2781,7 +2809,7 @@
     $('found').hidden = false;
     for (const el of document.querySelectorAll('#found [data-step]')) el.hidden = el.dataset.step !== step;
     if (step === 'who') { $('fNick').value = player.name; $('fJoinCard').disabled = !ONLINE; $('fJoinNote').hidden = ONLINE; $('fFoundCard').disabled = !foundingOpen; $('fFoundNote').hidden = foundingOpen; }
-    if (step === 'found') { foundSel = null; drawFoundMap(); showFoundInfo(); $('fName').focus(); }
+    if (step === 'found') { foundSel = null; drawFoundMap(); showFoundInfo(); renderFoundColors(); $('fName').focus(); }
     if (step === 'done') { $('fCode').textContent = myView ? myView.me.code : '-----'; $('fDoneName').textContent = myView ? myView.me.name : ''; }
     $('fMsg').textContent = '';
   }
@@ -2839,7 +2867,7 @@
     const name = $('fName').value.trim();
     if (name.length < 2) { $('fMsg').textContent = '나라 이름을 2글자 이상 지어 주세요'; return; }
     if (!foundSel) return;
-    if (ONLINE) { netAfterLook(); ws.send(JSON.stringify({ t: 'found', name, capital: foundSel })); }
+    if (ONLINE) { netAfterLook(); ws.send(JSON.stringify({ t: 'found', name, capital: foundSel, color: foundColor })); }
     else { setupOffline(foundSel, name); afterFounded(true); }
   });
   $('btnJoinCode').addEventListener('click', () => {
@@ -3151,7 +3179,7 @@
         if (b.att === MY_NID) sign(g, X, Y - 84, `전선 진지 · 충원 E (${b.F || 3}전선)`); else if (b.def === MY_NID) sign(g, X, Y - 84, `적 전선 진지 (${b.F || 3}전선)`);
       } });
     });
-    if (home && !home.portal && ONLINE) { const hp = homePortal(); if (hp[0] >= tx0 && hp[0] <= tx1 && hp[1] >= ty0 && hp[1] <= ty1) list.push({ x: hp[0] * TILE + 16, y: hp[1] * TILE + 20, draw: (g, X, Y) => drawPortal(g, X, Y, true) }); } // 천도한 수도의 하늘 포털
+    for (const t of terrs) { if (!t || gone[t.id] || !(t.capitalCandidate || ownerOf(t.id))) continue; const q = portalOf(t); if (!q || q[0] < tx0 || q[0] > tx1 || q[1] < ty0 || q[1] > ty1) continue; if (build.moving && build.moving.kind === 'portal' && t === home) continue; list.push({ x: q[0] * TILE + 16, y: q[1] * TILE + 20, draw: (g, X, Y) => drawPortal(g, X, Y, t === home && !!MY_NID) }); } // 하늘 포털 (나라 수도 · 주인 없는 수도 후보)
     if (build.on && player.scene === 'ground') { // 설치 모드: 앞 칸 표시
       for (const [fx, fy] of build.moving ? [facingTile()] : shapeTiles()) { const ok = ownerOf(terrAt(fx, fy)) === MY_NID && !blocked(fx, fy); ctx.fillStyle = ok ? 'rgba(255,211,77,0.35)' : 'rgba(255,60,80,0.3)'; ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE); ctx.strokeStyle = ok ? '#ffd34d' : '#ff3c50'; ctx.lineWidth = 2; ctx.strokeRect(fx * TILE + 1, fy * TILE + 1, TILE - 2, TILE - 2); }
     }

@@ -36,6 +36,7 @@
     berry: { name: '딸기', seed: 50, min: 120, yield: 3, sell: 40 },
     pumpkin: { name: '호박', seed: 80, min: 240, yield: 1, sell: 250 },
   };
+  BUILD.push({ id: 'b_wood', cat: 'bridge', theme: 'forest', name: '나무 다리', price: 25 }, { id: 'b_stone', cat: 'bridge', theme: 'stone', name: '돌 다리', price: 25 });
   BUILD.push({ id: 'farm', cat: 'farm', theme: 'forest', name: '밭', price: 10 }, { id: 'canal', cat: 'water', theme: 'stone', name: '수로', price: 15 }, { id: 'fert', cat: 'fert', theme: 'forest', name: '비료', price: 40 });
   for (const [k, c] of Object.entries(CROPS)) BUILD.push({ id: 's_' + k, cat: 'seed', theme: 'forest', name: c.name + ' 씨앗', price: c.seed, crop: k }, { id: 'p_' + k, cat: 'crop', theme: 'forest', name: c.name, sell: c.sell, crop: k });
   const BUILD_BY = Object.fromEntries(BUILD.map((b) => [b.id, b]));
@@ -206,7 +207,7 @@
         return { id: c.id, status, nation: capOwner[c.id] || this.s.owner[c.id] || null };
       });
     }
-    foundNation(key, playerName, nationName, capitalId) {
+    foundNation(key, playerName, nationName, capitalId, color) {
       if (this.nationOfPlayer(key)) return { ok: false, err: '이미 나라에 속해 있어요' };
       const name = String(nationName || '').replace(/[<>\u0000-\u001f]/g, '').trim().slice(0, 10);
       if (name.length < 2) return { ok: false, err: '나라 이름은 2글자 이상이에요' };
@@ -219,6 +220,7 @@
       const n = this.ensureNation(team, key, playerName, capitalId);
       if (!n) return { ok: false, err: '건국에 실패했어요' };
       n.name = name;
+      if (COLORS.includes(color) && !this.alive().some((x) => x !== n && x.color === color)) n.color = color; // 건국할 때 고른 나라 색 (겹치면 기본 색)
       return { ok: true, nation: n };
     }
     joinNation(key, playerName, code, maxMembers) {
@@ -520,7 +522,7 @@
     // ---------------------------------------------------------- 참가자에게 보낼 화면 정보
     publicNations() {
       const out = {};
-      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null, storeLv: storeLevel(n), race: n.race || RACES[(n.team | 0) % 3] };
+      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null, portal: n.portalPos || null, storeLv: storeLevel(n), race: n.race || RACES[(n.team | 0) % 3] };
       return out;
     }
     view(nid, key) {
@@ -636,5 +638,5 @@
   const notorietyTier = (v) => { const T2 = NUM.notorietyTiers; let k = 0; for (let i = 0; i < T2.length; i++) if ((v || 0) >= T2[i].min) k = i; return k; };
   // 이름 옆 표시: 마이너스 = 체포왕 👮, 1~199 💀, 200~499 💀💀, 500 이상 💀💀💀
   const notorietyBadge = (v) => (v < 0 ? '👮' : v <= 0 ? '' : v < 200 ? '💀' : v < 500 ? '💀💀' : '💀💀💀');
-  return { CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

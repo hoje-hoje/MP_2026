@@ -129,6 +129,7 @@ function frontsFor(attNid, tid) {
   border.sort((a, b) => horiz ? a[0] - b[0] || a[1] - b[1] : a[1] - b[1] || a[0] - b[0]);
   return [1 / 6, 1 / 2, 5 / 6].map((k) => border[Math.min(border.length - 1, Math.floor(border.length * k))]);
 }
+function portalOf(n) { return n && world.t[n.capital] ? (n.portalPos || MPRules.portalSpot(world.t[n.capital], tileAt)) : null; }
 function storageOf(n) { return n && world.t[n.capital] ? (n.storePos || storageSpot(world.t[n.capital], tileAt)) : null; }
 // 저장소 입구 전부 (수도 옆 본 저장소 + 빼앗은 땅·옛 수도에 남은 입구). 재료는 하나로 통합
 function storesOf(n) { if (!n || n.dead) return []; const main = storageOf(n); return (main ? [main] : []).concat((n.extraStores || []).filter((p) => world.ownerOf(terrAtTile(p[0], p[1])) === n.id)); }
@@ -150,6 +151,7 @@ function reservedTile(x, y) {
   const t = world.t[terrAtTile(x, y)]; if (!t) return true;
   const near = (p) => p && Math.abs(p[0] - x) <= 1 && Math.abs(p[1] - y) <= 1;
   if (near(t.altar) || near(t.portal)) return true;
+  for (const n of world.alive()) if (near(portalOf(n))) return true; // 옮긴 하늘 포털 둘레
   if (t.capitalCandidate && near(storageSpot(t, tileAt))) return true;
   return false;
 }
@@ -384,7 +386,7 @@ wss.on('connection', (ws) => {
       case 'found': case 'join': {
         if (m.t === 'found' && !foundingOpen()) return send(ws, { t: 'err', text: '건국 기간(12/14~12/15)이 끝났어요. 유랑민으로 시작해 주세요' });
         if (m.t === 'join' && (s.acc.joinBanUntil || 0) > Date.now()) return send(ws, { t: 'err', text: `나라를 떠난 지 24시간이 안 됐어요 (${Math.ceil((s.acc.joinBanUntil - Date.now()) / 3600e3)}시간 뒤 가입 가능)` });
-        const r = m.t === 'found' ? world.foundNation(s.token, s.acc.name, m.name, m.capital | 0) : world.joinNation(s.token, s.acc.name, m.code, memberCap());
+        const r = m.t === 'found' ? world.foundNation(s.token, s.acc.name, m.name, m.capital | 0, String(m.color || '')) : world.joinNation(s.token, s.acc.name, m.code, memberCap());
         if (!r.ok) return send(ws, { t: 'err', text: r.err });
         world.refreshActions(r.nation, actionDayKey());
         dirty = true; broadcastOwners(); sendViews([r.nation.id]);
@@ -506,6 +508,7 @@ wss.on('connection', (ws) => {
         const before = storageOf(n), old = n.capital;
         const r = world.moveCapital(n.id, m.terr | 0, Date.now()); if (!r.ok) return send(ws, { t: 'err', text: r.err });
         if (before) { n.extraStores = (n.extraStores || []).concat([before]); delete n.storePos; } // 옛 저장소 건물은 입구로 남고, 본 저장소는 새 수도로
+        delete n.portalPos; // 하늘 포털도 새 수도로
         dirty = true; broadcastOwners(); sendViews([n.id]);
         notifyNation(n.id, `🏰 천도! 수도가 ${world.t[old].name || old}에서 ${world.t[n.capital].name || n.capital}(으)로 옮겨졌어요`);
         break;
@@ -623,7 +626,17 @@ wss.on('connection', (ws) => {
         for (const [x, y] of list) {
           const i = tileIdx(x, y);
           if (!nextTo(s, x, y, 3.6)) { why = '너무 멀어요'; continue; }
-          if (world.ownerOf(terrAtTile(x, y)) !== n.id) { why = '우리 나라 땅에만 놓을 수 있어요'; continue; }
+          const own = world.ownerOf(terrAtTile(x, y)) === n.id;
+          if (m.t === 'pickup' && world.s.tiles[i] && world.s.tiles[i].k === 'bridge' && world.s.tiles[i].n === n.id) { const e = world.s.tiles[i]; if (e.canal) world.s.tiles[i] = { k: 'water', n: n.id, id: 'canal' }; else delete world.s.tiles[i]; n.items[e.id] = (n.items[e.id] || 0) + 1; sendTile(i); done++; continue; } // 다리 거두기 (수로 위였으면 수로로)
+          if (m.t === 'place' && k === 'bridge') { // 다리: 물 위에만, 우리 땅이거나 우리 땅·우리 다리에 붙은 물
+            const cur = world.s.tiles[i], onCanal = cur && cur.k === 'water' && cur.n === n.id;
+            if (!(tileAt(x, y) === TT.WATER && !cur) && !onCanal) { why = '다리는 물(강·호수·우리 수로) 위에만 놓아요'; continue; }
+            const touch = own || [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const q = world.s.tiles[tileIdx(x + dx, y + dy)]; return (tileAt(x + dx, y + dy) !== TT.WATER && world.ownerOf(terrAtTile(x + dx, y + dy)) === n.id) || (q && q.k === 'bridge' && q.n === n.id); });
+            if (!touch) { why = '우리 땅이나 우리 다리에 이어서 놓아요'; continue; }
+            if (!(n.items[B.id] > 0)) { why = '저장소에 남은 게 없어요 (하늘 건축 상점에서 사요)'; break; }
+            n.items[B.id]--; done++; world.s.tiles[i] = { k: 'bridge', n: n.id, id: B.id }; if (onCanal) world.s.tiles[i].canal = 1; sendTile(i); continue;
+          }
+          if (!own) { why = '우리 나라 땅에만 놓을 수 있어요'; continue; }
           if (m.t === 'pickup') {
             const e = world.s.tiles[i];
             if (e && e.n === n.id && e.crop) { why = '작물이 자라는 밭은 못 거둬요 (수확 먼저)'; continue; }
@@ -669,7 +682,7 @@ wss.on('connection', (ws) => {
             if (!B || B.cat !== 'seed') return;
             if (e.crop) { why = '이미 심은 칸이 있어요'; continue; }
             if (!(n.items[B.id] > 0)) { why = '씨앗이 모자라요 (하늘 정원 천사에게서 사요)'; break; }
-            let near = false; for (let dy = -NUM.canalRange; dy <= NUM.canalRange && !near; dy++) for (let dx = -NUM.canalRange; dx <= NUM.canalRange; dx++) { const w2 = world.s.tiles[tileIdx(x + dx, y + dy)]; if (w2 && w2.k === 'water') { near = true; break; } }
+            let near = false; for (let dy = -NUM.canalRange; dy <= NUM.canalRange && !near; dy++) for (let dx = -NUM.canalRange; dx <= NUM.canalRange; dx++) { const w2 = world.s.tiles[tileIdx(x + dx, y + dy)]; if (w2 && (w2.k === 'water' || w2.canal)) { near = true; break; } }
             n.items[B.id]--; e.crop = { c: B.crop, at: Date.now(), d: Math.round(CROPS[B.crop].min * 60e3 * (near ? NUM.canalBoost : 1) / (+process.env.CROP_FAST || 1)), w: near ? 1 : 0 }; done++; sendTile(i);
           } else if (m.t === 'fert') {
             if (!e.crop) { why = '심은 작물이 없어요'; continue; }
@@ -712,13 +725,16 @@ wss.on('connection', (ws) => {
       }
       case 'moveB': { // 설치 모드: 우리 저장소·우리 땅 금광 옮기기
         const n = world.nationOfPlayer(s.token); if (!n) return;
-        const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y), kind = m.kind === 'mine' ? 'mine' : 'store', tid = m.terr | 0;
+        const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y), kind = m.kind === 'mine' ? 'mine' : m.kind === 'portal' ? 'portal' : 'store', tid = m.terr | 0;
+        if (kind === 'portal' && n.king !== s.token) return send(ws, { t: 'err', text: '하늘 포털은 왕만 옮길 수 있어요' });
         if (kind === 'mine' && world.ownerOf(tid) !== n.id) return send(ws, { t: 'err', text: '우리 땅의 금광만 옮길 수 있어요' });
         if (!nextTo(s, x, y, 2.2)) return send(ws, { t: 'err', text: '바로 앞 칸에 놓아요' });
         if (world.ownerOf(terrAtTile(x, y)) !== n.id) return send(ws, { t: 'err', text: '우리 나라 땅에만 놓을 수 있어요' });
         if (!walkableTerrain(tileAt(x, y)) || (treeHere(x, y) && !world.s.chopped[i]) || world.s.tiles[i] && world.s.tiles[i].k === 'wall' || world.s.traps[i]) return send(ws, { t: 'err', text: '여기엔 놓을 수 없어요 (나무·방벽·덫이 있거나 걸을 수 없는 칸)' });
         if (reservedTile(x, y)) return send(ws, { t: 'err', text: '제단·포털 바로 옆엔 못 놓아요' });
         if (buildingNear(x, y, kind === 'mine' ? 'mine:' + tid : 'store:' + n.id)) return send(ws, { t: 'err', text: '다른 저장소·금광과 2칸 넘게 떨어져야 해요' });
+        if (kind === 'portal' && terrAtTile(x, y) !== n.capital) return send(ws, { t: 'err', text: '하늘 포털은 수도 영토 안에서만 옮길 수 있어요' });
+        if (kind === 'portal') { if (world.s.tiles[i] || reservedTile(x, y) && !(n.portalPos && Math.abs(n.portalPos[0] - x) <= 1 && Math.abs(n.portalPos[1] - y) <= 1)) return send(ws, { t: 'err', text: '여기엔 포털을 놓을 수 없어요' }); n.portalPos = [x, y]; dirty = true; broadcastOwners(); return send(ws, { t: 'ok', text: '하늘 포털을 옮겼어요' }); }
         if (kind === 'store') n.storePos = [x, y]; else world.s.mines[tid] = [x, y];
         dirty = true; broadcastOwners();
         send(ws, { t: 'ok', text: kind === 'store' ? '저장소를 옮겼어요' : '금광을 옮겼어요' });
@@ -947,6 +963,7 @@ function resolveNight(why, slot) {
   }
   for (const tid of Object.keys(world.s.mines)) if (world.s.owner[tid] !== before[tid]) delete world.s.mines[tid]; // 주인이 바뀐 영토의 금광은 기본 자리로
   for (const n of world.alive()) if (n.storePos && world.ownerOf(terrAtTile(n.storePos[0], n.storePos[1])) !== n.id) delete n.storePos; // 저장소 자리를 빼앗기면 수도 옆으로
+  for (const n of world.alive()) if (n.portalPos && (world.ownerOf(terrAtTile(n.portalPos[0], n.portalPos[1])) !== n.id || terrAtTile(n.portalPos[0], n.portalPos[1]) !== n.capital)) delete n.portalPos; // 포털은 수도 안에서만
   state.lastResolved = `${gameClock().day}일차 ${SLOT_LABEL[gameClock().slot]}`; dirty = true; saveState();
   console.log(`[전투] ${why}: ${reports.length}건 처리`);
   broadcastOwners();

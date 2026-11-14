@@ -454,6 +454,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .stItem i { position: absolute; right: 4px; top: 4px; font-style: normal; font-size: 12px; min-width: 22px; text-align: center; padding: 0 5px; background: #3d5fb8; color: #fff; border: 2px solid #2b2340; border-radius: 999px; }
 .stEmpty { grid-column: 1 / -1; margin: 18px; text-align: center; color: #8a7f9a; } .stFoot { display: flex; justify-content: flex-end; padding-top: 8px; border-top: 2px dashed #efe0b8; }
 @media (max-width: 640px) { .stRes { grid-template-columns: repeat(2, 1fr); } }
+#fColors .sw:disabled { opacity: 0.25; cursor: not-allowed; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -594,6 +595,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
     <div data-step="found" hidden>
       <div class="head"><h2>나라 세우기</h2><button type="button" data-back>뒤로</button></div>
       <label for="fName">나라 이름 (2~10글자)</label><input id="fName" type="text" maxlength="10" autocomplete="off" placeholder="예: 하늘왕국">
+      <label>나라 색 <small>(지도와 이름표에 보이는 우리 나라 색)</small></label><div class="swatches" id="fColors"></div>
       <label>수도 고르기</label>
       <canvas id="fMap" width="720" height="720" aria-label="수도 후보 지도"></canvas>
       <div id="fInfo" class="finfo"></div>
