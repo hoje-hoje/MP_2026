@@ -71,7 +71,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 #btSide .btns { margin-top: auto; }
 #btSide .btns button { width: 100%; }
 #btCanvas { flex: 1; min-width: 0; height: 100%; display: block; image-rendering: pixelated; cursor: pointer; }
-#battle .skip { color: #d9cfee; font-size: 12px; margin: 8px 0 0; }
+
 @media (max-width: 640px) { #battle .frame { flex-direction: column; height: calc(100vh - 60px); } #btSide { width: auto; max-height: 45%; } #btCanvas { height: auto; min-height: 0; } }
 #sunMoon { width: 24px; height: 24px; image-rendering: pixelated; flex: none; }
 #doomPop { position: fixed; inset: 0; z-index: 45; background: rgba(10,4,24,.82); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px; cursor: pointer; }
@@ -310,21 +310,38 @@ body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 
 .logoCv { width: clamp(280px, 42vw, 560px); image-rendering: pixelated; filter: drop-shadow(0 0 18px rgba(190,140,255,0.85)); }
 .tlogo.big .logoCv { width: clamp(320px, 56vw, 720px); }
 
-#battle .frame { flex-direction: column; width: min(1200px, 100%); height: min(760px, calc(100vh - 50px)); }
-#btHead { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #1b1430; color: #fff6d6; padding: 10px 14px; border-bottom: 4px solid #fff6d6; }
-#btHead .bside { display: flex; align-items: center; gap: 10px; min-width: 0; } #btHead .bside.d { text-align: right; }
-#btHead .bside b { display: block; font-family: var(--font-display); font-size: clamp(18px, 2.6vw, 30px); font-weight: 400; color: var(--c); text-shadow: 0 2px 0 #000; }
-#btHead .bside small { color: #d9cfee; font-size: 13px; }
-#btHead .ricon { font-size: clamp(26px, 3.4vw, 40px); width: 1.4em; height: 1.4em; display: grid; place-items: center; background: var(--c); border: 3px solid #fff6d6; }
-#btHead .bmid { text-align: center; } #btHead .bmid h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(22px, 3.2vw, 40px); color: #ffd34d; text-shadow: 0 3px 0 #c22f53; }
-#btHead .bmid small { color: #d9cfee; font-size: 13px; }
-#btCanvas { flex: 1; width: 100%; min-height: 0; }
-#btFoot { flex: none; display: flex; align-items: center; gap: 10px; background: #fff6d6; color: #2b2340; padding: 8px 12px; }
-#btSum { flex: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-size: 15px; }
-#btSum b { font-family: var(--font-display); font-weight: 400; font-size: 24px; } #btSum b.att { color: #3d5fb8; } #btSum b.def { color: #c94a3c; }
-#btSum small { color: #6b6280; width: 100%; } #btSum em { font-style: normal; font-weight: 700; } #btSum em.w { color: #277a58; } #btSum em.l { color: #c22f53; }
+#battle .frame { flex-direction: column; width: min(1100px, 100%); height: min(760px, calc(100vh - 30px)); background: #fff6d6; }
+#btHead { flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; background: #1b1430; color: #fff6d6; padding: 12px 18px; }
+#btHead .team { display: flex; flex-direction: column; gap: 2px; } #btHead .team.d { text-align: right; align-items: flex-end; }
+#btHead .team small { color: #b9add6; font-size: 13px; letter-spacing: 1px; }
+#btHead .team b { font-family: var(--font-display); font-weight: 400; font-size: clamp(20px, 3vw, 34px); color: #fff; border-bottom: 5px solid var(--c); line-height: 1.2; }
+#btHead .team i { font-style: normal; color: #d9cfee; font-size: 14px; }
+#btHead .score { text-align: center; }
+#btHead .sc { font-family: var(--font-display); font-size: clamp(40px, 6vw, 64px); line-height: 1; color: #fff; }
+#btHead .sc span:first-child { color: #9fc0ff; } #btHead .sc span:last-child { color: #ffaaaa; } #btHead .sc em { font-style: normal; margin: 0 10px; color: #6b6280; }
+#btHead .pips { display: flex; gap: 4px; justify-content: center; margin: 6px 0 4px; flex-wrap: wrap; max-width: 320px; }
+#btHead .pips i { width: 14px; height: 14px; background: #3a2f55; border: 2px solid #6b6280; } #btHead .pips i.att { background: #3d5fb8; border-color: #9fc0ff; } #btHead .pips i.def { background: #c94a3c; border-color: #ffaaaa; }
+#btHead .score small { color: #d9cfee; font-size: 13px; } #btHead .score small b { color: #ffd34d; }
+#btBody { flex: 1; min-height: 0; position: relative; background: #4c7a38; }
+#btRows { position: absolute; inset: 8px; display: grid; gap: 6px 10px; }
+#btFx { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); pointer-events: none; image-rendering: pixelated; }
+.frow { display: grid; grid-template-columns: 2.6em 1fr auto 1fr; align-items: center; gap: 6px; background: rgba(27,20,48,0.38); border: 3px solid rgba(27,20,48,0.5); padding: 0 12px; min-height: 0; transition: background .2s, border-color .2s; }
+.frow .fl { font-family: var(--font-display); font-weight: 400; font-size: clamp(16px, 2.4vw, 26px); color: #fff6d6; text-align: center; background: #1b1430; padding: 0 4px; }
+.frow .na, .frow .nd { font-family: var(--font-display); font-size: clamp(18px, 2.8vw, 30px); color: #fff; text-shadow: 0 2px 0 #1b1430; }
+.frow .na { text-align: right; padding-right: 10px; } .frow .nd { text-align: left; padding-left: 10px; }
+.frow .vs { font-family: var(--font-display); font-size: clamp(13px, 1.8vw, 20px); color: #fff6d6; background: #1b1430; padding: 2px 10px; min-width: 4.5em; text-align: center; }
+.frow.live { border-color: #ffd34d; background: rgba(255,211,77,0.18); }
+.frow.win-a { background: rgba(61,95,184,0.55); border-color: #9fc0ff; } .frow.win-a .vs { background: #3d5fb8; } .frow.win-a .nd { opacity: 0.45; text-decoration: line-through; }
+.frow.win-d { background: rgba(201,74,60,0.55); border-color: #ffaaaa; } .frow.win-d .vs { background: #c94a3c; } .frow.win-d .na { opacity: 0.45; text-decoration: line-through; }
+#btSum { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, 92%); background: #fff6d6; color: #2b2340; border: 4px solid #1b1430; box-shadow: 0 0 0 4px #fff6d6, 0 0 0 8px #1b1430, 0 18px 40px rgba(0,0,0,0.5); padding: 18px 20px; text-align: center; display: flex; flex-direction: column; gap: 8px; animation: sumIn .35s ease-out; }
+#btSum[hidden] { display: none; }
+@keyframes sumIn { from { transform: translate(-50%, -50%) scale(1.4); opacity: 0; } }
+#btSum .big { font-family: var(--font-display); font-size: clamp(34px, 5vw, 52px); } #btSum .big.att { color: #3d5fb8; } #btSum .big.def { color: #c94a3c; }
+#btSum .line { font-size: 17px; } #btSum .loss { color: #6b6280; font-size: 14px; }
+#btSum .me { font-family: var(--font-display); font-size: 22px; } #btSum .me.w { color: #277a58; } #btSum .me.l { color: #c22f53; }
+#btFoot { flex: none; display: flex; align-items: center; gap: 10px; background: #fff6d6; color: #6b6280; padding: 8px 12px; font-size: 13px; }
 #btFoot #btNext { margin-left: auto; min-width: 140px; }
-@media (max-width: 640px) { #btHead { flex-wrap: wrap; } #btHead .bmid { order: -1; width: 100%; } }
+@media (max-width: 640px) { #btHead { grid-template-columns: 1fr 1fr; } #btHead .score { grid-column: 1 / 3; grid-row: 1; }  }
 #warBanner { position: fixed; left: 0; right: 0; top: 34%; z-index: 55; pointer-events: none; display: flex; flex-direction: column; align-items: stretch; }
 #warBanner[hidden] { display: none; }
 #warBanner .stripe { height: 30px; background: repeating-linear-gradient(-60deg, #ff2a3a 0 18px, #2a0008 18px 36px); box-shadow: 0 0 24px #ff2a3a; animation: wbslide 0.6s linear infinite; opacity: 0.95; }
@@ -403,7 +420,7 @@ body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 
   <div class="r"><button type="button" id="edClear">이 방 되돌리기</button><button type="button" id="edExit">편집 끝내기</button></div>
 </div>
 <div id="doomPop" hidden><canvas id="doomPopCanvas" width="600" height="300"></canvas><p>화면을 누르면 닫혀요 · 하늘 신전 게시판에서 다시 볼 수 있어요</p></div>
-<div id="battle" hidden><div class="frame"><div id="btHead"></div><canvas id="btCanvas"></canvas><div id="btFoot"><div id="btSum" hidden></div><button id="btNext" type="button">닫기</button></div></div><p class="skip">화면을 누르면 결과로 건너뛰어요</p></div>
+<div id="battle" hidden><div class="frame"><div id="btHead"></div><div id="btBody"><div id="btRows"></div><canvas id="btFx"></canvas><div id="btSum" hidden></div></div><div id="btFoot"><span class="hint">화면을 누르면 결과로 건너뛰어요</span><button id="btNext" type="button">닫기</button></div></div></div>
 <div id="warBanner" hidden><div class="stripe"></div><div id="warBannerText">⚔ 영역전 시작 ⚔</div><div class="stripe r"></div></div>
 <div id="warCast" class="modalbox" hidden><div class="panel card"><h2>⚔ 영역전 중계</h2><div id="castBody"></div><div class="seg"><button id="castClose" type="button">닫기</button></div></div></div>
 <div id="warAlert" hidden role="alertdialog" aria-labelledby="warAlertTitle"><div class="box"><h2 id="warAlertTitle">⚔ 선전포고가 왔습니다!</h2><ul id="warAlertList"></ul><p id="warAlertNote"></p><div class="row"><button id="warAlertGo">방어 배치하러 가기</button><button id="warAlertClose" class="ghost">닫기</button></div></div></div>

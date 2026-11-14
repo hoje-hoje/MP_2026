@@ -1,0 +1,3 @@
+pixelfx (https://github.com/patch-gg/pixelfx) — MIT License, Copyright (c) 2026 Patch, Copyright (c) 2026 Hugo Duprez.
+src/core/sim.js 와 일부 이펙트는 Sprite Fusion pixel art VFX (MIT, Hugo Duprez), act.js 는 Hollow Crown (MIT, rehan-remade) 을 참고함.
+이 게임에서는 core/ 와 이펙트 몇 개만 그대로 가져와 영역전 장면에 씀. (글꼴 Patch Pixel 은 가져오지 않음)

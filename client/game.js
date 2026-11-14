@@ -2002,16 +2002,27 @@
   }
   // 다음 전투 시각 (13시·22시, 한국 시간)
   function nextFight() { if (ONLINE) return SLOT === 'morning' ? '오늘 점심 1시' : SLOT === 'lunch' ? '오늘 밤 10시' : '내일 점심 1시'; const h = new Date(Date.now() + 9 * 3600e3).getUTCHours(); return h < 13 ? '오늘 13시' : h < 22 ? '오늘 22시' : '내일 13시'; }
-  // ---- 전투 장면 (웅장하게, 큼직하게): 위에 두 나라·종족, 가운데 전선마다 싸움, 아래 결과
-  // 전선이 많으면 줄을 두 칸(세 칸)으로 나눠서 보여 줌. 화면을 누르면 결과로 건너뜀
-  const BT = { list: [], i: 0, t0: 0, done: null, raf: 0, shake: 0 };
-  const RACE_INFO = { human: { name: '인간', weapon: '검', icon: '⚔' }, elf: { name: '엘프', weapon: '활', icon: '🏹' }, dwarf: { name: '드워프', weapon: '도끼', icon: '🪓' } };
+  // ---- 전투 장면 (한눈에 보이게): 위 = 점수판(두 나라 · 이긴 전선 수 · 몇 곳 이기면 승리),
+  // 가운데 = 전선마다 한 줄(병사 · 병력 숫자 · 결과), 한 줄씩 차례로 싸움. 이펙트는 pixelfx. 화면을 누르면 결과로 건너뜀
+  const BT = { list: [], i: 0, t0: 0, done: null, raf: 0, fx: [], fired: {}, frame: null, img: null, off: null };
+  const RACE_INFO = { human: { name: '인간', weapon: '검', icon: '⚔', ch: 35 }, elf: { name: '엘프', weapon: '활', icon: '🏹', ch: 37 }, dwarf: { name: '드워프', weapon: '도끼', icon: '🪓', ch: 21 } }; // ch = aether.png 캐릭터 번호
   const raceOf = (nid) => (nationsPub[nid] && nationsPub[nid].race) || 'human';
+  // pixelfx: 처음 전투를 볼 때 한 번만 불러옴 (assets/pixelfx, MIT)
+  let PFX = null, pfxLoading = null;
+  function loadPfx() {
+    if (PFX || pfxLoading) return pfxLoading;
+    const B = 'assets/pixelfx/';
+    pfxLoading = Promise.all([import('./' + B + 'core/index.js'), ...['melee/sword-slash', 'melee/heavy-cleave', 'projectiles/arrow', 'impacts/crit-hit', 'impacts/hit-spark', 'ui/confetti', 'spawn/poof'].map((n) => import('./' + B + 'fx/' + n + '.js'))])
+      .then(([core, slash, cleave, arrow, crit, spark, confetti, poof]) => { PFX = { core, slash, cleave, arrow, crit, spark, confetti, poof }; }).catch(() => { PFX = null; });
+    return pfxLoading;
+  }
+  let FXS = 2; // 이펙트 도트 크기 (화면 2px = 이펙트 1칸, 전선이 많아 줄이 얇으면 1)
+  function addFx(name, x, y, o = {}) { if (!PFX || !PFX[name]) return; BT.fx.push(PFX.core.createFx(PFX[name], Object.assign({ x: x / FXS, y: y / FXS }, o))); }
   function playBattles(reps, done) {
     const seen = new Set(store('mp2026.battleSeen') || []);
     BT.list = reps.slice(); BT.i = 0; BT.done = done; SND.play('war');
     store('mp2026.battleSeen', [...seen, ...reps.map((r) => r.id)].slice(-80));
-    $('battle').hidden = false; startBattle();
+    $('battle').hidden = false; loadPfx(); startBattle();
   }
   // 접속했을 때 아직 못 본 지난 전투가 있으면 보여 준다
   function unseenBattles() {
@@ -2021,128 +2032,109 @@
     const reps = myView.reports.filter((r) => r.night === last && !seen.has(r.id));
     if (reps.length) setTimeout(() => playBattles(reps, () => {}), 600);
   }
-  const btEnd = (r) => 0.9 + 1.9 + 1.0; // 마지막 전선 결과까지
+  // 줄마다 싸우는 시각: 0.8초부터 차례로 (전선이 많으면 빨리)
+  const btStep = (F) => Math.min(0.55, 3.2 / F), btAt = (F, i) => 0.8 + i * btStep(F), btEnd = (r) => btAt(r.fronts.length, r.fronts.length - 1) + 1.0;
   function startBattle() {
-    const r = BT.list[BT.i]; BT.t0 = performance.now();
+    const r = BT.list[BT.i]; BT.t0 = performance.now(); BT.fx = []; BT.fired = {}; FXS = r.fronts.length > 8 ? 1 : 2; BT.frame = null;
+    const F = r.fronts.length, need = Math.floor(F / 2) + 1;
     const me = myView && myView.me ? myView.me.id : null, side = r.att === me ? 'att' : r.def === me ? 'def' : null;
     const ra = RACE_INFO[raceOf(r.att)], rd = RACE_INFO[raceOf(r.def)];
-    const won = side ? (r.winner === side) : null;
-    $('btHead').innerHTML = `<div class="bside a" style="--c:${natColor(r.att)}"><span class="ricon">${ra.icon}</span><div><b>${esc(r.attName)}</b><small>공격 · ${ra.name}(${ra.weapon})</small></div></div>
-      <div class="bmid"><h2>⚔ 영역전 ⚔</h2><small>${esc(terrLabel(r.target))}${r.capital ? ' · 수도' : ''} · 전선 ${r.F || r.fronts.length}곳 · 절반 넘게 이기면 승리</small></div>
-      <div class="bside d" style="--c:${natColor(r.def)}"><div><b>${esc(r.defName)}</b><small>방어 ×1.1 · ${rd.name}(${rd.weapon})</small></div><span class="ricon">${rd.icon}</span></div>`;
-    const lost = (r.lost || []).length;
+    $('btHead').innerHTML = `
+      <div class="team a" style="--c:${natColor(r.att)}"><small>공격</small><b>${esc(r.attName)}</b><i>${ra.icon} ${ra.name}</i></div>
+      <div class="score"><div class="sc"><span id="scA">0</span><em>:</em><span id="scD">0</span></div>
+        <div class="pips">${r.fronts.map((_, k) => `<i data-pip="${k}"></i>`).join('')}</div>
+        <small>${esc(terrLabel(r.target))}${r.capital ? ' (수도)' : ''} · 전선 ${F}곳 중 <b>${need}곳</b>을 먼저 이기면 승리</small></div>
+      <div class="team d" style="--c:${natColor(r.def)}"><small>방어 · 병력 ×1.1</small><b>${esc(r.defName)}</b><i>${rd.icon} ${rd.name}</i></div>`;
+    const cols = F <= 8 ? 1 : 2;
+    $('btRows').style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    $('btRows').style.gridTemplateRows = `repeat(${Math.ceil(F / cols)}, 1fr)`;
+    $('btRows').innerHTML = r.fronts.map((w, k) => `<div class="frow" data-row="${k}" style="grid-column:${Math.floor(k / Math.ceil(F / cols)) + 1};grid-row:${k % Math.ceil(F / cols) + 1}">
+      <b class="fl">${MPRules.frontName(k)}</b><span class="na">${r.a[k]}</span><span class="vs">VS</span><span class="nd">${r.effD[k]}</span></div>`).join('');
+    const lost = (r.lost || []).length, won = side ? r.winner === side : null;
     $('btSum').hidden = true;
-    $('btSum').innerHTML = `<b class="${r.winner}">${r.winner === 'att' ? '⚔ 공격 승리!' : '🛡 방어 승리!'}</b> <span>전선 ${r.attWon != null ? r.attWon : r.fronts.filter((x) => x === 'att').length} : ${r.defWon != null ? r.defWon : r.fronts.filter((x) => x === 'def').length}</span>
-      <span>${r.winner === 'att' ? `영역 ${lost || 1}곳이 ${esc(r.attName)}에게 넘어갔어요` : `${esc(r.defName)}이(가) 지켜 냈어요${r.prisoners ? ` · 포로 ${r.prisoners}명` : ''}`}${r.newCapital ? ' · 수도 함락, 강제 천도' : ''}${r.destroyed ? ' · <b>나라 멸망</b>' : ''}</span>
-      <small>잃은 병력: ${esc(r.attName)} −${r.lossA} · ${esc(r.defName)} −${r.lossD}</small>${won === null ? '' : `<em class="${won ? 'w' : 'l'}">${won ? '우리 나라 승리!' : '우리 나라 패배'}</em>`}`;
+    $('btSum').innerHTML = `<div class="big ${r.winner}">${r.winner === 'att' ? '⚔ 공격 승리' : '🛡 방어 승리'}</div>
+      <div class="line">${r.winner === 'att' ? `<b>${esc(r.attName)}</b>이(가) 영역 <b>${lost || 1}곳</b>을 차지했어요` : `<b>${esc(r.defName)}</b>이(가) 영역을 지켜 냈어요${r.prisoners ? ` · 포로 ${r.prisoners}명` : ''}`}${r.newCapital ? ' · 수도 함락, 강제 천도' : ''}${r.destroyed ? ' · <b>나라 멸망</b>' : ''}</div>
+      <div class="loss">잃은 병력 · ${esc(r.attName)} −${r.lossA} · ${esc(r.defName)} −${r.lossD}</div>${won === null ? '' : `<div class="me ${won ? 'w' : 'l'}">${won ? '우리 나라 승리!' : '우리 나라 패배…'}</div>`}`;
     $('btNext').textContent = BT.i < BT.list.length - 1 ? `다음 전투 (${BT.i + 2}/${BT.list.length})` : '닫기';
     $('btNext').onclick = (e) => { e.stopPropagation(); nextBattle(); };
-    cancelAnimationFrame(BT.raf); const loop = () => { drawBattle(r, (performance.now() - BT.t0) / 1000); BT.raf = requestAnimationFrame(loop); }; loop();
+    cancelAnimationFrame(BT.raf); let prev = performance.now();
+    const loop = (now) => { const dt = Math.min(0.05, (now - prev) / 1000); prev = now; drawBattle(r, (now - BT.t0) / 1000, dt); BT.raf = requestAnimationFrame(loop); };
+    BT.raf = requestAnimationFrame(loop);
   }
   function nextBattle() {
     if (++BT.i < BT.list.length) return startBattle();
     cancelAnimationFrame(BT.raf); $('battle').hidden = true; if (BT.done) BT.done();
   }
   $('battle').addEventListener('click', (e) => { if (e.target.closest('button')) return; const r = BT.list[BT.i]; if (r && performance.now() - BT.t0 < btEnd(r) * 1000) BT.t0 = performance.now() - btEnd(r) * 1000; });
-  // 도트 병사: 종족마다 모습·무기가 다름. dir 1 = 오른쪽을 봄, pose 0/1 걷기, 2 공격
-  function drawSoldier(g, x, y, s, race, col, dir, pose, alpha) {
-    g.save(); g.globalAlpha = alpha; g.translate(Math.round(x), Math.round(y)); if (dir < 0) g.scale(-1, 1);
-    const P = (px, py, w, h, c) => { g.fillStyle = c; g.fillRect(px * s, py * s, w * s, h * s); };
-    const short = race === 'dwarf', top = short ? -9 : -12;
-    // 다리
-    const lg = pose === 1 ? 1 : 0;
-    P(-2, -3, 1, 3 - lg, '#3a2a20'); P(1, -3, 1, 3 - (1 - lg), '#3a2a20');
-    // 몸 (나라 색)
-    P(-3, top + 5, 6, short ? 3 : 4, col); P(-3, top + 5, 6, 1, 'rgba(255,255,255,0.35)'); P(-3, -4, 6, 1, '#2b2340');
-    // 머리
-    const skin = race === 'elf' ? '#f6dcc0' : race === 'dwarf' ? '#e8b48a' : '#f0c8a0';
-    P(-2, top + 1, 4, 4, skin); P(1, top + 2, 1, 1, '#2b2340');
-    if (race === 'human') { P(-3, top, 6, 2, '#9aa3b8'); P(-3, top + 2, 1, 2, '#9aa3b8'); P(-1, top - 1, 2, 1, '#c22f53'); }
-    if (race === 'elf') { P(-3, top, 6, 2, '#2f7a46'); P(-3, top + 2, 1, 3, '#2f7a46'); P(2, top + 2, 2, 1, skin); }
-    if (race === 'dwarf') { P(-3, top, 6, 2, '#8a8f9e'); P(-4, top - 1, 1, 2, '#f1ecff'); P(3, top - 1, 1, 2, '#f1ecff'); P(-2, top + 4, 5, 3, '#b5651d'); P(-1, top + 7, 3, 1, '#b5651d'); }
-    // 무기
-    const sw = pose === 2;
-    if (race === 'human') { if (sw) { P(3, top + 3, 4, 1, '#e6ecf5'); P(7, top + 3, 1, 1, '#ffffff'); P(2, top + 3, 1, 2, '#7a5a30'); } else { P(3, top + 1, 1, 6, '#e6ecf5'); P(2, top + 6, 3, 1, '#7a5a30'); } }
-    if (race === 'elf') { P(3, top + 1, 1, 7, '#8a5a2b'); P(4, top, 1, 1, '#8a5a2b'); P(4, top + 8, 1, 1, '#8a5a2b'); P(3, top + 4, sw ? 3 : 1, 1, '#f1ecff'); }
-    if (race === 'dwarf') { if (sw) { P(3, top + 3, 5, 1, '#7a5a30'); P(7, top + 1, 2, 4, '#c9ced8'); } else { P(3, top, 1, 8, '#7a5a30'); P(3, top - 1, 3, 3, '#c9ced8'); } }
-    g.restore();
+  // 병사: 게임 캐릭터 시트(16px)에서 종족마다 한 캐릭터. dir 3 = 오른쪽, 2 = 왼쪽. row 0~3 걷기, 4 공격
+  function drawUnit(g, k, dir, row, x, y, sc, a) { // AetherAI 캐릭터 (32px). dir 2 = 왼쪽 보기(뒤집기), row 4 = 공격(앞으로 찌르기), 0~3 = 걷기
+    if (!ART.aether) return;
+    const s2 = sc / 2, w = 32 * s2, bob = row === 4 ? 0 : (row % 2) * s2, lunge = row === 4 ? (Math.floor(performance.now() / 90) % 2) * 2 * s2 : 0;
+    g.globalAlpha = a; g.save(); g.translate(Math.round(x + (dir === 2 ? -lunge : lunge)), Math.round(y - bob));
+    if (dir === 2) g.scale(-1, 1);
+    g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.ellipse(0, 0, w * 0.3, w * 0.08, 0, 0, 6.3); g.fill();
+    g.drawImage(ART.aether, (k % 8) * 32, Math.floor(k / 8) * 32, 32, 32, Math.round(-w / 2), Math.round(-w + 2 * s2), w, w);
+    g.restore(); g.globalAlpha = 1;
   }
-  function drawBattle(r, t) {
-    const cv = $('btCanvas'), W2 = cv.clientWidth, H2 = cv.clientHeight;
-    if (cv.width !== W2 || cv.height !== H2) { cv.width = W2; cv.height = H2; }
-    const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
-    const ease = (x) => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x), lerp = (a, b, k) => a + (b - a) * k;
-    const F = r.fronts.length, cols = F <= 7 ? 1 : F <= 16 ? 2 : 3, rows = Math.ceil(F / cols);
-    const cA = natColor(r.att), cD = natColor(r.def), raceA = raceOf(r.att), raceD = raceOf(r.def);
-    // 흔들림
-    let sh = 0; if (BT.shake > 0) { sh = (Math.random() - 0.5) * BT.shake * 10; BT.shake = Math.max(0, BT.shake - 0.05); }
-    g.save(); g.translate(sh, sh * 0.5);
-    // 전장 바닥
-    g.fillStyle = '#4c7a38'; g.fillRect(-10, -10, W2 + 20, H2 + 20);
-    for (let i = 0; i < 260; i++) { g.fillStyle = i % 3 ? '#578a40' : '#41692f'; g.fillRect((hash(i, 1, 9) * W2) | 0, (hash(i, 2, 9) * H2) | 0, 6, 3); }
-    g.fillStyle = cA; g.globalAlpha = 0.25; g.fillRect(0, 0, W2 * 0.12, H2); g.fillStyle = cD; g.fillRect(W2 * 0.88, 0, W2 * 0.12, H2); g.globalAlpha = 1;
-    const maxT = Math.max(1, ...r.a, ...r.d);
-    const cellW = W2 / cols, cellH = H2 / rows, s = Math.max(2, Math.min(7, Math.floor(Math.min(cellH / 16, cellW / 58)))); // 병사 크게 (줄 사이가 겹치지 않을 만큼)
-    for (let i = 0; i < F; i++) {
-      const col = Math.floor(i / rows), row = i % rows, x0 = col * cellW, y0 = row * cellH, mid = x0 + cellW / 2, gy = y0 + cellH * 0.72;
-      const start = 0.9 + i * (1.9 / F), clash = start + 0.45, res = start + 0.85, local = t - start, win = r.fronts[i];
-      // 줄 (흙길)
-      g.fillStyle = 'rgba(70,45,25,0.45)'; g.fillRect(x0 + 10, gy - 4, cellW - 20, 8);
-      if (cols > 1 && col > 0 && row === 0) { g.fillStyle = 'rgba(27,20,48,0.6)'; g.fillRect(x0 - 2, 0, 4, H2); }
-      // 전선 이름 + 숫자 + 힘 막대 (큼직하게)
-      const fs = Math.max(14, Math.min(30, cellH * 0.28));
-      g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `400 ${fs}px ${PFONT}`;
-      const outline = (txt, x, y, c, w = 5) => { g.lineWidth = w; g.lineJoin = 'round'; g.strokeStyle = '#1b1430'; g.strokeText(txt, x, y); g.fillStyle = c; g.fillText(txt, x, y); };
-      outline(MPRules.frontName(i), mid, y0 + fs * 0.75, '#fff6d6');
-      const aN = r.a[i], dN = r.effD[i];
-      g.font = `400 ${fs * 0.95}px ${PFONT}`; outline(String(aN), x0 + cellW * 0.2, y0 + fs * 0.75, '#bcd4ff'); outline(String(dN), x0 + cellW * 0.8, y0 + fs * 0.75, '#ffc4c4');
-      const bw = cellW * 0.36, bx = mid - bw / 2, by = y0 + fs * 1.45, k = aN / Math.max(0.1, aN + dN);
-      g.fillStyle = '#1b1430'; g.fillRect(bx - 2, by - 2, bw + 4, 10); g.fillStyle = cA; g.fillRect(bx, by, bw * k, 6); g.fillStyle = cD; g.fillRect(bx + bw * k, by, bw * (1 - k), 6);
-      // 병사 수 (병력에 따라 1~6명)
-      const nA = Math.max(1, Math.min(6, Math.round(aN / maxT * 6))), nD = Math.max(1, Math.min(6, Math.round(r.d[i] / maxT * 6)));
-      const march = ease(t / 0.8), walk = Math.floor(t * 8) % 2;
-      let ax = lerp(x0 + 18, mid - 14 * s, march), dx = lerp(x0 + cellW - 18, mid + 14 * s, march);
-      if (local > 0 && local < 0.45) { ax = lerp(mid - 14 * s, mid - 6 * s, ease(local / 0.45)); dx = lerp(mid + 14 * s, mid + 6 * s, ease(local / 0.45)); }
-      const fighting = t >= clash && t < res;
-      if (fighting) { const j = Math.sin(t * 80) * s; ax += j; dx -= j; }
-      const after = t >= res, push = after ? ease((t - res) / 0.4) * cellW * 0.18 : 0;
-      if (after) { ax += win === 'att' ? push : -push * 0.6; dx += win === 'att' ? push * 0.6 : -push; }
-      for (let kk = 0; kk < nA; kk++) { const fall = after && win !== 'att' && kk >= Math.ceil(nA / 3); drawSoldier(g, ax - (kk % 3) * 7 * s - (kk >= 3 ? 3 * s : 0), gy + (kk >= 3 ? -3 * s : 0) + (kk % 3 === 1 ? 2 * s : 0), s, raceA, cA, 1, fighting ? 2 : march < 1 ? walk : 0, fall ? 0.25 : 1); }
-      for (let kk = 0; kk < nD; kk++) { const fall = after && win === 'att' && kk >= Math.ceil(nD / 3); drawSoldier(g, dx + (kk % 3) * 7 * s + (kk >= 3 ? 3 * s : 0), gy + (kk >= 3 ? -3 * s : 0) + (kk % 3 === 1 ? 2 * s : 0), s, raceD, cD, -1, fighting ? 2 : march < 1 ? walk : 0, fall ? 0.25 : 1); }
-      // 이펙트: 엘프는 화살, 인간은 베기, 드워프는 땅 울림 + 불꽃
-      if (local > -0.1 && local < 0.5) for (const [race, fromX, toX, c] of [[raceA, ax, dx, '#fff6d6'], [raceD, dx, ax, '#fff6d6']]) if (race === 'elf') for (let q = 0; q < 3; q++) { const pr = ((local + 0.1) / 0.6 + q * 0.18) % 1, xx = lerp(fromX, toX, pr), yy = gy - 10 * s - Math.sin(pr * Math.PI) * 10 * s; g.fillStyle = c; g.fillRect(xx, yy, 5 * s * Math.sign(toX - fromX), s); g.fillStyle = '#c9ced8'; g.fillRect(xx + 5 * s * Math.sign(toX - fromX), yy - s * 0.5, s, s * 2); }
-      if (t >= clash && t < clash + 0.05 && !r['_c' + i]) { r['_c' + i] = 1; BT.shake = Math.max(BT.shake, 0.6); SND.play('hit'); }
-      if (fighting) {
-        const p = (t - clash) / (res - clash);
-        for (let q = 0; q < 10; q++) { const a = hash(i, q, 3) * Math.PI * 2, rr = p * (8 + hash(q, i, 4) * 18) * s; g.fillStyle = q % 2 ? '#ffd34d' : '#ffffff'; g.fillRect(mid + Math.cos(a) * rr, gy - 8 * s + Math.sin(a) * rr * 0.6, s, s); }
-        if (raceA === 'human' || raceD === 'human') { g.strokeStyle = `rgba(255,255,255,${1 - p})`; g.lineWidth = s; g.beginPath(); g.arc(mid, gy - 8 * s, (6 + p * 10) * s, -1.2 + p, 0.3 + p); g.stroke(); }
-        if (raceA === 'dwarf' || raceD === 'dwarf') { g.strokeStyle = `rgba(255,211,77,${1 - p})`; g.lineWidth = s; g.beginPath(); g.ellipse(mid, gy, (4 + p * 22) * s, (1 + p * 5) * s, 0, 0, Math.PI * 2); g.stroke(); }
+  function drawBattle(r, t, dt) {
+    const F = r.fronts.length, END = btEnd(r), wrap = $('btRows'), cv = $('btFx');
+    const W2 = wrap.clientWidth, H2 = wrap.clientHeight;
+    if (cv.width !== W2 || cv.height !== H2) { cv.width = W2; cv.height = H2; BT.frame = null; }
+    const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, W2, H2);
+    const box = wrap.getBoundingClientRect();
+    let sa = 0, sd = 0;
+    for (let k = 0; k < F; k++) {
+      const row = wrap.children[k]; if (!row) continue;
+      const rb = row.getBoundingClientRect(), x0 = rb.left - box.left, y0 = rb.top - box.top, rw = rb.width, rh = rb.height;
+      const at = btAt(F, k), res = at + 0.42, win = r.fronts[k], cx = x0 + rw / 2, gy = y0 + rh * 0.86;
+      const sc = Math.max(2, Math.min(4, Math.floor(rh / 22))), sp = Math.min(7 * sc, rw * 0.025); // 병사 간격 (줄이 좁으면 촘촘히)
+      // 병사 수: 병력이 클수록 많이 (1~4명)
+      const maxT = Math.max(1, r.a[k], r.d[k]);
+      const mx = F > 8 ? 3 : 4, nA = Math.max(1, Math.min(mx, Math.round(r.a[k] / maxT * mx))), nD = Math.max(1, Math.min(mx, Math.round(r.d[k] / maxT * mx)));
+      const charge = t < at ? 0 : Math.min(1, (t - at) / 0.3), back = t >= res ? Math.min(1, (t - res) / 0.3) : 0;
+      const lab = Math.min(rw * 0.09, 44) + 12, baseA = x0 + lab + 9 * sc, baseD = x0 + rw - 9 * sc, reach = rw * 0.05; // 병사는 바깥쪽(안쪽으로 줄 섬), 숫자는 가운데(VS) 옆
+      const ax = baseA + charge * reach - (t >= res && win !== 'att' ? back * reach * 0.6 : 0), dx = baseD - charge * reach + (t >= res && win === 'att' ? back * reach * 0.6 : 0);
+      const fighting = t >= at + 0.2 && t < res, walk = Math.floor(t * 8) % 4;
+      for (let u = 0; u < nA; u++) drawUnit(g, RACE_INFO[raceOf(r.att)].ch, 3, fighting ? 4 : charge > 0 && charge < 1 ? walk : 0, ax + u * sp, gy - (u % 2) * 3 * sc, sc, t >= res && win !== 'att' ? 0.3 : 1);
+      for (let u = 0; u < nD; u++) drawUnit(g, RACE_INFO[raceOf(r.def)].ch, 2, fighting ? 4 : charge > 0 && charge < 1 ? walk : 0, dx - u * sp, gy - (u % 2) * 3 * sc, sc, t >= res && win === 'att' ? 0.3 : 1);
+      // 이펙트: 싸움 시작 (종족별) → 결과 (이긴 쪽에 크리티컬)
+      if (t >= at + 0.15 && !BT.fired['a' + k]) {
+        BT.fired['a' + k] = 1;
+        const race = raceOf(r.att);
+        const fa = ax + (nA - 1) * sp, fd = dx - (nD - 1) * sp; // 맨 앞 병사
+        if (race === 'elf') addFx('arrow', fa + 4 * sc, gy - 9 * sc); else addFx(race === 'dwarf' ? 'cleave' : 'slash', fa + 6 * sc, gy);
+        const rd2 = raceOf(r.def); if (rd2 === 'elf') addFx('arrow', fd - 4 * sc, gy - 9 * sc, { flip: true }); else addFx(rd2 === 'dwarf' ? 'cleave' : 'slash', fd - 6 * sc, gy, { flip: true });
+        SND.play('hit');
       }
-      // 결과 도장
-      if (t >= res) {
-        const p = ease((t - res) / 0.25), c = win === 'att' ? cA : cD, label = win === 'att' ? '공격 승' : '방어 승';
-        g.save(); g.translate(mid, gy - 16 * s); g.scale(lerp(2.2, 1, p), lerp(2.2, 1, p)); g.rotate(-0.08); g.globalAlpha = p;
-        g.font = `400 ${Math.max(14, fs * 0.8)}px ${PFONT}`; const tw = g.measureText(label).width + 18, th = Math.max(14, fs * 0.8) + 10;
-        g.fillStyle = '#1b1430'; g.fillRect(-tw / 2 - 3, -th / 2 - 3, tw + 6, th + 6); g.fillStyle = c; g.fillRect(-tw / 2, -th / 2, tw, th);
-        g.fillStyle = '#fff'; g.fillText(label, 0, 1); g.restore(); g.globalAlpha = 1;
+      if (t >= res && !BT.fired['r' + k]) {
+        BT.fired['r' + k] = 1;
+        addFx('spark', cx, gy - 8 * sc); addFx('poof', win === 'att' ? dx - (nD - 1) * sp / 2 : ax + (nA - 1) * sp / 2, gy);
+        row.classList.add(win === 'att' ? 'win-a' : 'win-d'); row.querySelector('.vs').textContent = win === 'att' ? '공격 승' : '방어 승';
+        const pip = document.querySelector(`[data-pip="${k}"]`); if (pip) pip.className = win;
+        SND.play(win === 'att' ? 'coin' : 'place');
       }
+      if (t >= at - 0.05 && t < res) row.classList.add('live'); else row.classList.remove('live');
+      if (t >= res) { if (win === 'att') sa++; else sd++; }
     }
-    // 시작 글자
-    if (t < 0.9) { g.globalAlpha = 1 - ease((t - 0.55) / 0.35); const big = Math.min(W2 / 8, 72); g.font = `400 ${big}px ${PFONT}`; g.lineWidth = 10; g.strokeStyle = '#c22f53'; g.strokeText('⚔ 전투 시작 ⚔', W2 / 2, H2 / 2); g.fillStyle = '#fff'; g.fillText('⚔ 전투 시작 ⚔', W2 / 2, H2 / 2); g.globalAlpha = 1; }
-    // 끝: 큰 결과
-    const END = btEnd(r);
-    if (t >= END) {
-      if (!r._done) { r._done = 1; SND.play(r.winner === 'att' ? 'war' : 'ok'); $('btSum').hidden = false; }
-      const p = ease((t - END) / 0.4);
-      g.globalAlpha = p * 0.6; g.fillStyle = '#1b1430'; g.fillRect(-10, -10, W2 + 20, H2 + 20); g.globalAlpha = p;
-      const big = Math.min(W2 / 7, 96), c = r.winner === 'att' ? cA : cD;
-      g.font = `400 ${big}px ${PFONT}`; g.lineWidth = 12; g.strokeStyle = '#1b1430'; const txt = r.winner === 'att' ? '공격 승리!' : '방어 승리!';
-      g.strokeText(txt, W2 / 2, H2 / 2 - big * 0.2); g.fillStyle = c; g.fillText(txt, W2 / 2, H2 / 2 - big * 0.2);
-      g.font = `400 ${big * 0.38}px ${PFONT}`; g.lineWidth = 6; const sub = r.winner === 'att' ? `${r.attName} · 영역 ${(r.lost || []).length || 1}곳 점령` : `${r.defName} · 영역을 지켜 냄`;
-      g.strokeText(sub, W2 / 2, H2 / 2 + big * 0.55); g.fillStyle = '#fff6d6'; g.fillText(sub, W2 / 2, H2 / 2 + big * 0.55);
-      g.globalAlpha = 1;
+    if ($('scA')) { $('scA').textContent = sa; $('scD').textContent = sd; }
+    // pixelfx 그리기: 낮은 해상도 프레임에 그려서 2배로 키움
+    if (PFX && BT.fx.length) {
+      const fw = Math.ceil(W2 / FXS), fh = Math.ceil(H2 / FXS);
+      if (!BT.frame || BT.frame.w !== fw || BT.frame.h !== fh) { BT.frame = PFX.core.createFrame(fw, fh); BT.img = new ImageData(fw, fh); BT.off = document.createElement('canvas'); BT.off.width = fw; BT.off.height = fh; }
+      PFX.core.clearFrame(BT.frame);
+      for (const fx of BT.fx) { fx.update(dt); fx.draw(BT.frame); }
+      BT.fx = BT.fx.filter((fx) => !fx.done());
+      PFX.core.composite(BT.frame, BT.img.data, null);
+      BT.off.getContext('2d').putImageData(BT.img, 0, 0);
+      g.drawImage(BT.off, 0, 0, fw * FXS, fh * FXS);
     }
-    g.restore();
+    // 끝: 결과 카드
+    if (t >= END && $('btSum').hidden) {
+      $('btSum').hidden = false; SND.play(r.winner === 'att' ? 'war' : 'ok');
+      // 남은 줄을 모두 결과로 (건너뛰기)
+      for (let k = 0; k < F; k++) if (!BT.fired['r' + k]) { BT.fired['r' + k] = 1; const row = wrap.children[k], w = r.fronts[k]; if (row) { row.classList.add(w === 'att' ? 'win-a' : 'win-d'); row.querySelector('.vs').textContent = w === 'att' ? '공격 승' : '방어 승'; } const pip = document.querySelector(`[data-pip="${k}"]`); if (pip) pip.className = w; }
+      addFx('confetti', W2 / 2, H2 * 0.55);
+    }
   }
   // ---- 영역전 시작 배너 (모두에게) + 중계 목록
   let WAR = null;

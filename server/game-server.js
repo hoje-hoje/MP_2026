@@ -66,7 +66,7 @@ const server = http.createServer((req, res) => {
   let file = STATIC[url.pathname];
   if (!file && url.pathname.startsWith('/assets/')) {
     const f = path.normalize(path.join(ASSET_DIR, decodeURIComponent(url.pathname.slice(8))));
-    if (f.startsWith(ASSET_DIR + path.sep) && /\.(png|json|woff2)$/.test(f) && fs.existsSync(f)) file = f;
+    if (f.startsWith(ASSET_DIR + path.sep) && (/\.(png|json|woff2)$/.test(f) || (/\.js$/.test(f) && f.includes(path.sep + "pixelfx" + path.sep))) && fs.existsSync(f)) file = f;
   }
   if (!file) { res.writeHead(404); return res.end('not found'); }
   try {
