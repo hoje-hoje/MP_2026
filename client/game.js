@@ -393,7 +393,7 @@
     return (altarCache[type] = cv);
   }
   const CH_K = 3; // 16px → 48px
-  function drawSprite(g, x, y, look, t, moving, face) {
+  function drawSprite(g, x, y, look, t, moving, face, atk) {
     if (look.red) { g.fillStyle = look.red >= 2 ? 'rgba(230,20,50,0.85)' : 'rgba(235,50,70,0.6)'; ell(g, x, y, 24, 9); g.fillStyle = 'rgba(120,0,20,0.5)'; ell(g, x, y, 15, 5); } // 체포당한 사람은 그림자가 빨갛게 (2번이면 더 진하게)
     else { g.fillStyle = 'rgba(0,0,0,0.22)'; ell(g, x, y, 15, 5); }
     if (look.me) { g.strokeStyle = '#ffd23f'; g.lineWidth = 2; g.setLineDash([5, 4]); g.beginPath(); g.ellipse(x, y, 20, 7, 0, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); }
@@ -412,7 +412,7 @@
       g.restore();
     } else {
       const sheet = charSheet(c - USER.chars.length, look.hue | 0, look.sk | 0);
-      const row = moving ? (Math.floor(t * 8 + (look.seed || 0)) % 4) : 0;
+      const row = atk ? 4 : moving ? (Math.floor(t * 8 + (look.seed || 0)) % 4) : 0; // 4번 줄 = 공격 동작
       g.drawImage(sheet, (face | 0) * 16, row * 16, 16, 16, Math.round(x - 8 * CH_K), Math.round(y - 16 * CH_K + 2), 16 * CH_K, 16 * CH_K);
       if (look.hat) drawHat(g, x, y - 16 * CH_K + 2 + CH_K * 3, look.hat, CH_K, face === 2); // 머리 장식
     }
@@ -1138,8 +1138,9 @@
     dagger: { pv: [2, 6], px: ['..W..', '.WL..', '.WLD.', '.WLD.', 'gGGGg', '..b..', '..b..', '..G..'] },
     bow: { pv: [3, 6], noRot: true, px: ['sB...', 's.B..', 's..B.', 's...B', 's...B', 's..bB', 's..bB', 's...B', 's...B', 's..B.', 's.B..', 'sB...'] },
     staff: { pv: [2, 12], px: ['.ooo.', 'oYOOo', 'oOOOo', '.oOo.', '..G..', '..B..', '..b..', '..B..', '..b..', '..B..', '..b..', '..B..', '..b..', '..B..', '..g..'] },
+    fist: { pv: [3, 3], noRot: true, px: ['.KKKK.', 'KssssK', 'KsWssK', 'KssssK', 'KssssK', '.KKKK.'] },
   };
-  for (const k in TOOL) TOOL[k].cv = pxRows(TOOL[k].px, TPAL);
+  for (const k in TOOL) TOOL[k].cv = pxRows(TOOL[k].px, k === 'fist' ? Object.assign({}, TPAL, { s: '#ffd2ae', W: '#fff4e8' }) : TPAL);
   const ACT_TOOL = { chop: 'axe', hit: 'axe', mine: 'pick', dig: 'pick', fish: 'rod', farm: 'shovel' };
   function drawToolOn(g, o, act, t) { // o = 캐릭터 (x, y는 발), 캐릭터 48px(3배) 기준 손 위치
     const k = TOOL[ACT_TOOL[act]]; if (!k) return;
@@ -1206,8 +1207,8 @@
   }
 
   // ------------------------------------------------------------ 실시간 전투 (땅 어디서나): J 누르면 공격, 꾹 눌렀다 떼면 차징
-  const WPN_SPR = { sword: 'sword', dagger: 'dagger', axe: 'axe', spear: 'spear', bow: 'bow', magic: 'staff' };
-  const WPN_FX = { sword: ['sword-slash', 'spin-slash'], axe: ['heavy-cleave', 'hammer-smash'], spear: ['thrust', 'thrust'], dagger: ['dagger-flurry', 'double-slash'], fist: ['hit-spark', 'blunt-hit'] };
+  const WPN_SPR = { sword: 'sword', dagger: 'dagger', axe: 'axe', spear: 'spear', bow: 'bow', magic: 'staff', fist: 'fist' };
+  const WPN_FX = { sword: ['sword-slash', 'spin-slash'], axe: ['heavy-cleave', 'hammer-smash'], spear: ['thrust', 'thrust'], dagger: ['dagger-flurry', 'double-slash'], fist: ['blunt-hit', 'cartoon-pow'] };
   let MY_WEAPONS = {}, MY_WEAPON = null;
   const myWeapon = () => (MY_WEAPON && MY_WEAPONS[MY_WEAPON] ? MY_WEAPON : 'fist'); // 무기는 상점에서 직접 사야 함
   const remWeapon = (r) => r.weapon || 'fist';
@@ -1218,7 +1219,7 @@
   let PFXW = null, pfxwLoading = null;
   function loadPfxW() {
     if (PFXW || pfxwLoading) return pfxwLoading;
-    const names = ['melee/sword-slash', 'melee/spin-slash', 'melee/heavy-cleave', 'melee/hammer-smash', 'melee/thrust', 'melee/dagger-flurry', 'melee/double-slash', 'projectiles/arrow', 'fire/fireball', 'impacts/hit-spark', 'impacts/crit-hit', 'impacts/blunt-hit', 'ui/damage-number', 'ui/crit-number', 'spawn/shatter-death', 'spawn/respawn-beam', 'explosions/small-explosion', 'arcane/spell-charge', 'spawn/poof'];
+    const names = ['melee/sword-slash', 'melee/spin-slash', 'melee/heavy-cleave', 'melee/hammer-smash', 'melee/thrust', 'melee/dagger-flurry', 'melee/double-slash', 'projectiles/arrow', 'fire/fireball', 'impacts/hit-spark', 'impacts/crit-hit', 'impacts/blunt-hit', 'ui/damage-number', 'ui/crit-number', 'spawn/shatter-death', 'spawn/respawn-beam', 'explosions/small-explosion', 'explosions/cartoon-pow', 'arcane/spell-charge', 'spawn/poof'];
     pfxwLoading = Promise.all([import('./assets/pixelfx/core/index.js'), ...names.map((n) => import('./assets/pixelfx/fx/' + n + '.js'))])
       .then(([core, ...mods]) => { const fx = {}; names.forEach((n, i) => { fx[n.split('/')[1]] = mods[i]; }); PFXW = { core, fx, frame: null, img: null, off: null }; }).catch(() => { PFXW = null; });
     return pfxwLoading;
@@ -1244,6 +1245,15 @@
   }
   const amDead = () => performance.now() < PV.deadUntil;
   function canAttack() { return ONLINE && netOn && player.scene === 'ground' && !amDead() && !(jailUntil > Date.now()) && !build.on && $('talk').hidden && !FISHING.on && !document.querySelector('.modalbox:not([hidden]), #closet:not([hidden])'); }
+  let LAST_WEAPON = null;
+  function swapWeapon() { // 주먹 ↔ 무기 (여러 개면 차례로)
+    if (!ONLINE || !netOn) return; const owned = Object.keys(MY_WEAPONS || {}); if (!owned.length) { toast(`가진 무기가 없어요 · ${MPRules.NUM.weaponDay}일차부터 하늘 상점가 무기 상점에서 사요`); return; }
+    const cur = myWeapon(); let next;
+    if (cur === 'fist') next = LAST_WEAPON && MY_WEAPONS[LAST_WEAPON] ? LAST_WEAPON : owned[0];
+    else { LAST_WEAPON = cur; const i = owned.indexOf(cur); next = i >= 0 && i < owned.length - 1 && owned.length > 1 ? owned[i + 1] : ''; }
+    ws.send(JSON.stringify({ t: 'equipWeapon', w: next })); SND.play('place');
+  }
+  function swapIcon() { const cv = $('swapCv'); if (!cv) return; const g = cv.getContext('2d'), w = myWeapon(), S2 = TOOL[WPN_SPR[w]]; g.clearRect(0, 0, cv.width, cv.height); g.imageSmoothingEnabled = false; if (!S2) return; const k = w === 'fist' ? 5 : Math.max(1, Math.min(30 / S2.cv.width, 30 / S2.cv.height) | 0); g.save(); g.translate(cv.width / 2, cv.height / 2); g.rotate(S2.noRot ? 0 : 0.6); g.drawImage(S2.cv, -S2.cv.width * k / 2, -S2.cv.height * k / 2, S2.cv.width * k, S2.cv.height * k); g.restore(); }
   function atkDown() { if (ATK.down || !canAttack()) return; loadPfxW(); ATK.down = true; ATK.t0 = performance.now(); }
   function atkUp() {
     if (!ATK.down) return; ATK.down = false; if (ATK.chFx) { ATK.chFx.f.stop(); ATK.chFx.stopped = true; ATK.chFx = null; }
@@ -1254,9 +1264,16 @@
   const atkCharge = () => ATK.down ? Math.min(1, (performance.now() - ATK.t0) / 550) : -1;
   // 무기 그리기 (공격 순간 휘두름 · 차징 중엔 뒤로 젖힘)
   function drawWeaponOn(g, o, w, t) {
-    const S = TOOL[WPN_SPR[w]]; if (!S) return;
+    const S = TOOL[WPN_SPR[w]]; if (!S || player.scene !== 'ground') return;
     const face = o.face | 0, side = face === 2 ? -1 : 1, up = face === 1, down = face === 0;
     const swing = o.swing ? (performance.now() - o.swing) / 1000 : 9, chg = o === player ? atkCharge() : -1;
+    if (w === 'fist') { // 맨주먹: 평소엔 안 보이고, 칠 때 주먹이 앞으로 쭉 (차징이면 더 크게)
+      if (swing >= 0.25 && chg < 0) return; const D = FACE_D[face] || [0, 1], k = chg >= 0 ? -0.3 * chg : Math.sin(Math.min(1, swing / 0.25) * Math.PI), big = o.swingLv && swing < 0.25 ? 4 : 3;
+      const fx = o.x + D[0] * (14 + k * 18) + (D[1] ? 10 : 0), fy = o.y - 22 + D[1] * (6 + k * 14);
+      const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(S.cv, Math.round(fx - 3 * big), Math.round(fy - 3 * big), 6 * big, 6 * big); g.imageSmoothingEnabled = pv;
+      if (k > 0.5) { g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 2; for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(fx - D[0] * 10 + D[1] * i * 5, fy - D[1] * 10 + D[0] * i * 5); g.lineTo(fx - D[0] * 22 + D[1] * i * 5, fy - D[1] * 22 + D[0] * i * 5); g.stroke(); } } // 속도선
+      return;
+    }
     let hx = o.x + (up ? -15 : down ? 17 : 17 * side), hy = o.y - (down || up ? 8 : 10), ang = 0.35, push = 0;
     if (w === 'bow') { ang = 0; hx = o.x + (up ? -14 : down ? 16 : 13 * side); }
     if (chg >= 0) { ang = w === 'spear' ? 1.57 : w === 'bow' ? 0 : -0.9; push = w === 'bow' ? -chg * 5 : 0; }
@@ -1265,7 +1282,7 @@
       else if (w === 'bow' || w === 'magic') { push = Math.sin(Math.min(1, swing / 0.2) * Math.PI) * (w === 'bow' ? -3 : 4); ang = w === 'magic' ? 0.35 + Math.sin(Math.min(1, swing / 0.25) * Math.PI) * 0.9 : 0; }
       else if (o.swingLv && w === 'sword') ang = swing * 26;
       else { const k = Math.min(1, swing / 0.18), [s0, s1] = w === 'axe' ? [-2, 2.4] : w === 'dagger' ? [-1, 1.8] : [-1.4, 2.2]; ang = s0 + (s1 - s0) * (1 - Math.pow(1 - k, 3)); }
-    } else if (chg < 0) return; // 평소엔 무기를 안 들고 다님 (도구랑 겹치지 않게)
+    } // 평소엔 손에 들고 다님 (관리자 전투 실험실처럼)
     g.save(); g.translate(Math.round(hx), Math.round(hy)); if (side < 0) g.scale(-1, 1); g.rotate(S.noRot ? 0 : ang); g.translate(w === 'spear' || S.noRot ? push : 0, 0);
     if (chg >= 0.99) { g.shadowColor = '#fff2a8'; g.shadowBlur = 8; }
     g.scale(3, 3); const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(S.cv, -S.pv[0], -S.pv[1]); g.imageSmoothingEnabled = p; g.restore();
@@ -1281,6 +1298,7 @@
     const tgt = (h) => (h.id === myId ? player : remotes.get(h.id));
     const showHit = (h, delay) => setTimeout(() => {
       const o = tgt(h); if (!o) return; o.hpShow = performance.now(); o.hp = h.hp;
+      { const dx = o.x - ax, dy = o.y - ay, L = Math.hypot(dx, dy) || 1; o.hitAt = performance.now(); o.hitDx = dx / L; o.hitDy = dy / L; if (m.a === myId) shakeT = Math.max(shakeT || 0, m.lv ? 0.16 : 0.08); }
       if (h.id === myId) { PV.hp = h.hp; PV.flash = performance.now(); shakeT = Math.max(shakeT || 0, h.crit ? 0.3 : 0.18); }
       wfx(h.crit ? 'crit-hit' : m.w === 'axe' || m.w === 'fist' ? 'blunt-hit' : 'hit-spark', o.x, o.y - 24, { flip: o.x < ax });
       wfx(h.crit ? 'crit-number' : 'damage-number', o.x, o.y - 66, { text: h.crit ? h.dmg + '!' : '-' + h.dmg, seed: (Math.random() * 99) | 0 });
@@ -1289,7 +1307,7 @@
     }, delay);
     if (!W2.proj) {
       const fxn = (WPN_FX[m.w] || WPN_FX.fist)[m.lv ? 1 : 0];
-      if (m.w === 'fist') wfx(fxn, ax + D[0] * 26, cy + D[1] * 20, { flip });
+      if (m.w === 'fist') { if (m.lv) wfx('cartoon-pow', ax + D[0] * 34, cy + D[1] * 26, {}); else wfx('hit-spark', ax + D[0] * 30, cy + D[1] * 22, { flip, angle: ang }); } // 주먹: 퍽 / 차징이면 POW!
       else wfx(fxn, ax + D[0] * 3, ay - (D[1] ? 20 : 0), { flip, angle: ang });
       SND.play('chop'); (m.hits || []).forEach((h) => showHit(h, 110));
     } else {
@@ -2149,6 +2167,7 @@
     if (k === 'e' && !e.repeat && !document.querySelector('.modalbox:not([hidden]), #closet:not([hidden])')) pressE(); // 창이 열려 있으면 E 무시 (상점 연 뒤 대화창이 또 뜨던 버그)
     if (MQ.on && k >= '1' && k <= '4') { if (!e.repeat) answerQuiz(+k - 1); return; }
     if (k === 'j' && !e.repeat) atkDown();
+    if (k === 'q' && !e.repeat && player.scene === 'ground' && !document.querySelector('.modalbox:not([hidden])')) swapWeapon();
     if (k === 'g' && ONLINE) setBuild(!build.on);
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
@@ -2158,6 +2177,7 @@
   addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); if (k === 'j') atkUp(); });
   $('atkBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); atkDown(); });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('atkBtn').addEventListener(ev, atkUp);
+  $('swapBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); swapWeapon(); });
   // 패드·폰: 화면 아래 안내를 누르면 E (꾹 누르기도 됨)
   $('prompt').addEventListener('pointerdown', (e) => { e.preventDefault(); pressE(); });
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) $('prompt').addEventListener(ev, releaseE);
@@ -2768,7 +2788,7 @@
         myId = m.id; netOn = true; store('mp2026.token', m.token);
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
-        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {}; MY_JOB = m.job || null; PV.hp = m.hp ?? HPMAX; player.hp = PV.hp; MY_FRAGS = new Set(m.myFrags || []); MY_SIDE = m.side || null; FRAGS = m.frags || []; LOOTS.clear(); for (const L of m.loot || []) LOOTS.set(L.id, L); MY_PCOIN = m.pcoin | 0; MY_HATS = m.hats || {}; MY_BAG = m.bag || {}; if (player.look.hat && !MY_HATS[player.look.hat]) player.look.hat = ''; renderInv();
+        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {}; MY_JOB = m.job || null; PV.hp = m.hp ?? HPMAX; player.hp = PV.hp; loadPfxW(); // 전투 이펙트 미리 불러 둠 (첫 공격부터 보이게) MY_FRAGS = new Set(m.myFrags || []); MY_SIDE = m.side || null; FRAGS = m.frags || []; LOOTS.clear(); for (const L of m.loot || []) LOOTS.set(L.id, L); MY_PCOIN = m.pcoin | 0; MY_HATS = m.hats || {}; MY_BAG = m.bag || {}; if (player.look.hat && !MY_HATS[player.look.hat]) player.look.hat = ''; renderInv();
         if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
         if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); GPROPS.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls, clear: m.groundEdits.clear, props: m.groundEdits.props }); invalidateChunks(); mapSig = ''; }
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; for (const i of m.dug || []) GCLEAR.add(i); MY_WEAPONS = m.weapons || {}; MY_WEAPON = m.weapon || null; if ((m.dug || []).length) invalidateChunks(); if (m.stun) stunUntil = performance.now() + m.stun;
@@ -2834,7 +2854,7 @@
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break;
       case 'dug': GCLEAR.add(m.i); invalidateChunks(); mapSig = ''; SND.play('chop'); break;
-      case 'weapons': MY_WEAPONS = m.weapons || {}; MY_WEAPON = m.weapon || null; if (m.pcoin != null) { MY_PCOIN = m.pcoin; renderInv(); } if (m.text) toast(m.text); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
+      case 'weapons': MY_WEAPONS = m.weapons || {}; MY_WEAPON = m.weapon || null; swapIcon.w = null; if (m.pcoin != null) { MY_PCOIN = m.pcoin; renderInv(); } if (m.text) toast(m.text); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
       case 'clock': setClock(m); if (m.frags) setFrags(m.frags); break;
       case 'roomEdit': if (m.diff) applyRoomDiff(m.id, m.diff); else applyRoomEdit(m.id, m.edit); break;
@@ -3722,7 +3742,7 @@
     // 플레이어 이동
     stepPlayer(dt); tickHold(); tickFishing();
     tickBoard(); tickQuiz(); tickWelcome(); tickWar3();
-    { const show = ONLINE && player.scene === 'ground' && matchMedia('(pointer: coarse)').matches && !TITLE.on; if ($('atkBtn').hidden === show) $('atkBtn').hidden = !show; }
+    { const show = ONLINE && player.scene === 'ground' && (matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0) && !TITLE.on; if ($('atkBtn').hidden === show) { $('atkBtn').hidden = !show; $('swapBtn').hidden = !show; } if (show && swapIcon.w !== myWeapon()) { swapIcon.w = myWeapon(); swapIcon(); } } // 패드·폰: 동그라미 공격·무기 교체 버튼
     { const a = curAct(); if (a !== lastAct) { lastAct = a; if (netOn) ws.send(JSON.stringify({ t: 'act', a, fx: FISHING.x | 0, fy: FISHING.y | 0 })); } } // 도구를 주변에 알림
     if (player.scene === 'sky' && !(player.room.id === 'jail' && jailUntil > Date.now()) && !EDIT.on) {
       // 하늘 체류 시간 제한 없음 (나갔다 들어오면 어차피 초기화돼서 없앰)
@@ -3797,11 +3817,14 @@
       else {
         const down = (o.downUntil || 0) > performance.now(), inv = (o.invUntil || 0) > performance.now();
         if (down) ctx.globalAlpha = 0.35; else if (inv && Math.floor(performance.now() / 90) % 2) ctx.globalAlpha = 0.5;
-        const wpn = o === player ? myWeapon() : remWeapon(o);
-        if ((o.face | 0) === 1 && !down) drawWeaponOn(ctx, o, wpn, t);
-        drawSprite(ctx, o.x, o.y, o.look, t, o.moving, o.face); const act = o === player ? curAct() : o.act; if (act && !down) drawToolOn(ctx, o, act, t); // 작업 중이면 손에 도구
-        if ((o.face | 0) !== 1 && !down) drawWeaponOn(ctx, o, wpn, t);
-        ctx.globalAlpha = 1;
+        const wpn = o === player ? myWeapon() : remWeapon(o), act = o === player ? curAct() : o.act, nowT = performance.now();
+        const hk = o.hitAt ? Math.max(0, 1 - (nowT - o.hitAt) / 200) : 0, ox = o.x, oy = o.y; if (hk > 0) { o.x += o.hitDx * 9 * hk; o.y += o.hitDy * 6 * hk; } // 맞으면 뒤로 밀림
+        const atkPose = o.swing && nowT - o.swing < 260;
+        if ((o.face | 0) === 1 && !down && !act) drawWeaponOn(ctx, o, wpn, t);
+        if (hk > 0.55) ctx.filter = 'brightness(3.2)'; // 맞은 순간 하얗게 번쩍
+        drawSprite(ctx, o.x, o.y, o.look, t, o.moving && !atkPose, o.face, atkPose); ctx.filter = 'none'; if (act && !down) drawToolOn(ctx, o, act, t); // 작업 중이면 손에 도구
+        if ((o.face | 0) !== 1 && !down && !act) drawWeaponOn(ctx, o, wpn, t);
+        o.x = ox; o.y = oy; ctx.globalAlpha = 1;
       }
     }
     for (const o of list) {
@@ -3928,7 +3951,7 @@
     list.push(player);
     drawLoots(ctx, t);
     drawActors(list, t);
-    { const c = atkCharge(); if (c >= 0) { ctx.strokeStyle = c >= 1 ? '#fff2a8' : 'rgba(159,211,255,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(player.x, player.y - 24, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c); ctx.stroke(); if (c >= 1) { ctx.font = `700 12px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff2a8'; ctx.fillText('차징!', player.x, player.y - 100); } } }
+    { const c = atkCharge(); if (c >= 0.25 && !ATK.chFx && PFXW) ATK.chFx = wfx('spell-charge', player.x, player.y, {}, { follow: player }); if (c >= 0) { ctx.strokeStyle = c >= 1 ? '#fff2a8' : 'rgba(159,211,255,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(player.x, player.y - 24, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c); ctx.stroke(); if (c >= 1) { ctx.font = `700 12px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff2a8'; ctx.fillText('차징!', player.x, player.y - 100); } } }
     drawWfx(Math.min(0.05, lastDt || 0.016), groundCam.x, groundCam.y);
     if (hold.on) { // 꾹 누르기 게이지
       const k = Math.min(1, (performance.now() - hold.t0) / hold.ms);
