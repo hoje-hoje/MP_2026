@@ -857,6 +857,7 @@
     build: { name: '건축 천사 아라엘', ch: 'Woman', color: '#3d5fb8', shop: 'build', lines: ['어서 와요! 천상·숲·겨울·돌 테마로 바닥·벽·기둥·장식이 있어요.', '테마는 모양만 달라요. 효과는 종류마다 똑같아요!', '산 물건은 나라 저장소로 바로 가요. 설치 모드(G)로 우리 땅에 놓아요.', '벽과 기둥은 내구도가 100이에요. 적이 때리면 조금씩 닳아요.'] },
     vaccine: { name: '치유 천사 세라', ch: 'Princess', color: '#d64f86', shop: 'vaccine', lines: ['균열이 무서운가요? 백신 하나면 영토 하나를 지킬 수 있어요.', '곡괭이·낚싯대·삽 같은 작업 도구도 여기서 팔아요. 한 번 사면 계속 써요!', '백신은 많이 살수록 비싸져요. 꼭 필요한 만큼만!'] },
     seed: { name: '정원 천사 플로라', ch: 'Villager2', color: '#3fa37a', shop: 'seed', lines: ['어서 와요! 밭·수로·씨앗·비료가 있어요.', '우리 땅에 밭을 갈고(설치 모드 농사 탭) 그 위에 서서 씨앗을 심어요.', '수로 2칸 안은 20% 빨리 자라고, 비료를 주면 남은 시간이 절반!', '다 자라면 E로 수확해서 저한테 팔아요.', '낚시로 잡은 물고기도 사요! 비 오는 날엔 귀한 물고기가 잘 잡힌대요.'] },
+    stylist: { name: '꾸미기 천사 루나', ch: 'Noble', color: '#b07ae6', shop: 'hat', lines: ['어머, 모자 하나 써 볼래요? 머리 장식은 내 코인(개인 지갑)으로 사요.', '내 코인은 금광·판매·제단 정답·체포·매일 첫 접속으로 모여요.', '산 모자는 꾸미기 창에서 언제든 바꿔 쓸 수 있어요!'] },
     war: { name: '전쟁의 천사 미카', ch: 'KnightGold', color: '#c22f53', rules: true, lines: ['나는 전쟁의 규칙을 지키는 천사.', '3일차부터 영역전이 열린다. 그때 규칙서를 보여 주지.'] },
     clerk: { name: '등록 천사 노엘', ch: 'Villager', color: '#277a58', desk: true, lines: ['나라가 없나요? 여기서 귀화·용병·건국을 등록해요.'] },
     rest: { name: '쉼터지기 하루', ch: 'Monk2', color: '#4bb3c4', lines: ['조용히 쉬어 가요.', '여긴 나중에 쓰일지도 몰라요. 지금은 쉼터예요.'] },
@@ -918,14 +919,14 @@
   let SHOP_KIND = 'build', SHOP_TAB = 'all', SHOP_NPC = 'build'; // 상점마다 자기 물건만 (건축 상점 안의 탭은 종류: 전체·바닥·방벽·덫, 나중에 테마)
   function openShop(tab = 'build', npcId) {
     const me = myView && myView.me;
-    if (!me) { toast('나라가 있어야 살 수 있어요 (나라 공용 저장소에서 내요)'); return; }
+    if (!me && tab !== 'hat') { toast('나라가 있어야 살 수 있어요 (나라 공용 저장소에서 내요)'); return; }
     SHOP_KIND = tab; SHOP_TAB = 'all'; SHOP_NPC = npcId || tab;
     const npc = NPCS[SHOP_NPC]; $('shopWho').textContent = npc.name; facePortrait($('shopFace'), npc);
     $('shopSay').textContent = npc.lines[0];
     renderShop(); $('shopBox').hidden = false;
   }
   function renderShop() {
-    const me = myView && myView.me; if (!me) return;
+    const me = (myView && myView.me) || (SHOP_KIND === 'hat' ? { coin: 0, items: {} } : null); if (!me) return;
     const P = MPRules.NUM.price;
     const tabs = SHOP_KIND === 'build' ? [['heaven', '☁ 천상'], ['forest', '🌲 숲'], ['winter', '❄ 겨울'], ['stone', '🪨 돌'], ['trap', '🪤 덫']] : SHOP_KIND === 'seed' ? [['buy', '🌱 씨앗·밭'], ['sell', '🧺 작물·물고기 팔기']] : SHOP_KIND === 'vaccine' ? [['vaccine', '💉 백신'], ['tools', '🛠 작업 도구']] : [];
     if (SHOP_KIND === 'vaccine' && SHOP_TAB !== 'tools') SHOP_TAB = 'vaccine';
@@ -934,7 +935,7 @@
     $('shopTabs').hidden = !tabs.length;
     $('shopTabs').innerHTML = tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === SHOP_TAB}">${l}</button>`).join('');
     for (const b of $('shopTabs').querySelectorAll('[data-tab]')) b.onclick = () => { SHOP_TAB = b.dataset.tab; renderShop(); };
-    $('shopCoin').innerHTML = `<span class="coinIco"></span> 우리 저장소 <b>${me.coin.toLocaleString()}</b> 코인 <small>· 산 물건은 나라 저장소로 가요</small>`;
+    $('shopCoin').innerHTML = SHOP_KIND === 'hat' ? `👛 내 코인 <b>${MY_PCOIN.toLocaleString()}</b> <small>· 개인 지갑 (금광·판매·제단 정답·체포·매일 첫 접속으로 모여요)</small>` : `<span class="coinIco"></span> 우리 저장소 <b>${me.coin.toLocaleString()}</b> 코인 <small>· 산 물건은 나라 저장소로 가요</small>`;
     const card = (k, name, desc, price, counts, have) => `<div class="hvCard"><canvas data-ico="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${name}</b><small>${desc}</small>${have != null ? `<i>가진 것 ${have}개</i>` : ''}</div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${price.toLocaleString()}${counts ? '<small>/개</small>' : ''}</span><div>${(counts || [1]).map((c) => `<button type="button" data-buy="${k}" data-n="${c}" ${me.coin < price * c ? 'disabled' : ''}>${counts ? c + '개' : '사기'}</button>`).join('')}</div></div></div>`;
     let html = '';
     const want = (k) => SHOP_TAB === 'all' || SHOP_TAB === k;
@@ -942,12 +943,16 @@
     const CNT = { floor: [1, 5, 20], wall: [1, 5, 10], deco: [1, 5], trap: [1, 3], bridge: [1, 5, 10] };
     if (SHOP_KIND === 'build') html = MPRules.BUILD.filter((b) => !FARM_CATS.has(b.cat) && b.cat !== 'crop' && (SHOP_TAB === 'trap' ? b.cat === 'trap' : b.theme === SHOP_TAB && b.cat !== 'trap')).map((b) => card(b.id, b.name, CAT_DESC[b.cat], P[b.cat], CNT[b.cat], me.items[b.id] || 0)).join('');
     else if (false) html = (want('floor') ? card('floor', '황금 바닥', '우리 국민이 1.5배 빨라져요', P.floor, [1, 5, 20], me.items.floor) : '') + (want('wall') ? card('wall', '방벽', '다른 나라 사람을 막아요 (5초 맞으면 부서짐)', P.wall, [1, 5, 10], me.items.wall) : '') + (want('trap') ? card('trap', '덫', '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임', P.trap, [1, 3], me.items.trap) : '');
+    else if (SHOP_KIND === 'hat') html = Object.entries(HATS).map(([k, H]) => { const owned = MY_HATS[k], wearing = player.look.hat === k, price = MPRules.HAT_PRICE[k]; return `<div class="hvCard"><canvas data-hat-ico="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${H.name}</b><small>머리 위에 써요 · 다른 사람에게도 보여요</small>${owned ? `<i>${wearing ? '✔ 쓰고 있어요' : '✔ 가지고 있어요'}</i>` : ''}</div><div class="hvBuy"><span class="price">👛 ${price}</span><div>${owned ? `<button type="button" data-wear="${wearing ? '' : k}">${wearing ? '벗기' : '쓰기'}</button>` : `<button type="button" data-buyhat="${k}" ${MY_PCOIN < price ? 'disabled' : ''}>사기</button>`}</div></div></div>`; }).join('');
     else if (SHOP_KIND === 'vaccine' && SHOP_TAB === 'tools') html = Object.entries(MPRules.TOOLS).map(([k, tl]) => `<div class="hvCard"><canvas data-tool="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${tl.name}</b><small>${tl.use}에 꼭 필요해요 · 나만 쓰는 도구 (한 번 사면 계속)</small>${MY_TOOLS[k] ? '<i>✔ 가지고 있어요</i>' : ''}</div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${tl.price}</span><div><button type="button" data-buy="tool_${k}" data-n="1" ${MY_TOOLS[k] || me.coin < tl.price ? 'disabled' : ''}>${MY_TOOLS[k] ? '있음' : '사기'}</button></div></div></div>`).join('');
     else if (SHOP_KIND === 'vaccine') html = card('vaccine', '백신', '균열에서 영토 하나를 지켜요 · 살수록 비싸져요', me.vaccinePrice, null, me.vaccine);
     else if (SHOP_TAB === 'buy') html = [['farm', '밭 1칸 · 설치 모드 농사 탭에서 발밑에 갈아요', [1, 5, 20]], ['canal', '수로 1칸 · 2칸 안의 작물이 20% 빨리 자라요 (사람은 못 지나감)', [1, 5]], ['fert', '심은 작물에 주면 남은 시간이 절반!', [1, 5]]].map(([id, d, c]) => card(id, BUILD_BY[id].name, d, BUILD_BY[id].price, c, me.items[id] || 0)).join('')
       + Object.entries(CROPS).map(([k, c]) => card('s_' + k, c.name + ' 씨앗', `${fmtLeft(c.min * 60e3)} · ${c.yield}개 수확 · 1개 ${c.sell}코인에 팔림`, c.seed, [1, 5, 9], me.items['s_' + k] || 0)).join('');
     else { const owned = MPRules.BUILD.filter((b) => b.cat === 'crop' && me.items[b.id] > 0); html = owned.length ? owned.map((b) => { const n2 = me.items[b.id]; return `<div class="hvCard"><canvas data-ico="${b.id}" width="64" height="64"></canvas><div class="hvInfo"><b>${b.name}</b><small>1개 ${b.sell}코인</small><i>가진 것 ${n2}개</i></div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${(b.sell * n2).toLocaleString()}<small> 전부</small></span><div><button type="button" data-sell="${b.id}" data-n="1">1개</button><button type="button" data-sell="${b.id}" data-n="${n2}">전부</button></div></div></div>`; }).join('') : '<div class="hvSoon"><p><b>팔 작물·물고기가 없어요</b><br>밭에서 키우거나 물가에서 낚시해 보세요!</p></div>'; }
     $('shopBody').innerHTML = html;
+    for (const c of $('shopBody').querySelectorAll('[data-hat-ico]')) { const H = HATS[c.dataset.hatIco], g = c.getContext('2d'), k = Math.min(4, Math.floor(56 / H.cv.width), Math.floor(56 / H.cv.height)); g.imageSmoothingEnabled = false; g.drawImage(H.cv, (64 - H.cv.width * k) / 2, (64 - H.cv.height * k) / 2, H.cv.width * k, H.cv.height * k); }
+    for (const b of $('shopBody').querySelectorAll('[data-buyhat]')) b.onclick = () => ws.send(JSON.stringify({ t: 'buyHat', id: b.dataset.buyhat }));
+    for (const b of $('shopBody').querySelectorAll('[data-wear]')) b.onclick = () => { player.look.hat = b.dataset.wear; saveLook(); renderShop(); };
     for (const c of $('shopBody').querySelectorAll('[data-tool]')) { const g = c.getContext('2d'), T2 = TOOL[{ pick: 'pick', rod: 'rod', shovel: 'shovel' }[c.dataset.tool]]; g.imageSmoothingEnabled = false; const k = Math.min(56 / T2.cv.width, 56 / T2.cv.height) | 0; g.save(); g.translate(32, 32); g.rotate(0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); }
     for (const c of $('shopBody').querySelectorAll('[data-ico]')) { if (BUILD_BY[c.dataset.ico]) { itemIcon(c, c.dataset.ico); continue; } const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(ICON[c.dataset.ico], 0, 0, 64, 64); }
     for (const b of $('shopBody').querySelectorAll('[data-sell]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'sell', item: b.dataset.sell, n: +b.dataset.n })); $('shopSay').textContent = '싱싱하네요! 코인은 나라 저장소로 보냈어요.'; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
@@ -1175,7 +1180,7 @@
       ctx.fillStyle = 'rgba(235,245,255,0.95)'; const hgt = Math.sin(k * Math.PI) * 9; ctx.fillRect(x - 5 - k * 5, y - hgt, 2, 2); ctx.fillRect(x + 4 + k * 5, y - hgt, 2, 2); ctx.fillRect(x - 1, y - hgt * 1.4, 2, 2); }
     ctx.globalAlpha = 1; ctx.restore();
   }
-  let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {};
+  let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {}, MY_PCOIN = 0, MY_HATS = {};
   const TOOL_HINT = (k) => `${MPRules.TOOLS[k].name}이(가) 있어야 해요 · 하늘 천상 상점가 '치유의 샘'에서 사요`;
   // ------------------------------------------------------------ 동맹 계약서 (두 왕이 만나서 서명)
   const CONTRACT = { cid: null, me: null, signed: {}, drawing: false, dirty: false };
@@ -1302,8 +1307,9 @@
         { x: 13, y: 4, w: 4, h: 2, npc: 'vaccine', draw: (g, x, y) => pavilion(g, x, y, '#ff9fc4', '치유의 샘 · 백신·도구', NPCS.vaccine.ch) },
         { x: 23, y: 4, w: 4, h: 2, npc: 'seed', draw: (g, x, y) => pavilion(g, x, y, '#8fe0a8', '정원 상점 · 씨앗', NPCS.seed.ch) },
         { x: 13, y: 13, w: 4, h: 2, draw: lightFountain },
+        { x: 3, y: 12, w: 4, h: 2, npc: 'stylist', draw: (g, x, y) => pavilion(g, x, y, '#c9a7ff', '꾸미기 상점 · 모자', NPCS.stylist.ch) },
         P1(8, 13, cloudBench, { w: 2 }), P1(21, 13, cloudBench, { w: 2 }),
-        P1(2, 12, urn), P1(27, 12, urn), P1(2, 16, urn), P1(27, 16, urn),
+        P1(27, 12, urn), P1(2, 16, urn), P1(27, 16, urn),
         P1(9, 8, lantern), P1(20, 8, lantern), P1(9, 15, lantern), P1(20, 15, lantern),
       ],
     },
@@ -1669,7 +1675,7 @@
   const VACCINE_BASE = 3000, VACCINE_STEP = 500, SKY_LIMIT = 5 * 60;
   const vaccinePrice = () => VACCINE_BASE + VACCINE_STEP * inv.bought;
   function saveInv() { store('mp2026.inv', inv); renderInv(); }
-  function renderInv() { $('invCoin').textContent = (myView ? myView.me.coin : inv.coin).toLocaleString(); $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = myView ? myView.me.vaccine : inv.vaccine; $('invWood').textContent = myView ? myView.me.wood : 0; if (build.on) setBuild(true); }
+  function renderInv() { if ($('invP')) $('invP').textContent = MY_PCOIN.toLocaleString(); $('invCoin').textContent = (myView ? myView.me.coin : inv.coin).toLocaleString(); $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = myView ? myView.me.vaccine : inv.vaccine; $('invWood').textContent = myView ? myView.me.wood : 0; if (build.on) setBuild(true); }
   const player = {
     x: 0, y: 0, dir: 1, moving: false, scene: 'ground', room: null, entry: null,
     name: saved.name || '나', tag: '#277a58', team: store('mp2026.team') || 3,
@@ -2260,8 +2266,9 @@
       b.addEventListener('click', () => { player.look.char = i; closetUI(); saveLook(); });
       cw.appendChild(b);
     });
-    $('hatSw').innerHTML = [['', '없음'], ...Object.entries(HATS).map(([k, h]) => [k, h.name])].map(([k, nm]) => `<button type="button" class="hatbtn" data-hat="${k}" aria-pressed="${(player.look.hat || '') === k}" title="${nm}"><canvas width="40" height="34"></canvas><small>${nm}</small></button>`).join('');
-    for (const b of $('hatSw').querySelectorAll('[data-hat]')) { const H = HATS[b.dataset.hat], g = b.querySelector('canvas').getContext('2d'); g.imageSmoothingEnabled = false; if (H) { const k = Math.min(3, Math.floor(38 / H.cv.width), Math.floor(30 / H.cv.height)); g.drawImage(H.cv, (40 - H.cv.width * k) / 2, (34 - H.cv.height * k) / 2, H.cv.width * k, H.cv.height * k); } else { g.strokeStyle = '#c9b79a'; g.lineWidth = 3; g.beginPath(); g.arc(20, 17, 10, 0, 7); g.moveTo(13, 10); g.lineTo(27, 24); g.stroke(); } b.onclick = () => { player.look.hat = b.dataset.hat; closetUI(); saveLook(); }; }
+    const own = (k) => !k || !ONLINE || MY_HATS[k];
+    $('hatSw').innerHTML = [['', '없음'], ...Object.entries(HATS).map(([k, h]) => [k, h.name])].map(([k, nm]) => `<button type="button" class="hatbtn${own(k) ? '' : ' lock'}" data-hat="${k}" aria-pressed="${(player.look.hat || '') === k}" title="${nm}"><canvas width="40" height="34"></canvas><small>${own(k) ? nm : '🔒 ' + MPRules.HAT_PRICE[k]}</small></button>`).join('');
+    for (const b of $('hatSw').querySelectorAll('[data-hat]')) { const H = HATS[b.dataset.hat], g = b.querySelector('canvas').getContext('2d'); g.imageSmoothingEnabled = false; if (H) { const k = Math.min(3, Math.floor(38 / H.cv.width), Math.floor(30 / H.cv.height)); g.drawImage(H.cv, (40 - H.cv.width * k) / 2, (34 - H.cv.height * k) / 2, H.cv.width * k, H.cv.height * k); } else { g.strokeStyle = '#c9b79a'; g.lineWidth = 3; g.beginPath(); g.arc(20, 17, 10, 0, 7); g.moveTo(13, 10); g.lineTo(27, 24); g.stroke(); } b.onclick = () => { if (!own(b.dataset.hat)) { toast(`${HATS[b.dataset.hat].name}은(는) 하늘 천상 상점가 '꾸미기 상점'에서 내 코인으로 사요`); return; } player.look.hat = b.dataset.hat; closetUI(); saveLook(); }; }
     $('skinSw').innerHTML = SKINS_PAL.map((c, i) => `<button type="button" class="sw" data-sk="${i}" title="${SKIN_NAME[i]}" aria-pressed="${(player.look.sk | 0) === i}" style="background:${c || 'conic-gradient(#ffe2c8, #e9a879, #7a4a2c, #ffe2c8)'}"></button>`).join('');
     for (const b of $('skinSw').querySelectorAll('[data-sk]')) b.onclick = () => { player.look.sk = +b.dataset.sk; closetUI(); saveLook(); };
     const hw = $('outfitSw'); hw.textContent = '';
@@ -2360,7 +2367,7 @@
         myId = m.id; netOn = true; store('mp2026.token', m.token);
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
-        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {};
+        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {}; MY_PCOIN = m.pcoin | 0; MY_HATS = m.hats || {}; if (player.look.hat && !MY_HATS[player.look.hat]) player.look.hat = ''; renderInv();
         if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
         if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); GPROPS.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls, clear: m.groundEdits.clear, props: m.groundEdits.props }); invalidateChunks(); mapSig = ''; }
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
@@ -2440,6 +2447,8 @@
         $('bailBox').hidden = false; break;
       }
       case 'mined': mined.add(m.terr); toast(m.text); SND.play('coin'); break;
+      case 'pcoin': MY_PCOIN = m.v | 0; renderInv(); toast(`👛 내 코인 +${m.add} (${m.why})`); break;
+      case 'hats': MY_HATS = m.hats || {}; MY_PCOIN = m.pcoin | 0; renderInv(); player.look.hat = m.id; saveLook(); toast(`🎩 ${HATS[m.id].name}을(를) 샀어요! 바로 썼어요 (꾸미기에서 바꿀 수 있어요)`); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'contract': openContract(m); break;
       case 'contractSig': contractSig(m); break;
       case 'contractDone': contractDone(m); break;

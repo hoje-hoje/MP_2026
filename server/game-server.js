@@ -101,6 +101,7 @@ const world = new World(MAP, state.world || null);
 const MPRules = require('../client/rules.js');
 const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT, BUILD_BY, normItems, tileItem, CROPS, FISH, weatherOf, TOOLS } = MPRules;
 const needTool = (s, k) => !!(s.acc.tools && s.acc.tools[k]);
+function addPcoin(s, n, why) { n = Math.round(n); if (!s || !n) return; s.acc.pcoin = (s.acc.pcoin || 0) + n; dirty = true; send(s.ws, { t: 'pcoin', v: s.acc.pcoin, add: n, why }); } // 개인 지갑
 const MPRulesPortal = (t) => MPRules.portalSpot(t, tileAt);
 { const NM = MPRules.nameAll(MAP.territories); for (const t of MAP.territories) world.t[t.id].name = NM[t.id]; } // 알림에 쓰는 영토 이름 (겹치지 않게)
 world.tileTerr = (i) => terrAtTile(i % MAP.width, Math.floor(i / MAP.width)); // 영역이 넘어갈 때 그 땅의 설치물도 같이
@@ -306,8 +307,9 @@ wss.on('connection', (ws) => {
         t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        tools: acc.tools || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
+      { const dk = gameDayKey(); if (acc.dailyDay !== dk && acc.nameSet) { acc.dailyDay = dk; setTimeout(() => addPcoin(s, NUM.pcoin.daily, '오늘 첫 접속'), 1500); } }
       if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
       return;
     }
@@ -379,7 +381,7 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'look': {
-        s.acc.look = cleanLook(m.look); dirty = true; // 이름은 setName 으로만 바꾼다
+        s.acc.look = cleanLook(m.look); if (s.acc.look.hat && !(s.acc.hats || {})[s.acc.look.hat]) s.acc.look.hat = ''; dirty = true; // 산 머리 장식만 // 이름은 setName 으로만 바꾼다
         const mm = { t: 'meta', p: meta(s) };
         for (const o of online.values()) if (o.known.has(s.id) || o === s) send(o.ws, mm);
         break;
@@ -431,7 +433,7 @@ wss.on('connection', (ws) => {
           n.actions += 1; sendViews([n.id]);
           return send(ws, { t: 'answer', id: P.id, correct: true, done: true, text: owner === n.id ? '정답! 그런데 팀원이 먼저 점령했어요 · 행동력 1을 돌려받았어요' : '정답! 그런데 다른 나라가 먼저 점령했어요 · 행동력 1을 돌려받았어요' });
         }
-        const r = world.puzzleReward(n.id, P.terr, actionDayKey(), gameClock().day);
+        const r = world.puzzleReward(n.id, P.terr, actionDayKey(), gameClock().day); addPcoin(s, NUM.pcoin.puzzle, '제단 정답');
         if (r.kind === 'claim') { broadcastOwners(); notifyNation(n.id, `🏳 ${s.acc.name}님이 ${world.t[P.terr].name}을(를) 점령했어요`); }
         if (r.kind === 'none') { n.actions += 1; }
         sendViews([n.id]);
@@ -634,7 +636,7 @@ wss.on('connection', (ws) => {
         if (s.acc.mined.ids.includes(tid)) return send(ws, { t: 'err', text: '이 금광은 오늘 이미 캤어요' });
         if (!s.mining || s.mining.tid !== tid || now() - s.mining.at < NUM.mineHoldMs - 300) return; s.mining = null;
         const got = 300 + Math.floor(Math.random() * 31) * 10;
-        s.acc.mined.ids.push(tid); n.coin += got; dirty = true; sendViews([n.id]);
+        s.acc.mined.ids.push(tid); n.coin += got; dirty = true; sendViews([n.id]); addPcoin(s, got * NUM.pcoin.minePct, '금광');
         send(ws, { t: 'mined', terr: tid, text: `금광에서 코인 ${got}을 캤어요 (우리 저장소)` });
         break;
       }
@@ -773,13 +775,21 @@ wss.on('connection', (ws) => {
         else if (!done && why) send(ws, { t: 'err', text: why });
         break;
       }
+      case 'buyHat': { // 꾸미기 상점: 개인 지갑으로 머리 장식
+        if (s.scene !== 'sky' || s.room !== 'market') return;
+        const id = String(m.id || ''), price = MPRules.HAT_PRICE[id]; if (!price) return;
+        s.acc.hats = s.acc.hats || {}; if (s.acc.hats[id]) return send(ws, { t: 'err', text: '이미 가지고 있어요' });
+        if ((s.acc.pcoin || 0) < price) return send(ws, { t: 'err', text: `내 코인이 ${price - (s.acc.pcoin || 0)} 모자라요` });
+        s.acc.pcoin -= price; s.acc.hats[id] = 1; dirty = true;
+        send(ws, { t: 'hats', hats: s.acc.hats, pcoin: s.acc.pcoin, id }); break;
+      }
       case 'sell': { // 정원 천사에게 작물 팔기
         const n = world.nationOfPlayer(s.token); if (!n) return;
         if (s.scene !== 'sky' || s.room !== 'market') return;
         const B = BUILD_BY[String(m.item || '')]; if (!B || B.cat !== 'crop') return;
         n.items = normItems(n.items); const cnt = Math.max(1, Math.min(n.items[B.id] || 0, m.n | 0));
         if (!(n.items[B.id] > 0)) return send(ws, { t: 'err', text: '팔 작물이 없어요' });
-        n.items[B.id] -= cnt; const coin = B.sell * cnt; n.coin += coin; dirty = true; sendViews([n.id]);
+        n.items[B.id] -= cnt; const coin = B.sell * cnt; n.coin += coin; dirty = true; sendViews([n.id]); addPcoin(s, Math.max(1, coin * NUM.pcoin.sellPct), '판매');
         notifyNation(n.id, `🧺 ${s.acc.name}님이 ${B.name} ${cnt}개를 팔았어요 (코인 +${coin})`);
         break;
       }
@@ -871,7 +881,7 @@ wss.on('connection', (ws) => {
         // 보상금: 일정 악명 이상을 잡으면 (잡힌 사람 나라 저장소에서)
         const tier = MPRules.notorietyTier(o.acc.notoriety | 0), bounty = Math.min(NUM.notorietyTiers[tier].bounty, on.coin | 0);
         if (bounty > 0) { on.coin -= bounty; n.coin += bounty; back += ` · 보상금 ${bounty}`; }
-        addNotoriety(o.acc, (o.acc.notoriety | 0) * (NUM.notoriety.arrestedMul - 1)); addNotoriety(s.acc, NUM.notoriety.arrest);
+        addNotoriety(o.acc, (o.acc.notoriety | 0) * (NUM.notoriety.arrestedMul - 1)); addNotoriety(s.acc, NUM.notoriety.arrest); addPcoin(s, NUM.pcoin.arrest, '체포');
         stat(s.acc, 'arrests'); stat(o.acc, 'arrested');
         // 영지의 신의 가호: 잡힐 때마다 스택 1, 3스택이면 감옥 (날마다 초기화 안 됨, 감옥에 가면 0)
         o.acc.arrestStack = (o.acc.arrestStack | 0) + 1;

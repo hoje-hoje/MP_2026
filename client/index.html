@@ -485,6 +485,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .hatgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 4px; max-height: 190px; overflow-y: auto; background: #fff; border: 3px solid #e8c260; padding: 4px; }
 .hatbtn { display: flex; flex-direction: column; align-items: center; gap: 0; min-height: 0; padding: 2px; background: #fffaf0 !important; color: #2b2340 !important; border: 2px solid #efe0b8 !important; border-image: none !important; text-shadow: none !important; box-shadow: none !important; } .hatbtn canvas { width: 40px; height: 34px; image-rendering: pixelated; } .hatbtn small { font-size: 9px; line-height: 1.1; } .hatbtn[aria-pressed="true"] { border-color: #2b2340 !important; outline: 3px solid #ffd84d; }
 #skinSw .sw { width: 30px; height: 30px; min-height: 30px; }
+.hatbtn.lock { opacity: 0.55; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -510,6 +511,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 
 <div id="inv" class="hud card" aria-label="보유 자원">
   <span class="invc"><img src="assets/extra/coin.png" alt="코인" width="18" height="18"> <span id="invCoin">0</span></span>
+  <span title="내 코인 (개인 지갑)"><b>👛</b> <span id="invP">0</span></span>
   <span><b>병력</b> <span id="invArmy">0</span></span>
   <span><b>목재</b> <span id="invWood">0</span></span>
   <span><b>백신</b> <span id="invVac">0</span></span>
