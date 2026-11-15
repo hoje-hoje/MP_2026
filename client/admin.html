@@ -137,8 +137,8 @@ tr.editing td { background: #fff1b8; }
     <h2>🎫 학생 명단 · 입장 코드 <span class="hint">학번 + 이름 → 학교 메일로 6자리 코드 (Brevo) · 학번 하나에 계정 하나</span></h2>
     <div class="row"><label><input type="checkbox" id="rsOn"> 명단 로그인 켜기 (켜면 명단에 있는 학생만 들어올 수 있어요)</label><span class="muted" id="rsMail"></span></div>
     <details><summary>명단 넣기</summary>
-      <p class="muted">엑셀에서 <b>학번 · 이름 · 학교 메일</b> 세 칸을 복사해 붙여 넣어요 (한 줄에 한 명). 이미 있는 학번은 이름·메일만 바뀌어요.</p>
-      <textarea id="rsText" rows="6" style="width:100%" placeholder="20301	김철수	33_01@kbs.hs.kr"></textarea>
+      <p class="muted">엑셀에서 <b>학번 · 이름 · 학교 메일</b> 세 칸을 복사해 붙여 넣어요 (한 줄에 한 명). 이미 있는 학번은 이름·메일만 바뀌어요. <b>선생님</b>은 학번 없이 <b>이름 · 메일</b>만 적으면 돼요 (선생님은 로그인 화면에서 '선생님'을 골라 메일로 들어와요).</p>
+      <textarea id="rsText" rows="6" style="width:100%" placeholder="20301	김철수	33_01@kbs.hs.kr&#10;김선생	teacher@kbs.hs.kr"></textarea>
       <div class="row"><button id="rsAdd" type="button">명단 더하기</button><button id="rsReplace" type="button">명단 바꾸기 (빠진 학생 지움 · 이미 로그인한 학생은 남김)</button></div>
     </details>
     <details><summary>메일 시험</summary><div class="row"><input id="rsTestTo" placeholder="받을 메일" style="width:220px"><button id="rsTest" type="button">시험 메일 보내기</button></div></details>
@@ -304,8 +304,8 @@ tr.editing td { background: #fff1b8; }
   let rsRows = [];
   const fmtAgo = (t) => { if (!t) return '-'; const m = Math.round((Date.now() - t) / 60e3); return m < 1 ? '방금' : m < 60 ? m + '분 전' : m < 1440 ? Math.round(m / 60) + '시간 전' : Math.round(m / 1440) + '일 전'; };
   const drawRoster = () => { const q = ($('rsFind').value || '').trim(); const L = rsRows.filter((r) => !q || r.sid.includes(q) || r.name.includes(q) || (r.nick || '').includes(q));
-    $('rsInfo').textContent = `${rsRows.length}명 · 로그인 ${rsRows.filter((r) => r.linked).length}명 · 접속 중 ${rsRows.filter((r) => r.online).length}명`;
-    $('rsList').innerHTML = L.map((r) => `<tr${r.banned ? ' style="opacity:.55"' : ''}><td>${r.sid}</td><td>${escA(r.name)}<br><small class="muted">${escA(r.email || '메일 없음')}</small></td><td>${r.online ? '🟢 ' : ''}${escA(r.nick || (r.linked ? '(이름 전)' : '-'))}${r.nation ? `<br><small>${escA(r.nation)}</small>` : ''}</td><td>${fmtAgo(r.last)}</td><td><button type="button" data-rs="code" data-sid="${r.sid}">코드</button> <button type="button" data-rs="reset" data-sid="${r.sid}">로그인 초기화</button> <button type="button" data-rs="wipe" data-sid="${r.sid}">진행 초기화</button> <button type="button" class="danger" data-rs="ban" data-sid="${r.sid}" data-ban="${r.banned ? 0 : 1}">${r.banned ? '밴 풀기' : '밴'}</button> <button type="button" data-rs="del" data-sid="${r.sid}">삭제</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">명단이 없어요</td></tr>'; };
+    $('rsInfo').textContent = `${rsRows.length}명 (선생님 ${rsRows.filter((r) => r.teacher).length}) · 로그인 ${rsRows.filter((r) => r.linked).length}명 · 접속 중 ${rsRows.filter((r) => r.online).length}명`;
+    $('rsList').innerHTML = L.map((r) => `<tr${r.banned ? ' style="opacity:.55"' : ''}><td>${r.teacher ? '📚 선생님' : r.sid}</td><td>${escA(r.name)}<br><small class="muted">${escA(r.email || '메일 없음')}</small></td><td>${r.online ? '🟢 ' : ''}${escA(r.nick || (r.linked ? '(이름 전)' : '-'))}${r.nation ? `<br><small>${escA(r.nation)}</small>` : ''}</td><td>${fmtAgo(r.last)}</td><td><button type="button" data-rs="code" data-sid="${r.sid}">코드</button> <button type="button" data-rs="reset" data-sid="${r.sid}">로그인 초기화</button> <button type="button" data-rs="wipe" data-sid="${r.sid}">진행 초기화</button> <button type="button" class="danger" data-rs="ban" data-sid="${r.sid}" data-ban="${r.banned ? 0 : 1}">${r.banned ? '밴 풀기' : '밴'}</button> <button type="button" data-rs="del" data-sid="${r.sid}">삭제</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">명단이 없어요</td></tr>'; };
   async function loadRoster() { const r = await api('rosterList'); rsRows = r.list || []; drawRoster(); }
   document.addEventListener('click', async (e) => {
     const id = e.target.id;

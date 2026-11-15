@@ -473,7 +473,8 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 #atkBtn { position: fixed; z-index: 21; right: 18px; bottom: calc(210px + env(safe-area-inset-bottom, 0px)); width: 64px; height: 64px; font-size: 28px; border: 4px solid #2b2340; background: #e8423c; color: #fff; box-shadow: 0 4px 0 #2b2340; touch-action: none; }
 #atkBtn[hidden] { display: none; } #atkBtn:active { transform: translateY(3px); box-shadow: 0 1px 0 #2b2340; }
 #rLogin { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(11,8,32,0.82); }
-#rLogin[hidden], #rStep1[hidden], #rStep2[hidden] { display: none; } #rStep1, #rStep2 { display: grid; gap: 10px; width: 100%; }
+#rLogin[hidden], #rStep1[hidden], #rStep2[hidden], .rRow[hidden] { display: none; }
+.rRole { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 3px solid #2b2340; } .rRole button { font: 700 16px var(--font-body); padding: 8px; background: #fff; color: #6a6280; border: 0; cursor: pointer; } .rRole button[aria-pressed="true"] { background: #6b4fb3; color: #fff; } #rStep1, #rStep2 { display: grid; gap: 10px; width: 100%; }
 .rRow { display: flex; gap: 8px; justify-content: center; } .rRow input { flex: 1; min-width: 0; width: 100%; box-sizing: border-box; font: 700 17px var(--font-body); padding: 9px 10px; border: 3px solid #2b2340; }
 .rCode { width: 100%; box-sizing: border-box; font: 700 28px var(--font-display); letter-spacing: 6px; text-align: center; padding: 8px; border: 3px solid #2b2340; }
 .rMain { font: 700 17px var(--font-body); padding: 10px; background: #6b4fb3; color: #fff; border: 3px solid #2b2340; box-shadow: 0 3px 0 #2b2340; cursor: pointer; } .rMain:disabled { opacity: 0.6; }
@@ -685,8 +686,10 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 <button id="atkBtn" type="button" hidden title="공격 (J) · 꾹 = 차징">⚔</button>
 <div id="rLogin" hidden><div class="gIn">
   <b>MP</b>
-  <div id="rStep1"><p>학번과 이름을 넣으면<br>학교 메일로 <b class="hl">입장 코드</b>를 보내 드려요.</p>
-    <div class="rRow"><input id="rSid" inputmode="numeric" maxlength="10" placeholder="학번" autocomplete="off"><input id="rName" maxlength="20" placeholder="이름" autocomplete="off"></div>
+  <div id="rStep1"><div class="rRole"><button type="button" data-role="student" aria-pressed="true">🎒 학생</button><button type="button" data-role="teacher" aria-pressed="false">📚 선생님</button></div>
+    <p id="rWhat"></p>
+    <div class="rRow" id="rStu"><input id="rSid" inputmode="numeric" maxlength="10" placeholder="학번" autocomplete="off"><input id="rName" maxlength="20" placeholder="이름" autocomplete="off"></div>
+    <div class="rRow" id="rTea" hidden><input id="rMail" type="email" maxlength="80" placeholder="학교 메일 (예: name@kbs.hs.kr)" autocomplete="email"></div>
     <button id="rSend" type="button" class="rMain">입장 코드 받기</button><button id="rHave" type="button" class="rLink">선생님께 받은 코드가 있어요</button>
     <small id="rErr" class="gErr"></small></div>
   <div id="rStep2" hidden><p id="rNote"></p>

@@ -101,8 +101,11 @@ function rosterAuth(kind, req, res) {
   let body = ''; req.on('data', (c) => { body += c; if (body.length > 4096) req.destroy(); });
   req.on('end', async () => {
     let m; try { m = JSON.parse(body); } catch (e) { return out(400, { ok: false, err: '잘못된 요청' }); }
-    const sid = String(m.sid || '').trim(), r = (state.roster || {})[sid];
-    if (!r || normName(r.name) !== normName(m.name)) return out(404, { ok: false, err: '명단에 없는 학번·이름이에요. 다시 확인하거나 선생님께 말해 주세요' });
+    const teacher = m.role === 'teacher', email = String(m.email || '').trim().toLowerCase();
+    const sid = teacher ? 't:' + email : String(m.sid || '').trim(), r = (state.roster || {})[sid];
+    if (teacher) { // 선생님: 학교 메일 (관리자가 넣은 선생님 명단에 있어야). 학생 메일이면 학생으로 들어오게
+      if (!r || r.role !== 'teacher') { const st = Object.values(state.roster || {}).find((q) => q.role !== 'teacher' && q.email === email); return out(404, { ok: false, err: st ? '학생 메일이에요. 위에서 \'학생\'을 골라 학번·이름으로 들어와 주세요' : '선생님 명단에 없는 메일이에요. 관리자 선생님께 말해 주세요' }); }
+    } else if (!r || r.role === 'teacher' || normName(r.name) !== normName(m.name)) return out(404, { ok: false, err: '명단에 없는 학번·이름이에요. 다시 확인하거나 선생님께 말해 주세요' });
     if (r.banned) return out(403, { ok: false, err: '이 계정은 쓸 수 없어요. 선생님께 말해 주세요' });
     if (kind === 'start') {
       if (!mailOn()) return out(200, { ok: true, noMail: true });
@@ -119,7 +122,7 @@ function rosterAuth(kind, req, res) {
     if (codeHash(sid, String(m.code || '').replace(/\D/g, '')) !== C.h) { dirty = true; return out(400, { ok: false, err: `코드가 달라요 (남은 기회 ${5 - C.tries}번)` }); }
     r.code = null; r.lv = r.lv || 1;
     let token = r.token; if (!token || !state.accounts[token]) { token = crypto.randomBytes(16).toString('hex'); state.accounts[token] = { x: null, y: null, scene: 'ground', room: null }; r.token = token; }
-    const acc = state.accounts[token]; acc.sid = sid; acc.realName = r.name; if (r.email) acc.email = r.email; r.last = Date.now(); dirty = true;
+    const acc = state.accounts[token]; acc.sid = sid; acc.realName = r.name; acc.teacher = r.role === 'teacher'; if (r.email) acc.email = r.email; r.last = Date.now(); dirty = true;
     console.log('[로그인] 명단 로그인'); out(200, { ok: true, token, lv: r.lv });
   });
 }
@@ -364,7 +367,7 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 65536 }); // 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function meta(s) {
   const n = world.nationOfPlayer(s.token);
-  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), job: s.acc.job || null, side: s.acc.side || null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
+  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), job: s.acc.job || null, teacher: !!s.acc.teacher, side: s.acc.side || null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
 }
 // 체포 횟수 (하루 단위), 감옥
 function arrestsToday(acc) { return acc.arrests && acc.arrests.day === gameDayKey() ? acc.arrests.n : 0; }
@@ -1515,13 +1518,14 @@ async function adminOp(m) {
       for (const line of String(m.text || '').split(/\r?\n/)) {
         const words = line.trim().split(/[\t,;\s]+/).filter(Boolean); if (!words.length) continue;
         const sid = words.find((w) => /^\d{3,10}$/.test(w)), email = words.find((w) => /@/.test(w)), name = words.filter((w) => w !== sid && w !== email).join(' ').trim();
+        if (!sid && email && name) { const k = 't:' + email.toLowerCase(), r = state.roster[k]; seen.add(k); if (r) { r.name = name.slice(0, 20); upd++; } else { state.roster[k] = { sid: k, role: 'teacher', name: name.slice(0, 20), email: email.toLowerCase().slice(0, 80), token: null, lv: 1 }; add++; } continue; } // 학번 없이 이름 + 메일 = 선생님
         if (!sid || !name) { if (line.trim()) bad.push(line.trim().slice(0, 40)); continue; }
         seen.add(sid); const r = state.roster[sid]; if (r) { r.name = name.slice(0, 20); if (email) r.email = email.toLowerCase().slice(0, 80); upd++; } else { state.roster[sid] = { sid, name: name.slice(0, 20), email: email ? email.toLowerCase().slice(0, 80) : '', token: null, lv: 1 }; add++; }
       }
       let removed = 0; if (m.replace) for (const [k, r] of Object.entries(state.roster)) if (!seen.has(k) && !r.token) { delete state.roster[k]; removed++; }
       dirty = true; return { ok: true, add, upd, removed, bad: bad.slice(0, 10) };
     }
-    case 'rosterList': return { ok: true, list: Object.values(state.roster || {}).map((r) => { const a = r.token && state.accounts[r.token], n = r.token && world.nationOfPlayer(r.token); return { sid: r.sid, name: r.name, email: r.email, linked: !!a, nick: a && a.nameSet ? a.name : '', nation: n ? n.name : '', online: !!r.token && [...online.values()].some((o) => o.token === r.token), last: r.last || 0, banned: !!r.banned }; }).sort((a, b) => a.sid.localeCompare(b.sid)) };
+    case 'rosterList': return { ok: true, list: Object.values(state.roster || {}).map((r) => { const a = r.token && state.accounts[r.token], n = r.token && world.nationOfPlayer(r.token); return { sid: r.sid, teacher: r.role === 'teacher', name: r.name, email: r.email, linked: !!a, nick: a && a.nameSet ? a.name : '', nation: n ? n.name : '', online: !!r.token && [...online.values()].some((o) => o.token === r.token), last: r.last || 0, banned: !!r.banned }; }).sort((a, b) => a.sid.localeCompare(b.sid)) };
     case 'rosterCode': { // 입장 코드 만들기 → 메일로 보내고, 관리자 화면에도 보여 줌 (메일이 안 되면 직접 알려 주기)
       const r = (state.roster || {})[String(m.sid)]; if (!r) return { ok: false, err: '명단에 없어요' };
       const code = newCode(r); const mail = r.email && mailOn() ? await codeMail(r, code) : { ok: false, err: r.email ? '메일 설정 없음' : '메일 주소 없음' };

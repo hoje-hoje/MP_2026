@@ -2771,12 +2771,12 @@
       }
       case 'meta': {
         const q = m.p;
-        if (q.id === myId) { player.carry = q.carry ? (player.carry || {}) : null; player.look.red = q.red | 0; player.badge = q.badge || ''; break; }
+        if (q.id === myId) { player.teacher = !!q.teacher; player.carry = q.carry ? (player.carry || {}) : null; player.look.red = q.red | 0; player.badge = q.badge || ''; break; }
         let r = remotes.get(q.id);
         if (!r) { r = { x: null, y: null, tx: null, ty: null, dir: 1, moving: false, emote: null, emoteT: 0 }; remotes.set(q.id, r); }
         r.name = q.name; r.team = q.team; r.tag = teamColor(q.team);
         r.look = Object.assign({ seed: (q.id * 0.37) % 3 }, q.look, { red: q.red | 0 });
-        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || ''; r.king = !!q.king; r.job = q.job || null; r.side = q.side || null;
+        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || ''; r.king = !!q.king; r.job = q.job || null; r.side = q.side || null; r.teacher = !!q.teacher;
         break;
       }
       case 'leave': remotes.delete(m.id); break;
@@ -2994,17 +2994,21 @@
     document.head.appendChild(sc);
   }
   // 학생 명단 로그인: 학번 + 이름 → 학교 메일로 온 6자리 코드
-  const RL = { sid: '', name: '' };
+  const RL = { sid: '', name: '', role: 'student', email: '' };
+  function setRole(role) { RL.role = role; for (const b of document.querySelectorAll('[data-role]')) b.setAttribute('aria-pressed', String(b.dataset.role === role)); $('rStu').hidden = role !== 'student'; $('rTea').hidden = role !== 'teacher'; $('rWhat').innerHTML = role === 'student' ? '학번과 이름을 넣으면<br>학교 메일로 <b class="hl">입장 코드</b>를 보내 드려요.' : '학교 메일을 넣으면<br>그 메일로 <b class="hl">입장 코드</b>를 보내 드려요.'; $('rErr').textContent = ''; setTimeout(() => (role === 'student' ? $('rSid') : $('rMail')).focus(), 30); }
+  for (const b of document.querySelectorAll('[data-role]')) b.addEventListener('click', () => setRole(b.dataset.role));
   function showRoster(msg) {
-    $('rLogin').hidden = false; $('rStep1').hidden = false; $('rStep2').hidden = true; $('rErr').textContent = msg || ''; setTimeout(() => $('rSid').focus(), 50);
+    $('rLogin').hidden = false; $('rStep1').hidden = false; $('rStep2').hidden = true; setRole(RL.role); $('rErr').textContent = msg || '';
   }
   async function rPost(path, body) { const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r.json(); }
   function rStep2(note) { $('rStep1').hidden = true; $('rStep2').hidden = false; $('rNote').innerHTML = note; $('rCode').value = ''; setTimeout(() => $('rCode').focus(), 50); }
   async function rStart(skipMail) {
-    RL.sid = $('rSid').value.trim(); RL.name = $('rName').value.trim(); if (!RL.sid || !RL.name) { $('rErr').textContent = '학번과 이름을 적어 주세요'; return; }
+    RL.sid = $('rSid').value.trim(); RL.name = $('rName').value.trim(); RL.email = $('rMail').value.trim();
+    if (RL.role === 'student' && (!RL.sid || !RL.name)) { $('rErr').textContent = '학번과 이름을 적어 주세요'; return; }
+    if (RL.role === 'teacher' && !/@/.test(RL.email)) { $('rErr').textContent = '학교 메일을 적어 주세요'; return; }
     if (skipMail) { $('rErr').textContent = ''; rStep2('선생님께 받은 <b>6자리 입장 코드</b>를 넣어 주세요.'); return; }
     $('rErr').textContent = '확인하는 중…'; $('rSend').disabled = true;
-    try { const j = await rPost('/auth/start', { sid: RL.sid, name: RL.name }); $('rSend').disabled = false;
+    try { const j = await rPost('/auth/start', { role: RL.role, sid: RL.sid, name: RL.name, email: RL.email }); $('rSend').disabled = false;
       if (!j.ok) { $('rErr').textContent = j.err || '확인하지 못했어요'; return; } $('rErr').textContent = '';
       rStep2(j.noMail ? '지금은 메일을 보낼 수 없어요. <b>선생님께 입장 코드</b>를 받아 넣어 주세요.' : `<b>${esc(j.masked)}</b> 로 6자리 입장 코드를 보냈어요.<br><small>10분 동안 쓸 수 있어요 · 안 보이면 스팸함도 확인해 주세요</small>`);
     } catch (e) { $('rSend').disabled = false; $('rErr').textContent = '서버에 연결하지 못했어요. 다시 해 주세요'; }
@@ -3012,7 +3016,7 @@
   async function rVerify() {
     const code = $('rCode').value.replace(/\D/g, ''); if (code.length !== 6) { $('rErr2').textContent = '6자리 숫자를 넣어 주세요'; return; }
     $('rErr2').textContent = '확인하는 중…';
-    try { const j = await rPost('/auth/verify', { sid: RL.sid, name: RL.name, code });
+    try { const j = await rPost('/auth/verify', { role: RL.role, sid: RL.sid, name: RL.name, email: RL.email, code });
       if (!j.ok) { $('rErr2').textContent = j.err || '코드가 맞지 않아요'; return; }
       store('mp2026.token', j.token); store('mp2026.lv', j.lv); $('rLogin').hidden = true; $('rErr2').textContent = ''; if (!netOn) { try { ws && ws.close(); } catch (e) { /* 없음 */ } connect(); }
     } catch (e) { $('rErr2').textContent = '서버에 연결하지 못했어요. 다시 해 주세요'; }
@@ -3023,6 +3027,7 @@
   $('rBack').addEventListener('click', () => showRoster());
   $('rResend').addEventListener('click', () => { showRoster(); rStart(false); });
   for (const id of ['rSid', 'rName']) $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (id === 'rSid') $('rName').focus(); else rStart(false); } });
+  $('rMail').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); rStart(false); } });
   $('rCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); rVerify(); } });
   async function onGoogle(resp) {
     $('gErr').textContent = '확인하는 중…';
@@ -3787,7 +3792,7 @@
       { const hp = o === player ? PV.hp : o.hp, dl = (o.downUntil || 0) - performance.now(); if (player.scene === 'ground' && hp != null && hp < HPMAX && dl <= 0) drawHpBar2(ctx, o.x, o.y - 76, hp);
         if (dl > 0) { const txt = `💫 기절 · 부활 중 ${Math.ceil(dl / 1000)}`; ctx.font = `700 13px ${PFONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const w = ctx.measureText(txt).width + 14; ctx.fillStyle = 'rgba(43,35,64,0.85)'; ctx.fillRect(o.x - w / 2, o.y - 92, w, 20); ctx.fillStyle = '#ffd84d'; ctx.fillText(txt, o.x, o.y - 82);
           const k = 1 - dl / (MPRules.NUM.pvp.respawnSec * 1000); ctx.fillStyle = '#5a1a2a'; ctx.fillRect(o.x - w / 2, o.y - 72, w, 4); ctx.fillStyle = '#9fd3ff'; ctx.fillRect(o.x - w / 2, o.y - 72, w * Math.max(0, Math.min(1, k)), 4); } }
-      nameTag(ctx, o.x, o.y - 56, (SIDE_ICON[o === player ? MY_SIDE : o.side] || '') + jobIcon(o === player ? MY_JOB : o.job) + (o === player ? player.name : o.name) + (o.badge ? ' ' + o.badge : ''), o === player ? player.tag : o.tag); // 이름 옆 악명 (💀 / 체포왕 👮)
+      nameTag(ctx, o.x, o.y - 56, (SIDE_ICON[o === player ? MY_SIDE : o.side] || '') + jobIcon(o === player ? MY_JOB : o.job) + (o === player ? player.name : o.name) + ((o === player ? player.teacher : o.teacher) ? ' 선생님' : '') + (o.badge ? ' ' + o.badge : ''), o === player ? player.tag : o.tag); // 이름 옆 악명 (💀 / 체포왕 👮)
       if (o.carry) { // 훔친 가방: 머리 옆에 큰 자루
         const b = Math.sin(performance.now() / 150) * 2, bx = o.x + 24, by = o.y - 40 + b;
         ctx.fillStyle = '#2b2340'; ctx.fillRect(bx - 12, by - 14, 24, 22); ctx.fillStyle = '#9a6a35'; ctx.fillRect(bx - 10, by - 12, 20, 18); ctx.fillStyle = '#c98c4a'; ctx.fillRect(bx - 10, by - 12, 20, 5);
