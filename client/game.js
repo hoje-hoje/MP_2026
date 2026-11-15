@@ -1312,6 +1312,85 @@
     }
   }
   let shakeT = 0;
+
+  // ------------------------------------------------------------ 스토리: 멸망 조각 · 여신의 고백 · 13일차 편 고르기
+  let FRAGS = [], MY_FRAGS = new Set(), MY_SIDE = null, sideAsked = false;
+  const FRAG_N = MPRules.STORY.frags.length, SIDE_DAY = MPRules.STORY.sideDay;
+  const SIDE_ICON = { angel: '😇', devil: '😈' };
+  function setFrags(list) {
+    const before = new Set(FRAGS.map((f) => f.i)); FRAGS = list || [];
+    const fresh = FRAGS.filter((f) => !before.has(f.i) && !MY_FRAGS.has(f.i) && f.day === DAY);
+    if (before.size && fresh.length && !TITLE.on) toast(`✨ 오늘의 멸망 조각이 ${((terrs[f0(fresh).tid] || {}).name || "어딘가")} 근처에 떨어졌어요 · 지도(M)에 보라색 ◆`);
+  }
+  const f0 = (a) => a[0];
+  function drawFrag(g, X, Y, t, i) { // 빛기둥 + 떠다니는 보랏빛 조각
+    const bob = Math.sin(t * 2 + i) * 4, a = 0.5 + 0.25 * Math.sin(t * 3 + i);
+    const gr = g.createLinearGradient(0, Y - 240, 0, Y); gr.addColorStop(0, 'rgba(190,140,255,0)'); gr.addColorStop(1, `rgba(200,160,255,${a * 0.55})`);
+    g.fillStyle = gr; g.fillRect(X - 10, Y - 240, 20, 240); g.fillStyle = `rgba(255,255,255,${a * 0.35})`; g.fillRect(X - 3, Y - 240, 6, 240);
+    g.fillStyle = 'rgba(120,60,200,0.3)'; ell(g, X, Y, 16, 5);
+    const P = (dx, dy, w, h, c) => { g.fillStyle = c; g.fillRect(Math.round(X + dx * 3), Math.round(Y - 34 + bob + dy * 3), w * 3, h * 3); };
+    P(-1, -6, 2, 1, '#2b2340'); P(-2, -5, 4, 1, '#2b2340'); P(-3, -4, 6, 7, '#2b2340'); P(-2, 3, 4, 1, '#2b2340'); P(-1, 4, 2, 1, '#2b2340');
+    P(-1, -5, 2, 1, '#e9d8ff'); P(-2, -4, 4, 1, '#c9a8ff'); P(-2, -3, 4, 5, '#9a6aff'); P(-2, -3, 2, 5, '#c9a8ff'); P(-1, 2, 2, 1, '#6a3ad0'); P(-1, -2, 1, 2, '#ffffff');
+    for (let k = 0; k < 4; k++) { const u = (t * 0.6 + k / 4 + i * 0.13) % 1; g.fillStyle = `rgba(233,216,255,${1 - u})`; g.fillRect(Math.round(X + Math.sin(k * 2.1 + t) * 14), Math.round(Y - 20 - u * 60), 3, 3); }
+  }
+  function fragNearby() { if (!ONLINE || player.scene !== 'ground') return null; for (const f of FRAGS) if (!MY_FRAGS.has(f.i) && Math.hypot(f.x - player.x, f.y - player.y) < 64) return { kind: 'frag', i: f.i, text: '✨ 멸망 조각 줍기' }; return null; }
+  function onFrag(m) {
+    MY_FRAGS = new Set(m.have); SND.play('war');
+    STORY_LINES.frag = [{ who: `멸망 조각 ${m.have.length}/${FRAG_N}`, text: MPRules.STORY.frags[m.i], memory: true },
+      { who: '', text: m.all ? '……마지막 조각이다. 조각들이 하나로 이어지며 빛나기 시작한다.' : `조각 ${m.have.length}/${FRAG_N} · 남은 조각을 모으면 진실을 알 수 있을 것 같다.`, memory: true }];
+    fragAll = !!m.all; startOpening('frag');
+  }
+  let fragAll = false;
+  const STORY_LINES = {
+    confess: [
+      { who: '여신', text: '……플레이어님, 잠깐 시간 괜찮으세요?', dim: 0.5 },
+      { who: '여신', text: '처음 만났을 때 "나중에 하겠다"던 이야기…… 기억하세요?' },
+      { who: '여신', text: '이제는 말해야 할 것 같아요.' },
+      { who: '여신', text: '이 세계는…… 곧 멸망해요.', shake: true, dark: true },
+      { who: '여신', text: () => `${LAST_DAY}일차, 12월 ${13 + LAST_DAY}일. 하늘이 갈라지고, 땅이 모두 무너질 거예요.`, dark: true },
+      { who: '여신', text: '벌써 균열이 땅을 갉아먹기 시작했어요. 무너지는 땅을 막으려면 백신이 필요해요.' },
+      { who: '여신', text: '왜 이런 일이 생기는지는…… 저도 몰라요. 정말이에요.' },
+      { who: '여신', text: '다만 세계 곳곳에 보랏빛 조각이 떨어지기 시작했어요. 무언가를 기억하고 있는 조각이에요.' },
+      { who: '여신', text: '하루에 하나씩 떨어질 거예요. 조각을 모으면 진실을 알 수 있을지도 몰라요.' },
+      { who: '여신', text: '……미안해요. 초대해 놓고, 이런 이야기를 해서.' },
+    ],
+    reveal: [
+      { who: '여신', text: '……기억났어요. 전부 다.', dim: 0.6 },
+      { who: '여신', text: '제 곁에 늘 있던 그 친구…… 그 아이가 하늘을 긁고 있었어요.' },
+      { who: '???', text: '크크크…… 이제야 알아챘어?', devil: true, dark: true, shake: true },
+      { who: '악마', text: '맞아. 이 세계를 무너뜨리는 건 나야. 너무 밝은 세계는 재미없거든.', devil: true, dark: true },
+      { who: '여신', text: '이 세계가 무너지고 있었던 건…… 악마 때문이었어요.' },
+      { who: '여신', text: () => `${SIDE_DAY}일차가 되면, 모두에게 물어볼 거예요. 끝까지 이 세계를 지켜 줄 건지…… 아니면.` },
+    ],
+    side: [
+      { who: '여신', text: '오늘은 꼭 물어봐야 할 게 있어요.' },
+      { who: '???', text: '크크…… 여신 혼자 떠들게 둘 순 없지.', devil: true, dark: true, shake: true },
+      { who: '악마', text: '내 편에 서. 무너지는 세계에서도, 내 편은 살아남게 해 주지.', devil: true, dark: true },
+      { who: '여신', text: '저와 함께 이 세계를 끝까지 지켜 주세요. 세계를 무너뜨린 건 악마예요.' },
+      { who: '여신', text: '선택은…… 당신의 몫이에요.', choice: true },
+    ],
+  };
+  // 악마 그림 (직접 찍은 도트)
+  const DEVIL = pxRows([
+    '..H..........H..', '..HH........HH..', '...HH.KKKK.HH...', '....HKKKKKKH....', '...KKKKKKKKKK...', '...KKRKKKKRKK...', '...KKKKKKKKKK...', '...KKKWKKWKKK...', '....KKKKKKKK....', '.....KKKKKK.....',
+    '...KKKKKKKKKK...', '..KKKPKKKKPKKK..', '..KK.KPPPPK.KK..', '..KK.KKKKKK.KK..', '.....KKKKKK.....', '.....KK..KK.....', '.....KK..KK.....', '....KKK..KKK....'], { H: '#e8dccb', K: '#2a1430', R: '#ff3048', W: '#ffffff', P: '#5a2a6a' });
+  function drawDevil(g, cx, cy, sc, t) {
+    const glow = g.createRadialGradient(cx, cy, 10, cx, cy, sc * 36); glow.addColorStop(0, 'rgba(255,40,70,0.45)'); glow.addColorStop(1, 'rgba(255,40,70,0)'); g.fillStyle = glow; g.fillRect(cx - sc * 40, cy - sc * 40, sc * 80, sc * 80);
+    for (const sgn of [-1, 1]) { g.fillStyle = '#3a1438'; g.beginPath(); const f = Math.sin(t * 4) * sc; g.moveTo(cx + sgn * sc * 4, cy - sc * 6); g.lineTo(cx + sgn * sc * 26, cy - sc * 16 + f); g.lineTo(cx + sgn * sc * 22, cy - sc * 2 + f); g.lineTo(cx + sgn * sc * 18, cy + sc * 2 + f); g.lineTo(cx + sgn * sc * 12, cy - sc * 1); g.lineTo(cx + sgn * sc * 4, cy + sc * 4); g.fill(); g.strokeStyle = '#7a2a5a'; g.lineWidth = sc * 0.8; g.stroke(); }
+    g.drawImage(DEVIL, Math.round(cx - 8 * sc * 1.6), Math.round(cy - 12 * sc * 1.6), 16 * sc * 1.6, 18 * sc * 1.6);
+  }
+  function openFragBook() {
+    const rows = []; for (let i = 0; i < FRAG_N; i++) { const f = FRAGS.find((q) => q.i === i), have = MY_FRAGS.has(i), day = DOOM_DAY + i;
+      rows.push(`<div class="fbRow ${have ? 'have' : ''}"><b>${i + 1}</b><div><small>${day}일차 조각</small><p>${have ? esc(MPRules.STORY.frags[i]) : f ? `아직 못 주웠어요 · <u>${esc((terrs[f.tid] || {}).name || "어딘가")}</u> 근처에 떨어져 있어요 (지도에 ◆)` : '아직 떨어지지 않았어요'}</p></div></div>`); }
+    $('fbCount').textContent = `${MY_FRAGS.size} / ${FRAG_N}`; $('fbBody').innerHTML = rows.join('');
+    $('fbSide').hidden = !(ONLINE && DAY >= SIDE_DAY && !MY_SIDE); $('fbMine').textContent = MY_SIDE ? `내 편: ${SIDE_ICON[MY_SIDE]} ${MY_SIDE === 'angel' ? '천사 편' : '악마 편'}` : '';
+    $('fragBook').hidden = false;
+  }
+  function pickSide(side) {
+    if (netOn) ws.send(JSON.stringify({ t: 'side', side })); $('opChoice').hidden = true;
+    OPL.push(side === 'angel' ? { who: '여신', text: '고마워요…… 끝까지, 함께해요.' } : { who: '악마', text: '크크, 현명한 선택이야. 무너지는 걸 같이 구경하자고.', devil: true, dark: true });
+    OP.i++; showLine();
+  }
   let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {}, MY_PCOIN = 0, MY_HATS = {}, MY_JOB = null;
   const jobIcon = (j) => (j && MPRules.JOBS[j] ? MPRules.JOBS[j].icon + ' ' : '');
   const TOOL_HINT = (k) => `${MPRules.TOOLS[k].name}이(가) 있어야 해요 · 하늘 천상 상점가 '치유의 샘'에서 사요`;
@@ -1397,7 +1476,7 @@
     $('bagCoin').innerHTML = `${MY_JOB ? `<span class="bagJob">${jobIcon(MY_JOB)}${MPRules.JOBS[MY_JOB].name} · ${MPRules.JOBS[MY_JOB].perk}</span>` : '<span class="bagJob">직업 없음 (오프라인 점심 전직)</span>'} 👛 내 코인 <b>${MY_PCOIN.toLocaleString()}</b>`;
     $('bagBody').innerHTML = list.length ? list.map((q) => `<div class="stItem"><canvas data-pk="${q.k}" width="56" height="56"></canvas><span>${esc(persName(q.k))}</span>${q.n > 1 || !q.k.includes(':') ? `<i>${q.n}</i>` : ''}</div>`).join('') : '<p class="stEmpty">가방이 비었어요 · 낚시로 물고기를 잡거나, 상점에서 도구·모자를 사요</p>';
     for (const c of $('bagBody').querySelectorAll('[data-pk]')) persIcon(c, c.dataset.pk);
-    $('bagDonate').hidden = !MY_NID; $('bagBox').hidden = false;
+    $('bagDonate').hidden = !MY_NID; $('bagFrag').textContent = `📜 멸망 조각 ${MY_FRAGS.size}/${FRAG_N}${ONLINE && DAY >= SIDE_DAY && !MY_SIDE ? ' · ⚖ 편 고르기' : ''}`; $('bagFrag').hidden = !DOOM; $('bagBox').hidden = false;
   }
   // 거래
   const TRADE = { tid: null, me: null, offer: null, ready: {}, go: {}, other: null };
@@ -1950,7 +2029,7 @@
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
     if ((k === '[' || k === ']') && !ONLINE) { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { $('pmenu').hidden = true; $('barracks').hidden = true; $('bagBox').hidden = true; closeTalk(); $('rulebook').hidden = true; $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
+    if (k === 'escape') { $('fragBook').hidden = true; $('pmenu').hidden = true; $('barracks').hidden = true; $('bagBox').hidden = true; closeTalk(); $('rulebook').hidden = true; $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
   });
   addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); if (k === 'j') atkUp(); });
   $('atkBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); atkDown(); });
@@ -2073,6 +2152,7 @@
     }
     if (player.scene === 'ground' && ONLINE && build.on && !(best && best.kind === 'portal')) { const b = groundAction(); if (b) best = b; } // 설치 모드에선 설치가 먼저 (포털만 예외)
     if (!best && player.scene === 'ground' && ONLINE) best = groundAction();
+    { const fr = fragNearby(); if (fr) best = fr; } // 멸망 조각이 제일 먼저
     if (!best || best.kind === 'info') { const kn = kingNearby(); if (kn) best = kn; } // 다른 나라 왕 옆: 동맹 계약 (거래는 사람을 클릭해서)
     const key = best ? best.kind + best.text : '';
     if (key !== lastPKey) { lastPKey = key; // (설치 모드를 꺼도 안내가 남던 버그: 마지막으로 보여 준 글자와 비교)
@@ -2272,6 +2352,7 @@
     if (near.kind === 'shop') { openShop(); return; }
     if (near.kind === 'npc') { openTalk(near.npc); return; }
     if (near.kind === 'fish') { startFishing(near.x, near.y); return; }
+    if (near.kind === 'frag') { ws.send(JSON.stringify({ t: 'frag', i: near.i })); return; }
     if (near.kind === 'tradeAsk') { ws.send(JSON.stringify({ t: 'tradeAsk', id: near.id })); return; }
     if (near.kind === 'allyMeet') { ws.send(JSON.stringify({ t: 'allyMeet', id: near.id })); toast('동맹 계약서를 펼쳤어요 · 두 왕 모두 서명해 주세요'); return; }
     if (near.kind === 'bail') { if (netOn) ws.send(JSON.stringify({ t: 'bailList' })); return; }
@@ -2422,6 +2503,7 @@
     bg.fillStyle = '#ffffff';
     if (player.scene === 'ground') for (const b of others('ground', null)) bg.fillRect(b.x / TILE * k - 1.5, b.y / TILE * k - 1.5, 3, 3);
     for (const t of terrs) { const q = t && !gone[t.id] && portalOf(t); if (q) { bg.fillStyle = '#ffec8c'; bg.beginPath(); bg.arc(q[0] * k, q[1] * k, 3, 0, Math.PI * 2); bg.fill(); } }
+    for (const f of FRAGS) if (!MY_FRAGS.has(f.i)) { const X = f.x / TILE * k, Y = f.y / TILE * k, pu = 5 + Math.sin(performance.now() / 200) * 1.5; bg.fillStyle = '#2b2340'; bg.beginPath(); bg.moveTo(X, Y - pu - 2); bg.lineTo(X + pu + 2, Y); bg.lineTo(X, Y + pu + 2); bg.lineTo(X - pu - 2, Y); bg.fill(); bg.fillStyle = '#b48aff'; bg.beginPath(); bg.moveTo(X, Y - pu); bg.lineTo(X + pu, Y); bg.lineTo(X, Y + pu); bg.lineTo(X - pu, Y); bg.fill(); } // 멸망 조각
     const px = player.scene === 'sky' ? MPRules.portalSpot(player.entry || home, tileAt)[0] * TILE : player.x, py = player.scene === "sky" ? MPRules.portalSpot(player.entry || home, tileAt)[1] * TILE : player.y;
     pix(bg, 'pin', px / TILE * k, py / TILE * k + 2, 0, 40);
   }
@@ -2561,7 +2643,7 @@
         myId = m.id; netOn = true; store('mp2026.token', m.token);
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
-        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {}; MY_JOB = m.job || null; PV.hp = m.hp ?? HPMAX; player.hp = PV.hp; LOOTS.clear(); for (const L of m.loot || []) LOOTS.set(L.id, L); MY_PCOIN = m.pcoin | 0; MY_HATS = m.hats || {}; MY_BAG = m.bag || {}; if (player.look.hat && !MY_HATS[player.look.hat]) player.look.hat = ''; renderInv();
+        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {}; MY_JOB = m.job || null; PV.hp = m.hp ?? HPMAX; player.hp = PV.hp; MY_FRAGS = new Set(m.myFrags || []); MY_SIDE = m.side || null; FRAGS = m.frags || []; LOOTS.clear(); for (const L of m.loot || []) LOOTS.set(L.id, L); MY_PCOIN = m.pcoin | 0; MY_HATS = m.hats || {}; MY_BAG = m.bag || {}; if (player.look.hat && !MY_HATS[player.look.hat]) player.look.hat = ''; renderInv();
         if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
         if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); GPROPS.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls, clear: m.groundEdits.clear, props: m.groundEdits.props }); invalidateChunks(); mapSig = ''; }
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
@@ -2584,7 +2666,7 @@
         if (!r) { r = { x: null, y: null, tx: null, ty: null, dir: 1, moving: false, emote: null, emoteT: 0 }; remotes.set(q.id, r); }
         r.name = q.name; r.team = q.team; r.tag = teamColor(q.team);
         r.look = Object.assign({ seed: (q.id * 0.37) % 3 }, q.look, { red: q.red | 0 });
-        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || ''; r.king = !!q.king; r.job = q.job || null;
+        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || ''; r.king = !!q.king; r.job = q.job || null; r.side = q.side || null;
         break;
       }
       case 'leave': remotes.delete(m.id); break;
@@ -2627,7 +2709,7 @@
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
-      case 'clock': setClock(m); break;
+      case 'clock': setClock(m); if (m.frags) setFrags(m.frags); break;
       case 'roomEdit': if (m.diff) applyRoomDiff(m.id, m.diff); else applyRoomEdit(m.id, m.edit); break;
       case 'groundEdit': applyGroundEdit(m); break;
       case 'rift': toast(m.text); break;
@@ -2657,6 +2739,8 @@
       case 'tools': if (m.pcoin != null) { MY_PCOIN = m.pcoin; renderInv(); } MY_TOOLS = m.tools || {}; toast(m.text); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'fishBite': if (FISHING.on) FISHING.biteAt = performance.now() + m.wait; break;
       case 'fished': stopFishing(); toast(m.text); if (m.fish) { FISHPOP = { kind: m.fish, t0: performance.now() }; SND.play('coin'); } break;
+      case 'frag': onFrag(m); break;
+      case 'side': MY_SIDE = m.side; if (!$('fragBook').hidden) openFragBook(); break;
       case 'fx': onFx(m); break;
       case 'dead': onDead(m); break;
       case 'hp': onHp(m); break;
@@ -3051,7 +3135,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
@@ -3521,7 +3605,7 @@
     for (const o of list) {
       if (o.draw) continue;
       { const hp = o === player ? PV.hp : o.hp; if (player.scene === 'ground' && hp != null && hp < HPMAX && !((o.downUntil || 0) > performance.now())) drawHpBar2(ctx, o.x, o.y - 76, hp); }
-      nameTag(ctx, o.x, o.y - 56, jobIcon(o === player ? MY_JOB : o.job) + (o === player ? player.name : o.name) + (o.badge ? ' ' + o.badge : ''), o === player ? player.tag : o.tag); // 이름 옆 악명 (💀 / 체포왕 👮)
+      nameTag(ctx, o.x, o.y - 56, (SIDE_ICON[o === player ? MY_SIDE : o.side] || '') + jobIcon(o === player ? MY_JOB : o.job) + (o === player ? player.name : o.name) + (o.badge ? ' ' + o.badge : ''), o === player ? player.tag : o.tag); // 이름 옆 악명 (💀 / 체포왕 👮)
       if (o.carry) { // 훔친 가방: 머리 옆에 큰 자루
         const b = Math.sin(performance.now() / 150) * 2, bx = o.x + 24, by = o.y - 40 + b;
         ctx.fillStyle = '#2b2340'; ctx.fillRect(bx - 12, by - 14, 24, 22); ctx.fillStyle = '#9a6a35'; ctx.fillRect(bx - 10, by - 12, 20, 18); ctx.fillStyle = '#c98c4a'; ctx.fillRect(bx - 10, by - 12, 20, 5);
@@ -3636,6 +3720,7 @@
       for (const [fx, fy] of build.moving ? [facingTile()] : shapeTiles()) { const ok = ownerOf(terrAt(fx, fy)) === MY_NID && !blocked(fx, fy); ctx.fillStyle = ok ? 'rgba(255,211,77,0.35)' : 'rgba(255,60,80,0.3)'; ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE); ctx.strokeStyle = ok ? '#ffd34d' : '#ff3c50'; ctx.lineWidth = 2; ctx.strokeRect(fx * TILE + 1, fy * TILE + 1, TILE - 2, TILE - 2); }
     }
     for (const b of others('ground', null)) if (b.x > x0 && b.x < x1 && b.y > y0 && b.y < y1) list.push(b);
+    for (const f of FRAGS) if (!MY_FRAGS.has(f.i) && f.x > x0 && f.x < x1 && f.y > y0 && f.y < y1) list.push({ x: f.x, y: f.y, draw: (g, X, Y) => drawFrag(g, X, Y, t, f.i) });
     list.push(player);
     drawLoots(ctx, t);
     drawActors(list, t);
@@ -3748,7 +3833,10 @@
   }
   // 하루에 한 번 크게 띄우기 (선포일 점심부터). 그 뒤엔 하늘 신전 게시판에 걸려 있음
   function maybeDoomPopup() {
-    if (!DOOM || store('mp2026.doomSeen') === DAY || TITLE.on || OP.on || !titleDone) return; // 타이틀·오프닝이 끝난 뒤에
+    if (!DOOM || TITLE.on || OP.on || !titleDone) return; // 타이틀·오프닝이 끝난 뒤에
+    if (!store('mp2026.confess')) { store('mp2026.confess', 1); startOpening('confess'); return; } // 선포일: 여신의 고백 먼저
+    if (ONLINE && netOn && DAY >= SIDE_DAY && !MY_SIDE && !sideAsked) { sideAsked = true; startOpening('side'); return; } // 13일차: 편 고르기
+    if (store('mp2026.doomSeen') === DAY) return;
     store('mp2026.doomSeen', DAY);
     $('doomPop').hidden = false;
     const cv = $('doomPopCanvas'), g = cv.getContext('2d');
@@ -4158,23 +4246,23 @@
   ];
   let OPL = OP_LINES, opMode = 'first';
   const opText = (L) => (typeof L.text === 'function' ? L.text() : L.text);
-  function startOpening(mode = 'first') { opMode = mode; OPL = mode === 'replay' ? OP_REPLAY : mode === 'rename' ? OP_RENAME : OP_LINES; OP.on = true; OP.i = 0; $('opening').hidden = false; showLine(); cancelAnimationFrame(OP.raf); const loop = (n) => { drawOpening(n / 1000); if (OP.on) OP.raf = requestAnimationFrame(loop); }; OP.raf = requestAnimationFrame(loop); }
+  function startOpening(mode = 'first') { opMode = mode; OPL = STORY_LINES[mode] ? STORY_LINES[mode].slice() : mode === 'replay' ? OP_REPLAY : mode === 'rename' ? OP_RENAME : OP_LINES; $('opChoice').hidden = true; OP.on = true; OP.i = 0; $('opening').hidden = false; showLine(); cancelAnimationFrame(OP.raf); const loop = (n) => { drawOpening(n / 1000); if (OP.on) OP.raf = requestAnimationFrame(loop); }; OP.raf = requestAnimationFrame(loop); }
   function showLine() {
     const L = OPL[OP.i]; OP.t0 = performance.now(); OP.shown = 0; OP.typing = true;
-    $('opWho').textContent = L.who; $('opInput').hidden = true; $('opNext').hidden = true;
+    $('opWho').textContent = L.who; $('opWho').hidden = !L.who; $('opInput').hidden = true; $('opChoice').hidden = true; $('opNext').hidden = true; $('opening').classList.toggle('devil', !!L.devil);
     if (L.shake) { $('opening').classList.remove('shake'); void $('opening').offsetWidth; $('opening').classList.add('shake'); }
   }
   function tickType() {
     if (!OP.on) return;
     const L = OPL[OP.i]; if (!L) return; const full = opText(L);
-    if (OP.typing) { OP.shown = Math.min(full.length, Math.floor((performance.now() - OP.t0) / 45)); if (OP.shown >= full.length) { OP.typing = false; if (L.input) { $('opInput').hidden = false; $('opNick').value = player.name && player.name !== '나' ? player.name : ''; setTimeout(() => $('opNick').focus(), 30); } else $('opNext').hidden = false; } }
+    if (OP.typing) { OP.shown = Math.min(full.length, Math.floor((performance.now() - OP.t0) / 45)); if (OP.shown >= full.length) { OP.typing = false; if (L.choice) $('opChoice').hidden = false; else if (L.input) { $('opInput').hidden = false; $('opNick').value = player.name && player.name !== '나' ? player.name : ''; setTimeout(() => $('opNick').focus(), 30); } else $('opNext').hidden = false; } }
     $('opText').textContent = full.slice(0, OP.shown);
   }
   function opAdvance() {
     if (!OP.on || OP.flash) return;
     const L = OPL[OP.i];
-    if (OP.typing) { OP.typing = false; OP.shown = opText(L).length; tickType(); if (L.input) { $('opInput').hidden = false; setTimeout(() => $('opNick').focus(), 30); } else $('opNext').hidden = false; return; }
-    if (L.input) return; // 이름을 정해야 넘어감
+    if (OP.typing) { OP.typing = false; OP.shown = opText(L).length; tickType(); if (L.choice) { $('opChoice').hidden = false; return; } if (L.input) { $('opInput').hidden = false; setTimeout(() => $('opNick').focus(), 30); } else $('opNext').hidden = false; return; }
+    if (L.input || L.choice) return; // 이름을 정해야 / 편을 골라야 넘어감
     if (++OP.i < OPL.length) showLine(); else finishOpening();
   }
   function opName() {
@@ -4191,13 +4279,27 @@
     withName(go);
   }
   function finishOpening() { // 로고가 딱 나오고 → 건국 창 (다시 보기면 타이틀로, 이름 바꾸기면 바로 닫힘)
+    if (STORY_LINES[opMode]) { // 스토리 장면: 그냥 닫고 다음 일
+      OP.on = false; $('opening').hidden = true; $('opening').classList.remove('devil'); SND.bgm(BGM_CUR);
+      if (opMode === 'frag' && fragAll) { fragAll = false; setTimeout(() => startOpening('reveal'), 500); return; }
+      if (opMode === 'reveal') toast(DAY >= SIDE_DAY ? '📜 진실을 알았어요' : `📜 진실을 알았어요 · ${SIDE_DAY}일차에 천사 편과 악마 편 중 하나를 고르게 돼요`);
+      setTimeout(maybeDoomPopup, 300); // 밀린 장면(13일차 편 고르기 등)이 있으면 이어서
+      return;
+    }
     if (opMode === 'rename') { OP.on = false; $('opening').hidden = true; toast(`이름을 '${player.name}'(으)로 바꿨어요 · 남은 변경 ${renamesLeft}번`); return; }
     if (opMode === 'replay') { OP.flash = performance.now(); $('opBox').hidden = true; $('opLogo').hidden = false; setTimeout(() => { OP.on = false; OP.flash = 0; $('opening').hidden = true; $('opLogo').hidden = true; $('opBox').hidden = false; startTitle(); }, 2600); return; }
     OP.flash = performance.now(); $('opBox').hidden = true; $('opLogo').hidden = false;
     setTimeout(() => { OP.on = false; OP.flash = 0; $('opening').hidden = true; $('opLogo').hidden = true; $('opBox').hidden = false; store('mp2026.opened', 1); SND.bgm(BGM_CUR); if (needFound || !ONLINE) openFound('who'); else maybeDoomPopup(); }, 2600);
   }
-  $('opening').addEventListener('click', (e) => { if (!e.target.closest('#opInput')) opAdvance(); });
+  $('opening').addEventListener('click', (e) => { if (!e.target.closest('#opInput, #opChoice')) opAdvance(); });
   $('opOk').addEventListener('click', opName);
+  $('opAngel').addEventListener('click', (e) => { e.stopPropagation(); pickSide('angel'); });
+  $('opDevil').addEventListener('click', (e) => { e.stopPropagation(); pickSide('devil'); });
+  $('opLater').addEventListener('click', (e) => { e.stopPropagation(); $('opChoice').hidden = true; finishOpening(); toast('편은 가방(I) → 멸망 조각에서 나중에 고를 수 있어요'); });
+  $('bagFrag').addEventListener('click', () => { $('bagBox').hidden = true; openFragBook(); });
+  $('fbClose').addEventListener('click', () => { $('fragBook').hidden = true; });
+  $('fbSide').addEventListener('click', () => { $('fragBook').hidden = true; startOpening('side'); });
+  $('fbConfess').addEventListener('click', () => { $('fragBook').hidden = true; startOpening('confess'); });
   $('opNick').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.stopPropagation(); opName(); } });
   addEventListener('keydown', (e) => {
     if (!(TITLE.on || OP.on) || (e.target && e.target.tagName === 'INPUT')) return;
@@ -4212,9 +4314,11 @@
     const W2 = opCv.clientWidth, H2 = opCv.clientHeight; if (opCv.width !== W2 || opCv.height !== H2) { opCv.width = W2; opCv.height = H2; }
     const g = opCv.getContext('2d'); g.imageSmoothingEnabled = false;
     const L = OPL[Math.min(OP.i, OPL.length - 1)], dim = OP.flash ? Math.max(0, 1 - (performance.now() - OP.flash) / 300) : L.dim == null ? 1 : L.dim; // 로고가 나오면 여신은 사라짐
-    const grd = g.createLinearGradient(0, 0, 0, H2); grd.addColorStop(0, '#0b0820'); grd.addColorStop(1, '#2a1a4a'); g.fillStyle = grd; g.fillRect(0, 0, W2, H2);
+    const grd = g.createLinearGradient(0, 0, 0, H2); grd.addColorStop(0, L.dark ? '#1a0410' : L.memory ? '#100a24' : '#0b0820'); grd.addColorStop(1, L.dark ? '#4a0a1e' : L.memory ? '#3a2266' : '#2a1a4a'); g.fillStyle = grd; g.fillRect(0, 0, W2, H2);
     for (let i = 0; i < 140; i++) { const x = (hash(i, 1, 5) * W2 + t * (6 + hash(i, 2, 5) * 14)) % W2, y = hash(i, 3, 5) * H2 * 0.85, tw = 0.5 + 0.5 * Math.sin(t * 2 + i); g.fillStyle = `rgba(255,${230 + (i % 25)},255,${(0.25 + 0.6 * tw) * Math.max(0.3, dim)})`; g.fillRect(x | 0, y | 0, i % 7 ? 2 : 3, i % 7 ? 2 : 3); }
     const sc = Math.max(4, Math.min(9, Math.floor(H2 / 110))), cx = W2 / 2, cy = H2 * 0.42 + Math.sin(t * 1.6) * 6;
+    if (L.devil) { g.save(); g.globalAlpha = dim; drawDevil(g, cx, cy, sc, t); g.restore(); if (OP.flash) { const k = Math.min(1, (performance.now() - OP.flash) / 400); g.fillStyle = `rgba(255,255,255,${1 - k})`; g.fillRect(0, 0, W2, H2); } return; }
+    if (L.memory) { const sh = sc * 2.2; g.save(); g.globalAlpha = dim; g.translate(cx, cy); g.rotate(Math.sin(t) * 0.08); const glow2 = g.createRadialGradient(0, 0, 4, 0, 0, sc * 30); glow2.addColorStop(0, 'rgba(200,160,255,0.6)'); glow2.addColorStop(1, 'rgba(200,160,255,0)'); g.fillStyle = glow2; g.fillRect(-sc * 32, -sc * 32, sc * 64, sc * 64); g.fillStyle = '#2b2340'; g.beginPath(); g.moveTo(0, -sh * 7); g.lineTo(sh * 3.5, -sh * 1); g.lineTo(0, sh * 6); g.lineTo(-sh * 3.5, -sh * 1); g.fill(); g.fillStyle = '#9a6aff'; g.beginPath(); g.moveTo(0, -sh * 6); g.lineTo(sh * 2.7, -sh * 1); g.lineTo(0, sh * 5); g.lineTo(-sh * 2.7, -sh * 1); g.fill(); g.fillStyle = '#c9a8ff'; g.beginPath(); g.moveTo(0, -sh * 6); g.lineTo(-sh * 2.7, -sh * 1); g.lineTo(0, sh * 5); g.fill(); g.fillStyle = '#fff'; g.fillRect(-sh * 1.2, -sh * 3, sh * 0.6, sh * 2); g.restore(); return; }
     g.save(); g.globalAlpha = dim;
     // 빛무리
     const glow = g.createRadialGradient(cx, cy, 10, cx, cy, sc * 34); glow.addColorStop(0, 'rgba(255,240,200,0.55)'); glow.addColorStop(1, 'rgba(255,240,200,0)'); g.fillStyle = glow; g.fillRect(cx - sc * 40, cy - sc * 40, sc * 80, sc * 80);

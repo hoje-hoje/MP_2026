@@ -757,6 +757,20 @@
     bow: { name: '작살', proj: 1, range: 300, dmg: [7, 9], cd: 700 },
     magic: { name: '불마법', proj: 1, range: 260, dmg: [12, 15], cd: 1200, boom: 40 },
   };
+  // 스토리: 멸망 조각 8개 (선포일부터 하루 하나씩 땅 어딘가에 떨어짐). 다 모으면 진실 → 13일차 천사/악마 선택
+  const STORY = {
+    frags: [
+      '……처음 이 세계를 만들 때, 여신은 혼자가 아니었다.',
+      '여신 곁에는 늘 그림자처럼 붙어 다니는 누군가가 있었다. 여신은 그를 "친구"라고 불렀다.',
+      '친구는 사람들이 웃는 걸 싫어했다. 나라가 하나 세워질 때마다, 그는 말없이 땅 끝을 바라보았다.',
+      '"이 세계는 너무 밝아." 그가 말했다. 여신은 그냥 웃어넘겼다.',
+      '어느 밤, 하늘에 첫 번째 금이 갔다. 그 아래에서 검은 날개가 펄럭였다.',
+      '균열은 저절로 생기지 않는다. 누군가 손톱으로 하늘을 긁고 있었다.',
+      '여신은 그날의 기억을 잃었다. 누군가 그 기억을 산산조각 내어 땅에 흩뿌렸으니까.',
+      '마지막 조각에 비친 얼굴. 뿔 달린 그림자가 웃고 있었다. "열흘이면 충분해."',
+    ],
+    sideDay: 13,
+  };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

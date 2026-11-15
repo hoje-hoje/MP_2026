@@ -295,6 +295,18 @@ body.titling .hud, body.titling #chat, body.titling #prompt, body.titling #stick
 .opbox b { font-family: var(--font-display); font-size: 20px; color: #6b4fb3; }
 .opbox p { margin: 6px 0 0; font-size: clamp(16px, 2.2vw, 20px); line-height: 1.6; min-height: 2.2em; }
 .opnext { position: absolute; right: 16px; bottom: 8px; font-size: 18px; animation: tblink 0.9s steps(2) infinite; }
+#opWho[hidden] { display: none; }
+#opChoice { display: grid; gap: 8px; margin-top: 10px; } #opChoice[hidden] { display: none; }
+#opChoice button { font: 700 17px var(--font-body); padding: 10px 14px; border: 3px solid #2b2340; box-shadow: 0 3px 0 #2b2340; cursor: pointer; text-align: left; }
+#opAngel { background: #fff6d8; color: #2b2340; } #opDevil { background: #3a1438; color: #ffd8e0; } #opChoice .later { background: transparent; border-color: transparent; box-shadow: none; color: #b9b0d0; font-size: 14px; text-align: center; }
+#opening.devil #opWho { color: #c8203c; }
+.bagFrag { margin: 6px 0 0; padding: 10px; font: 700 15px var(--font-body); background: #3a2266; color: #e9d8ff; border: 3px solid #2b2340; box-shadow: 0 3px 0 #2b2340; cursor: pointer; } .bagFrag[hidden] { display: none; }
+.fbHv { height: min(640px, calc(100vh - 40px)); display: flex; flex-direction: column; overflow: hidden; }
+.fbBody { flex: 1; overflow: auto; display: grid; gap: 8px; align-content: start; padding: 4px 2px; }
+.fbRow { display: flex; gap: 10px; align-items: flex-start; background: rgba(255,255,255,0.55); border: 3px solid #c9bfe0; padding: 8px 10px; color: #6a6280; }
+.fbRow > b { flex: none; width: 30px; height: 30px; display: grid; place-items: center; background: #c9bfe0; color: #fff; font-family: var(--font-display); font-weight: 400; }
+.fbRow.have { border-color: #9a6aff; color: #2b2340; background: #f5efff; } .fbRow.have > b { background: #9a6aff; }
+.fbRow small { font-weight: 700; color: #8a6ad0; } .fbRow p { margin: 2px 0 0; font-size: 15px; line-height: 1.45; } .fbRow u { text-decoration: none; color: #6a3ad0; font-weight: 700; }
 #opInput { display: flex; gap: 8px; margin-top: 8px; } #opInput[hidden] { display: none; } #opInput input { flex: 1; font: 600 18px var(--font-body); padding: 6px 10px; border: 3px solid #2b2340; }
 #opLogo { position: absolute; inset: 0; justify-content: center; animation: oplogo 2.6s ease-out; } #opLogo[hidden] { display: none; }
 .tlogo.big .mp { font-size: clamp(80px, 18vw, 170px); }
@@ -649,7 +661,14 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div class="hvTop"><h2>👜 내 가방</h2><span class="bagCoin" id="bagCoin"></span><button id="bagClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
   <p class="msg">나만 쓰는 것들이에요. 내 코인은 물고기를 팔면 100%, 작물을 팔면 20%가 들어와요. 다른 사람을 클릭하면 거래를 신청할 수 있어요.</p>
   <div class="stGrid" id="bagBody"></div>
+  <button id="bagFrag" type="button" class="bagFrag" hidden>📜 멸망 조각</button>
   <div class="stFoot" id="bagDonate"><span class="msg">💝 내 코인을 나라 저장소에 기부 (나라 돈 → 내 돈은 안 돼요)</span><input id="bagGiveN" type="number" min="1" value="50" style="width:80px"><button id="bagGive" type="button">기부</button></div>
+</div></div>
+<div id="fragBook" class="modalbox" hidden><div class="hv fbHv"><div class="hvClouds"></div>
+  <div class="hvTop"><h2>📜 멸망 조각</h2><span class="bagCoin" id="fbCount"></span><button id="fbClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
+  <p class="msg">선포일부터 하루에 하나씩, 땅 어딘가에 보랏빛 조각이 떨어져요. 가까이 가서 E로 주우면 잃어버린 기억이 보여요. 조각은 사람마다 따로 모아요.</p>
+  <div class="fbBody" id="fbBody"></div>
+  <div class="stFoot"><span class="msg" id="fbMine"></span><button id="fbConfess" type="button">여신의 고백 다시 보기</button><button id="fbSide" type="button" hidden>⚖ 편 고르기</button></div>
 </div></div>
 <div id="pmenu" hidden><b id="pmName"></b><button id="pmTrade" type="button">🤝 거래 신청</button></div>
 <div id="tradeReq" hidden><b id="trqText"></b><div><button id="trqYes" type="button">수락</button><button id="trqNo" type="button">거절</button></div></div>
@@ -752,6 +771,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div id="opLogo" class="tlogo big" hidden><canvas class="logoCv" aria-label="MP 이세계"></canvas></div>
   <div id="opBox" class="opbox"><b id="opWho">???</b><p id="opText"></p>
     <div id="opInput" hidden><input id="opNick" type="text" maxlength="10" autocomplete="off" placeholder="이름 (10자까지)"><button id="opOk" type="button">이걸로 할게요</button></div>
+    <div id="opChoice" hidden><button id="opAngel" type="button">😇 여신과 함께 세계를 지킨다</button><button id="opDevil" type="button">😈 악마의 편에 선다</button><button id="opLater" type="button" class="later">조금 더 생각해 볼게요</button></div>
     <span id="opNext" class="opnext" hidden>▼</span></div>
   <small class="ophint">Enter · 클릭으로 넘기기</small>
 </div>

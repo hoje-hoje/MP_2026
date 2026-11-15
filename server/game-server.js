@@ -289,7 +289,7 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 65536 }); // 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function meta(s) {
   const n = world.nationOfPlayer(s.token);
-  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), job: s.acc.job || null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
+  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), job: s.acc.job || null, side: s.acc.side || null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
 }
 // 체포 횟수 (하루 단위), 감옥
 function arrestsToday(acc) { return acc.arrests && acc.arrests.day === gameDayKey() ? acc.arrests.n : 0; }
@@ -344,7 +344,7 @@ wss.on('connection', (ws) => {
         t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], job: acc.job || null, tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], job: acc.job || null, tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
       return;
@@ -900,6 +900,17 @@ wss.on('connection', (ws) => {
         areaSend(s, { t: 'fx', a: s.id, w: weaponOf(s), dir: m.dir | 0, lv, x: Math.round(s.x), y: Math.round(s.y), hits });
         break;
       }
+      case 'frag': { // 멸망 조각 줍기 (사람마다 따로 모음)
+        const f = fragList().find((q) => q.i === (m.i | 0)); if (!f || s.scene !== 'ground' || s.x == null || Math.hypot(f.x - s.x, f.y - s.y) > 80) return;
+        s.acc.frags = s.acc.frags || {}; if (s.acc.frags[f.i]) return; s.acc.frags[f.i] = 1; dirty = true;
+        const have = myFrags(s.acc); send(ws, { t: 'frag', i: f.i, have, all: have.length >= FRAG_N });
+        break;
+      }
+      case 'side': { // 13일차: 천사 편 / 악마 편 (한 번만)
+        if (gameClock().day < MPRules.STORY.sideDay || s.acc.side || !['angel', 'devil'].includes(m.side)) return;
+        s.acc.side = m.side; dirty = true; send(ws, { t: 'side', side: m.side }); sendMeta(s);
+        break;
+      }
       case 'pickLoot': { // 떨어진 물고기 줍기 (내 가방)
         const L = LOOT.get(m.id | 0); if (!L || s.scene !== 'ground' || s.x == null || Math.hypot(L.x - s.x, L.y - s.y) > 56 || (s.deadUntil || 0) > now()) return;
         LOOT.delete(L.id); s.acc.bag = s.acc.bag || {}; s.acc.bag[L.k] = (s.acc.bag[L.k] || 0) + L.n; dirty = true; send(ws, { t: 'bag', bag: s.acc.bag });
@@ -1190,7 +1201,31 @@ const waveDay = (k) => doomDay() + 2 * k - 1; // 선포 다음 날부터 이틀�
 function curWeather() { return state.weather === 'rain' || state.weather === 'clear' ? state.weather : weatherOf(Date.now()); }
 let lastWeather = null, contractSeq = 0; const contracts = new Map(); // 동맹 계약서 (서명 기다리는 중)
 setInterval(() => { const w = curWeather(); if (w !== lastWeather) { lastWeather = w; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); } }, 20e3); // 날씨가 바뀌면 알림 // 관리자가 정하면 그 날씨
-function clockMsg() { const c = gameClock(); return { t: 'clock', day: c.day, slot: c.slot, weather: curWeather(), doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
+// ---- 스토리: 멸망 조각 (선포일부터 하루에 하나, 아직 안 무너진 땅 아무 데나) · 13일차 편 고르기
+const PASS = new Set(['grass', 'sand'].map((n) => MAP.terrainNames.indexOf(n))); // 숲은 나무에 가려질 수 있어서 뺌
+const FRAG_N = MPRules.STORY.frags.length, fragDay = (i) => doomDay() + i;
+function placeFrag() {
+  const nearAltar = (tx, ty, t) => Math.hypot(tx - t.altar[0], ty - t.altar[1]) < 4; // 제단 E 안내와 겹치지 않게
+  const cand = MAP.territories.filter((t) => !world.s.gone[t.id] && t.area > 300);
+  for (let tries = 0; tries < 60 && cand.length; tries++) {
+    const t = cand[Math.floor(Math.random() * cand.length)], cx = Math.round(t.center[0]), cy = Math.round(t.center[1]);
+    for (let r = 3; r < 14; r++) for (let k = 0; k < 12; k++) { const a = Math.random() * Math.PI * 2, tx = Math.round(cx + Math.cos(a) * r), ty = Math.round(cy + Math.sin(a) * r), i = ty * MAP.width + tx;
+      if (tx < 1 || ty < 1 || tx >= MAP.width - 1 || ty >= MAP.height - 1 || TERR[i] !== t.id || !PASS.has(tileAt(tx, ty)) || nearAltar(tx, ty, t) || world.s.tiles[i]) continue;
+      return { x: tx * 32 + 16, y: ty * 32 + 16, tid: t.id }; }
+  }
+  return null;
+}
+function fragList() {
+  const day = gameClock().day; state.story = state.story || { frags: {} }; const F = state.story.frags, out = [];
+  for (let i = 0; i < FRAG_N; i++) {
+    if (fragDay(i) > day) break;
+    if (!F[i] || world.s.gone[F[i].tid]) { const f = placeFrag(); if (!f) continue; F[i] = f; dirty = true; } // 땅이 무너지면 다른 곳으로
+    out.push({ i, x: F[i].x, y: F[i].y, tid: F[i].tid, day: fragDay(i) });
+  }
+  return out;
+}
+const myFrags = (acc) => Object.keys(acc.frags || {}).map(Number);
+function clockMsg() { const c = gameClock(); return { t: 'clock', frags: fragList(), day: c.day, slot: c.slot, weather: curWeather(), doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
 function onEnter(c) {
   if (c.slot === 'lunch' || c.slot === 'night') resolveNight(`${c.day}일차 ${SLOT_LABEL[c.slot]}`, slotIdx(c.day, c.slot));
   // 멸망 선포: 선포일 점심. 다음 날 아침부터 균열이 매일 영역마다 10%씩 침식
