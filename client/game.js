@@ -2730,7 +2730,7 @@
   function setNet(text) { $('netText').textContent = text; }
   function connect() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: store('mp2026.token'), name: player.name, team: 0, look: lookPayload() }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: store('mp2026.token'), lv: store('mp2026.lv') | 0, name: player.name, team: 0, look: lookPayload() }));
     ws.binaryType = 'arraybuffer';
     ws.onmessage = (ev) => { try { if (typeof ev.data === 'string') onNet(JSON.parse(ev.data)); else onPositions(new DataView(ev.data)); } catch (e) { /* 무시 */ } };
     ws.onclose = (ev) => { netOn = false; remotes.clear(); if (ev && ev.code === 4002) { setNet('학교 계정으로 로그인해 주세요'); return; } setNet('연결이 끊겼어요 · 다시 연결하는 중…'); setTimeout(connect, 2000); };
@@ -2849,7 +2849,7 @@
       case 'tools': if (m.pcoin != null) { MY_PCOIN = m.pcoin; renderInv(); } MY_TOOLS = m.tools || {}; toast(m.text); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'fishBite': if (FISHING.on) FISHING.biteAt = performance.now() + m.wait; break;
       case 'fished': stopFishing(); toast(m.text); if (m.fish) { FISHPOP = { kind: m.fish, t0: performance.now() }; SND.play('coin'); } break;
-      case 'needLogin': try { localStorage.removeItem('mp2026.token'); } catch (e) { /* 막힘 */ } showLogin(); break;
+      case 'needLogin': try { localStorage.removeItem('mp2026.token'); localStorage.removeItem('mp2026.lv'); } catch (e) { /* 막힘 */ } if (m.mode === 'roster') showRoster(m.banned ? '이 계정은 쓸 수 없어요. 선생님께 말해 주세요' : m.text || ''); else showLogin(); break;
       case 'board': BOARD = m.posts || []; renderBoard(); break;
       case 'frag': onFrag(m); break;
       case 'ko': onKo(m); break;
@@ -2979,6 +2979,7 @@
   function startOnline() {
     $('help').hidden = true; $('chat').hidden = false;
     setNet('서버에 연결하는 중…');
+    if (window.MP_ROSTER && !store('mp2026.token')) { showRoster(); return; } // 학번·이름 → 메일 입장 코드
     if (window.MP_GOOGLE && !store('mp2026.token')) { showLogin(); return; } // 학교 계정 로그인 먼저
     connect();
   }
@@ -2992,6 +2993,37 @@
     sc.onerror = () => { $('gErr').textContent = '구글 로그인 창을 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요.'; };
     document.head.appendChild(sc);
   }
+  // 학생 명단 로그인: 학번 + 이름 → 학교 메일로 온 6자리 코드
+  const RL = { sid: '', name: '' };
+  function showRoster(msg) {
+    $('rLogin').hidden = false; $('rStep1').hidden = false; $('rStep2').hidden = true; $('rErr').textContent = msg || ''; setTimeout(() => $('rSid').focus(), 50);
+  }
+  async function rPost(path, body) { const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r.json(); }
+  function rStep2(note) { $('rStep1').hidden = true; $('rStep2').hidden = false; $('rNote').innerHTML = note; $('rCode').value = ''; setTimeout(() => $('rCode').focus(), 50); }
+  async function rStart(skipMail) {
+    RL.sid = $('rSid').value.trim(); RL.name = $('rName').value.trim(); if (!RL.sid || !RL.name) { $('rErr').textContent = '학번과 이름을 적어 주세요'; return; }
+    if (skipMail) { $('rErr').textContent = ''; rStep2('선생님께 받은 <b>6자리 입장 코드</b>를 넣어 주세요.'); return; }
+    $('rErr').textContent = '확인하는 중…'; $('rSend').disabled = true;
+    try { const j = await rPost('/auth/start', { sid: RL.sid, name: RL.name }); $('rSend').disabled = false;
+      if (!j.ok) { $('rErr').textContent = j.err || '확인하지 못했어요'; return; } $('rErr').textContent = '';
+      rStep2(j.noMail ? '지금은 메일을 보낼 수 없어요. <b>선생님께 입장 코드</b>를 받아 넣어 주세요.' : `<b>${esc(j.masked)}</b> 로 6자리 입장 코드를 보냈어요.<br><small>10분 동안 쓸 수 있어요 · 안 보이면 스팸함도 확인해 주세요</small>`);
+    } catch (e) { $('rSend').disabled = false; $('rErr').textContent = '서버에 연결하지 못했어요. 다시 해 주세요'; }
+  }
+  async function rVerify() {
+    const code = $('rCode').value.replace(/\D/g, ''); if (code.length !== 6) { $('rErr2').textContent = '6자리 숫자를 넣어 주세요'; return; }
+    $('rErr2').textContent = '확인하는 중…';
+    try { const j = await rPost('/auth/verify', { sid: RL.sid, name: RL.name, code });
+      if (!j.ok) { $('rErr2').textContent = j.err || '코드가 맞지 않아요'; return; }
+      store('mp2026.token', j.token); store('mp2026.lv', j.lv); $('rLogin').hidden = true; $('rErr2').textContent = ''; if (!netOn) { try { ws && ws.close(); } catch (e) { /* 없음 */ } connect(); }
+    } catch (e) { $('rErr2').textContent = '서버에 연결하지 못했어요. 다시 해 주세요'; }
+  }
+  $('rSend').addEventListener('click', () => rStart(false));
+  $('rHave').addEventListener('click', () => rStart(true));
+  $('rOk').addEventListener('click', rVerify);
+  $('rBack').addEventListener('click', () => showRoster());
+  $('rResend').addEventListener('click', () => { showRoster(); rStart(false); });
+  for (const id of ['rSid', 'rName']) $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (id === 'rSid') $('rName').focus(); else rStart(false); } });
+  $('rCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); rVerify(); } });
   async function onGoogle(resp) {
     $('gErr').textContent = '확인하는 중…';
     try {
@@ -4455,7 +4487,7 @@
   $('fbConfess').addEventListener('click', () => { $('fragBook').hidden = true; startOpening('confess'); });
   $('opNick').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.stopPropagation(); opName(); } });
   addEventListener('keydown', (e) => {
-    if (!$('gLogin').hidden) { e.stopImmediatePropagation(); return; } // 로그인 창이 떠 있으면 아무 키도 안 먹게
+    if (!$('gLogin').hidden || !$('rLogin').hidden) { if (!(e.target && e.target.tagName === 'INPUT')) e.stopImmediatePropagation(); return; } // 로그인 창이 떠 있으면 게임 키는 안 먹게
     if (!(TITLE.on || OP.on) || (e.target && e.target.tagName === 'INPUT')) return;
     e.stopImmediatePropagation(); // 타이틀·오프닝 중에는 게임 키(E, 채팅 등)가 안 먹게
     if (TITLE.on && (e.key === 'Enter' || e.key === ' ') && $('coupon').hidden) { e.preventDefault(); endTitle(); return; }

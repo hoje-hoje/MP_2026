@@ -472,10 +472,17 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 #fishBar { position: fixed; z-index: 27; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(420px, calc(100vw - 32px)); background: #fffaf0; border: 4px solid #b8862b; box-shadow: 0 0 0 3px #2b2340; padding: 8px 12px 12px; text-align: center; color: #2b2340; }
 #atkBtn { position: fixed; z-index: 21; right: 18px; bottom: calc(210px + env(safe-area-inset-bottom, 0px)); width: 64px; height: 64px; font-size: 28px; border: 4px solid #2b2340; background: #e8423c; color: #fff; box-shadow: 0 4px 0 #2b2340; touch-action: none; }
 #atkBtn[hidden] { display: none; } #atkBtn:active { transform: translateY(3px); box-shadow: 0 1px 0 #2b2340; }
+#rLogin { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(11,8,32,0.82); }
+#rLogin[hidden], #rStep1[hidden], #rStep2[hidden] { display: none; } #rStep1, #rStep2 { display: grid; gap: 10px; width: 100%; }
+.rRow { display: flex; gap: 8px; justify-content: center; } .rRow input { flex: 1; min-width: 0; width: 100%; box-sizing: border-box; font: 700 17px var(--font-body); padding: 9px 10px; border: 3px solid #2b2340; }
+.rCode { width: 100%; box-sizing: border-box; font: 700 28px var(--font-display); letter-spacing: 6px; text-align: center; padding: 8px; border: 3px solid #2b2340; }
+.rMain { font: 700 17px var(--font-body); padding: 10px; background: #6b4fb3; color: #fff; border: 3px solid #2b2340; box-shadow: 0 3px 0 #2b2340; cursor: pointer; } .rMain:disabled { opacity: 0.6; }
+.rLink { background: none; border: 0; color: #6a3ad0; font: 700 14px var(--font-body); text-decoration: underline; cursor: pointer; padding: 2px; }
+.gIn .hl { font: inherit; font-weight: 700; color: #6a3ad0; }
 #gLogin { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(11,8,32,0.82); }
 #gLogin[hidden] { display: none; }
-.gIn { background: #fffaf0; border: 4px solid #2b2340; box-shadow: 0 0 0 4px #b8862b, 0 8px 0 #2b2340; padding: 24px 28px; margin: 0 16px; max-width: 420px; text-align: center; color: #2b2340; display: grid; gap: 12px; justify-items: center; }
-.gIn b { font-family: var(--font-display); font-weight: 400; font-size: 32px; color: #6a3ad0; } .gIn p { margin: 0; font-size: 16px; line-height: 1.5; } .gIn small { font-size: 13px; color: #6a6280; }
+.gIn { background: #fffaf0; border: 4px solid #2b2340; box-shadow: 0 0 0 4px #b8862b, 0 8px 0 #2b2340; padding: 24px 28px; margin: 0 16px; width: min(420px, calc(100vw - 32px)); box-sizing: border-box; grid-template-columns: minmax(0, 1fr); text-align: center; color: #2b2340; display: grid; gap: 12px; justify-items: center; }
+.gIn > b { font-family: var(--font-display); font-weight: 400; font-size: 32px; color: #6a3ad0; } .gIn p b { color: #6a3ad0; } .gIn p { margin: 0; font-size: 16px; line-height: 1.5; } .gIn small { font-size: 13px; color: #6a6280; }
 .gErr { color: #c8203c !important; font-weight: 700; min-height: 1em; }
 #boardPanel { position: fixed; z-index: 19; right: 16px; top: 140px; width: min(440px, calc(100vw - 32px)); background: #17110d; border: 3px solid #6b5034; box-shadow: 0 0 0 3px #2b2340, inset 0 0 0 2px #3a2a1c; color: #f4ecd8; font-family: var(--font-body); }
 #boardPanel[hidden] { display: none; }
@@ -676,6 +683,19 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div class="hvTabs" id="shopTabs"></div><div class="hvCoin" id="shopCoin"></div><div class="hvGrid" id="shopBody"></div>
 </div></div>
 <button id="atkBtn" type="button" hidden title="공격 (J) · 꾹 = 차징">⚔</button>
+<div id="rLogin" hidden><div class="gIn">
+  <b>MP</b>
+  <div id="rStep1"><p>학번과 이름을 넣으면<br>학교 메일로 <b class="hl">입장 코드</b>를 보내 드려요.</p>
+    <div class="rRow"><input id="rSid" inputmode="numeric" maxlength="10" placeholder="학번" autocomplete="off"><input id="rName" maxlength="20" placeholder="이름" autocomplete="off"></div>
+    <button id="rSend" type="button" class="rMain">입장 코드 받기</button><button id="rHave" type="button" class="rLink">선생님께 받은 코드가 있어요</button>
+    <small id="rErr" class="gErr"></small></div>
+  <div id="rStep2" hidden><p id="rNote"></p>
+    <input id="rCode" class="rCode" inputmode="numeric" maxlength="6" placeholder="● ● ● ● ● ●" autocomplete="one-time-code">
+    <button id="rOk" type="button" class="rMain">들어가기</button>
+    <div class="rRow"><button id="rResend" type="button" class="rLink">코드 다시 받기</button><button id="rBack" type="button" class="rLink">처음으로</button></div>
+    <small id="rErr2" class="gErr"></small></div>
+  <small>학번 하나에 캐릭터 하나 · 다른 기기에서도 같은 방법으로 이어서 해요</small>
+</div></div>
 <div id="gLogin" hidden><div class="gIn"><b>MP</b><p>학교 구글 계정(<span id="gDomain">@kbs.hs.kr</span>)으로 로그인해 주세요.<br><small>계정 하나에 캐릭터 하나예요. 다른 기기에서 로그인해도 이어서 할 수 있어요.</small></p><div id="gBtn"></div><small id="gErr" class="gErr"></small></div></div>
 <div id="boardPanel" hidden>
   <div class="bpHead"><b>BOARD</b><span>자유 게시판 · 인재 모집 · 동맹 구함</span></div>

@@ -134,6 +134,20 @@ tr.editing td { background: #fff1b8; }
   </section>
 
   <section class="card">
+    <h2>🎫 학생 명단 · 입장 코드 <span class="hint">학번 + 이름 → 학교 메일로 6자리 코드 (Brevo) · 학번 하나에 계정 하나</span></h2>
+    <div class="row"><label><input type="checkbox" id="rsOn"> 명단 로그인 켜기 (켜면 명단에 있는 학생만 들어올 수 있어요)</label><span class="muted" id="rsMail"></span></div>
+    <details><summary>명단 넣기</summary>
+      <p class="muted">엑셀에서 <b>학번 · 이름 · 학교 메일</b> 세 칸을 복사해 붙여 넣어요 (한 줄에 한 명). 이미 있는 학번은 이름·메일만 바뀌어요.</p>
+      <textarea id="rsText" rows="6" style="width:100%" placeholder="20301	김철수	33_01@kbs.hs.kr"></textarea>
+      <div class="row"><button id="rsAdd" type="button">명단 더하기</button><button id="rsReplace" type="button">명단 바꾸기 (빠진 학생 지움 · 이미 로그인한 학생은 남김)</button></div>
+    </details>
+    <details><summary>메일 시험</summary><div class="row"><input id="rsTestTo" placeholder="받을 메일" style="width:220px"><button id="rsTest" type="button">시험 메일 보내기</button></div></details>
+    <div class="row"><button id="rsLoad" type="button">명단 불러오기</button><input id="rsFind" placeholder="학번·이름·닉네임 찾기" style="width:170px"><span class="muted" id="rsInfo"></span></div>
+    <div class="tablewrap" style="max-height:380px"><table><thead><tr><th>학번</th><th>이름 · 메일</th><th>게임</th><th>마지막 접속</th><th>관리</th></tr></thead><tbody id="rsList"></tbody></table></div>
+    <p class="muted">코드: 새 입장 코드를 메일로 보내고 여기에도 보여 줘요 (메일이 안 되면 직접 알려 주기) · 로그인 초기화: 그 학생의 모든 기기에서 로그아웃 → 코드를 다시 받아야 함 · 진행 초기화: 코인·가방·모자·도구·직업·조각·위치를 처음으로 (나라는 그대로) · 밴: 못 들어옴</p>
+  </section>
+
+  <section class="card">
     <h2>📜 자유 게시판 관리 <span class="hint">하늘 신전 게시판에 올라온 글 · 나쁜 글은 지우기</span></h2>
     <div class="row"><button id="bdLoad" type="button">글 불러오기</button><span class="muted" id="bdInfo"></span></div>
     <div class="tablewrap" style="max-height:320px"><table><thead><tr><th>번호</th><th>쓴 사람</th><th>제목 · 내용</th><th></th></tr></thead><tbody id="bdList"></tbody></table></div>
@@ -287,6 +301,24 @@ tr.editing td { background: #fff1b8; }
   const JOBS = { '': '— 없음 —', knight: '⚔ 기사 · 수정 5번에 첩보', rogue: '🗡 도적 · 털기 2배', mage: '🔥 마법사 · 벽 2배 빨리 부숨', mechanic: '🔧 정비공 · 우리 벽 고치기', farmer: '🌾 농사꾼 · 작물 2배 빨리', fisher: '🎣 어부 · 낚시 2배', builder: '🧱 건축업자 · 벽 내구도 2배' };
   let jobPlayers = [];
   const drawJobs = () => { const q = ($('jobFind').value || '').trim(); $('jobList').innerHTML = jobPlayers.filter((p) => !q || p.name.includes(q) || (p.real || '').includes(q) || (p.email || '').includes(q)).map((p) => `<tr><td>${p.name}${p.real || p.email ? `<br><small class="muted">${p.real || ''} ${p.email ? '· ' + p.email.split('@')[0] : ''}</small>` : ''}</td><td>${p.nation || '<span class="muted">유랑민</span>'}</td><td>${p.online ? '🟢' : ''}</td><td><select data-job="${p.name}">${Object.entries(JOBS).map(([k, v]) => `<option value="${k}" ${k === p.job ? 'selected' : ''}>${v}</option>`).join('')}</select></td></tr>`).join(''); $('jobInfo').textContent = `${jobPlayers.length}명 · 직업 있음 ${jobPlayers.filter((p) => p.job).length}명`; };
+  let rsRows = [];
+  const fmtAgo = (t) => { if (!t) return '-'; const m = Math.round((Date.now() - t) / 60e3); return m < 1 ? '방금' : m < 60 ? m + '분 전' : m < 1440 ? Math.round(m / 60) + '시간 전' : Math.round(m / 1440) + '일 전'; };
+  const drawRoster = () => { const q = ($('rsFind').value || '').trim(); const L = rsRows.filter((r) => !q || r.sid.includes(q) || r.name.includes(q) || (r.nick || '').includes(q));
+    $('rsInfo').textContent = `${rsRows.length}명 · 로그인 ${rsRows.filter((r) => r.linked).length}명 · 접속 중 ${rsRows.filter((r) => r.online).length}명`;
+    $('rsList').innerHTML = L.map((r) => `<tr${r.banned ? ' style="opacity:.55"' : ''}><td>${r.sid}</td><td>${escA(r.name)}<br><small class="muted">${escA(r.email || '메일 없음')}</small></td><td>${r.online ? '🟢 ' : ''}${escA(r.nick || (r.linked ? '(이름 전)' : '-'))}${r.nation ? `<br><small>${escA(r.nation)}</small>` : ''}</td><td>${fmtAgo(r.last)}</td><td><button type="button" data-rs="code" data-sid="${r.sid}">코드</button> <button type="button" data-rs="reset" data-sid="${r.sid}">로그인 초기화</button> <button type="button" data-rs="wipe" data-sid="${r.sid}">진행 초기화</button> <button type="button" class="danger" data-rs="ban" data-sid="${r.sid}" data-ban="${r.banned ? 0 : 1}">${r.banned ? '밴 풀기' : '밴'}</button> <button type="button" data-rs="del" data-sid="${r.sid}">삭제</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">명단이 없어요</td></tr>'; };
+  async function loadRoster() { const r = await api('rosterList'); rsRows = r.list || []; drawRoster(); }
+  document.addEventListener('click', async (e) => {
+    const id = e.target.id;
+    if (id === 'rsLoad') loadRoster();
+    if (id === 'rsAdd' || id === 'rsReplace') { if (id === 'rsReplace' && !confirm('명단을 바꿀까요? 새 명단에 없는 학생 중 아직 로그인 안 한 학생은 지워져요.')) return; const r = await api('rosterImport', { text: $('rsText').value, replace: id === 'rsReplace' }); say(`명단: 새로 ${r.add}명 · 바뀜 ${r.upd}명${r.removed ? ` · 지움 ${r.removed}명` : ''}${r.bad && r.bad.length ? ` · 못 읽은 줄: ${r.bad.join(' / ')}` : ''}`); $('rsText').value = ''; loadRoster(); load(); }
+    if (id === 'rsTest') { const r = await api('mailTest', { to: $('rsTestTo').value }); say(r.ok ? '시험 메일을 보냈어요 · 메일함을 확인해 주세요' : r.err); }
+    const act = e.target.dataset && e.target.dataset.rs; if (!act) return; const sid = e.target.dataset.sid;
+    if (act === 'code') { const r = await api('rosterCode', { sid }); if (r.ok) alert(`${sid} 입장 코드: ${r.code}\n(10분 동안)\n${r.mailed ? '메일로도 보냈어요 ✓' : '메일은 못 보냈어요: ' + r.mailErr + '\n학생에게 직접 알려 주세요 (학생은 "선생님께 받은 코드가 있어요"를 눌러 넣어요)'}`); else say(r.err); return; }
+    const ask = { reset: '이 학생을 모든 기기에서 로그아웃시킬까요? (다시 코드를 받아야 해요)', wipe: '이 학생의 진행 상황(코인·가방·모자·도구·직업·조각·위치)을 처음으로 돌릴까요? 되돌릴 수 없어요.', ban: e.target.dataset.ban === '1' ? '이 학생을 밴할까요? (바로 쫓겨나고 못 들어와요)' : '밴을 풀까요?', del: '명단에서 지울까요?' }[act];
+    if (!confirm(ask)) return; const r = await api({ reset: 'rosterReset', wipe: 'rosterWipe', ban: 'rosterBan', del: 'rosterDel' }[act], { sid, ban: e.target.dataset.ban === '1' }); say(r && r.ok === false ? r.err : '했어요'); loadRoster();
+  });
+  document.addEventListener('change', async (e) => { if (e.target.id === 'rsOn') { const r = await api('rosterMode', { on: e.target.checked }); say(r.on ? '명단 로그인을 켰어요 · 이제 명단에 있는 학생만 들어와요' : '명단 로그인을 껐어요'); } });
+  document.addEventListener('input', (e) => { if (e.target.id === 'rsFind') drawRoster(); });
   const escA = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   async function loadBoard() { const r = await api('boardList'); const L = (r.posts || []).slice().reverse(); $('bdInfo').textContent = `${L.length}개`; $('bdList').innerHTML = L.map((q) => `<tr><td>${q.id}</td><td>${escA(q.name)}${q.real ? `<br><small class="muted">${escA(q.real)}</small>` : ''}${q.nation ? `<br><small>■ ${escA(q.nation)}</small>` : ''}</td><td><b>${escA(q.title)}</b><br><small>${escA(q.body)}</small></td><td><button type="button" class="danger" data-bdel="${q.id}">지우기</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">글이 없어요</td></tr>'; }
   document.addEventListener('click', async (e) => { if (e.target.id === 'bdLoad') loadBoard(); const d = e.target.dataset && e.target.dataset.bdel; if (d && confirm('이 글을 지울까요?')) { await api('boardDel', { id: +d }); loadBoard(); } });
@@ -314,6 +346,7 @@ tr.editing td { background: #fff1b8; }
 
   function ago(ms) { const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? `${s}초 전` : s < 3600 ? `${Math.round(s / 60)}분 전` : `${Math.round(s / 3600)}시간 전`; }
   function render() {
+    if ($('rsOn')) { $('rsOn').checked = !!S.rosterLogin; $('rsMail').textContent = S.mailOn ? `메일: ${S.mailFrom} 에서 보내요 ✓ · 명단 ${S.rosterCount}명` : `⚠ 메일 설정 없음 (Render 환경 변수 BREVO_API_KEY, MAIL_FROM) · 명단 ${S.rosterCount}명 · 지금은 '코드' 버튼으로 직접 알려 줘야 해요`; }
     $('updated').textContent = `한국 날짜 ${S.kstDay} · ${new Date(S.now).toLocaleTimeString('ko-KR')} 갱신`;
     const alive = S.nations.filter((n) => !n.dead);
     const unused = S.coupons.filter((c) => !c.used).length;

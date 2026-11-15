@@ -23,5 +23,9 @@ services:
         sync: false
       - key: LOGIN_DOMAIN      # 이 도메인 계정만 들어올 수 있음
         value: kbs.hs.kr
+      - key: BREVO_API_KEY     # 학생 명단 로그인 입장 코드 메일 (Brevo API 키): Render 화면에서 직접 넣는다 (저장소에 적지 않음)
+        sync: false
+      - key: MAIL_FROM         # Brevo 에서 인증한 보내는 사람 메일 주소
+        sync: false
       - key: TEST_MODE       # 행사 시작 전 '0' 으로 바꾸면 '지금 전투 처리' 버튼이 사라짐
         value: "1"

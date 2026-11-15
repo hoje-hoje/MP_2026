@@ -76,13 +76,61 @@ function googleLogin(req, res) {
     console.log('[로그인] 학교 계정 로그인'); out(200, { ok: true, token });
   });
 }
+// ---- 학생 명단 로그인: 학번 + 이름 → 학교 메일로 6자리 입장 코드 (Brevo) → 코드 넣으면 그 학생 계정 하나
+const BREVO_KEY = (process.env.BREVO_API_KEY || '').trim(), MAIL_FROM = (process.env.MAIL_FROM || '').trim(), MAIL_NAME = (process.env.MAIL_NAME || 'MP 2026').trim();
+const mailOn = () => !!(BREVO_KEY && MAIL_FROM);
+const rosterOn = () => !!(state.settings && state.settings.rosterLogin);
+const codeHash = (sid, code) => crypto.createHash('sha256').update(sid + ':' + code).digest('hex');
+const maskMail = (e) => { const [a, d] = String(e || '').split('@'); return a ? (a.length <= 2 ? a[0] + '*' : a.slice(0, 2) + '*'.repeat(Math.min(6, a.length - 2))) + '@' + d : ''; };
+async function sendMail(to, subject, html) {
+  if (!mailOn()) return { ok: false, err: '메일 설정이 없어요 (BREVO_API_KEY, MAIL_FROM)' };
+  try {
+    const r = await fetch('https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': BREVO_KEY, 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ sender: { email: MAIL_FROM, name: MAIL_NAME }, to: [{ email: to }], subject, htmlContent: html }) });
+    if (!r.ok) { const t = await r.text(); console.error('[메일] 보내기 실패', r.status, t.slice(0, 200)); return { ok: false, err: '메일을 보내지 못했어요 (' + r.status + ')' }; }
+    return { ok: true };
+  } catch (e) { console.error('[메일] 오류', e.message); return { ok: false, err: '메일 서버에 연결하지 못했어요' }; }
+}
+function newCode(r) { const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0'); r.code = { h: codeHash(r.sid, code), exp: Date.now() + 10 * 60e3, tries: 0 }; dirty = true; return code; }
+const codeMail = (r, code) => sendMail(r.email, `[MP 2026] 입장 코드 ${code}`, `<div style="font-family:sans-serif;max-width:420px;margin:auto;padding:24px;border:3px solid #2b2340;border-radius:8px"><h2 style="margin:0 0 8px;color:#6b4fb3">MP 2026 입장 코드</h2><p>${r.name} 학생, 아래 코드를 게임 화면에 넣어 주세요.</p><p style="font-size:34px;font-weight:700;letter-spacing:8px;background:#f1ecff;padding:12px;text-align:center">${code}</p><p style="color:#666;font-size:13px">10분 동안만 쓸 수 있어요. 내가 요청하지 않았다면 이 메일은 무시하세요.</p></div>`);
+function rosterKick(r, reason) { for (const o of online.values()) if (r.token && o.token === r.token) { send(o.ws, { t: 'needLogin', mode: 'roster', banned: !!r.banned, text: reason }); setTimeout(() => o.ws.close(4002, 'login'), 200); } }
+function rosterAuth(kind, req, res) {
+  const out = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  if (!rosterOn()) return out(404, { ok: false, err: '명단 로그인이 꺼져 있어요' });
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim(), g = loginFails.get(ip) || { n: 0, t: Date.now() };
+  if (Date.now() - g.t > 60e3) { g.n = 0; g.t = Date.now(); } if (++g.n > 40) return out(429, { ok: false, err: '잠시 뒤에 다시 해 주세요' }); loginFails.set(ip, g);
+  let body = ''; req.on('data', (c) => { body += c; if (body.length > 4096) req.destroy(); });
+  req.on('end', async () => {
+    let m; try { m = JSON.parse(body); } catch (e) { return out(400, { ok: false, err: '잘못된 요청' }); }
+    const sid = String(m.sid || '').trim(), r = (state.roster || {})[sid];
+    if (!r || normName(r.name) !== normName(m.name)) return out(404, { ok: false, err: '명단에 없는 학번·이름이에요. 다시 확인하거나 선생님께 말해 주세요' });
+    if (r.banned) return out(403, { ok: false, err: '이 계정은 쓸 수 없어요. 선생님께 말해 주세요' });
+    if (kind === 'start') {
+      if (!mailOn()) return out(200, { ok: true, noMail: true });
+      if (!r.email) return out(200, { ok: true, noMail: true, err: '명단에 메일이 없어요' });
+      r.sends = (r.sends || []).filter((t) => Date.now() - t < 3600e3);
+      if (r.sends.length && Date.now() - r.sends[r.sends.length - 1] < 60e3) return out(429, { ok: false, err: '코드는 1분에 한 번만 보낼 수 있어요. 메일함(스팸함도)을 확인해 주세요' });
+      if (r.sends.length >= 6) return out(429, { ok: false, err: '코드를 너무 많이 받았어요. 선생님께 말해 주세요' });
+      const code = newCode(r), sent = await codeMail(r, code); if (!sent.ok) return out(502, { ok: false, err: sent.err + ' · 선생님께 코드를 받아 주세요' });
+      r.sends.push(Date.now()); dirty = true; return out(200, { ok: true, masked: maskMail(r.email) });
+    }
+    // verify
+    const C = r.code; if (!C || Date.now() > C.exp) return out(400, { ok: false, err: '코드가 없거나 시간이 지났어요. 다시 받아 주세요' });
+    if (++C.tries > 5) { r.code = null; dirty = true; return out(400, { ok: false, err: '여러 번 틀려서 코드가 막혔어요. 다시 받아 주세요' }); }
+    if (codeHash(sid, String(m.code || '').replace(/\D/g, '')) !== C.h) { dirty = true; return out(400, { ok: false, err: `코드가 달라요 (남은 기회 ${5 - C.tries}번)` }); }
+    r.code = null; r.lv = r.lv || 1;
+    let token = r.token; if (!token || !state.accounts[token]) { token = crypto.randomBytes(16).toString('hex'); state.accounts[token] = { x: null, y: null, scene: 'ground', room: null }; r.token = token; }
+    const acc = state.accounts[token]; acc.sid = sid; acc.realName = r.name; if (r.email) acc.email = r.email; r.last = Date.now(); dirty = true;
+    console.log('[로그인] 명단 로그인'); out(200, { ok: true, token, lv: r.lv });
+  });
+}
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/config.js') {
     res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-store' });
-    return res.end('window.MP_ONLINE = true;' + (GOOGLE_ID ? `window.MP_GOOGLE = ${JSON.stringify({ client: GOOGLE_ID, domain: LOGIN_DOMAIN })};` : ''));
+    return res.end('window.MP_ONLINE = true;' + (rosterOn() ? 'window.MP_ROSTER = true;' : '') + (GOOGLE_ID && !rosterOn() ? `window.MP_GOOGLE = ${JSON.stringify({ client: GOOGLE_ID, domain: LOGIN_DOMAIN })};` : ''));
   }
   if (url.pathname === '/auth/google' && req.method === 'POST') return googleLogin(req, res);
+  if ((url.pathname === '/auth/start' || url.pathname === '/auth/verify') && req.method === 'POST') return rosterAuth(url.pathname.slice(6), req, res);
   if (url.pathname === '/admin/api') return adminHttp(req, res);
   if (url.pathname.startsWith('/puzzle-img/')) return puzzleImage(url.pathname.slice(12), res);
   if (url.pathname.startsWith('/bgm/')) return bgmFile(url.pathname.slice(5), res);
@@ -351,7 +399,11 @@ wss.on('connection', (ws) => {
       if (m.t !== 'hello') return;
       const team = Math.max(1, Math.min(TEAM_MAX, parseInt(m.team, 10) || 1));
       let token = typeof m.token === 'string' && state.accounts[m.token] ? m.token : null;
-      if (GOOGLE_ID && (!token || !state.accounts[token].email)) { send(ws, { t: 'needLogin', domain: LOGIN_DOMAIN }); setTimeout(() => ws.close(4002, 'login'), 200); return; } // 학교 계정 로그인 먼저
+      if (rosterOn()) { // 명단 로그인: 그 학번에 연결된 계정 + 로그인 버전이 맞아야
+        const a0 = token && state.accounts[token], r0 = a0 && a0.sid && (state.roster || {})[a0.sid];
+        if (!r0 || r0.token !== token || (m.lv | 0) !== (r0.lv | 0) || r0.banned) { send(ws, { t: 'needLogin', mode: 'roster', banned: !!(r0 && r0.banned) }); setTimeout(() => ws.close(4002, 'login'), 200); return; }
+        r0.last = Date.now();
+      } else if (GOOGLE_ID && (!token || !state.accounts[token].email)) { send(ws, { t: 'needLogin', mode: 'google', domain: LOGIN_DOMAIN }); setTimeout(() => ws.close(4002, 'login'), 200); return; } // 학교 계정 로그인 먼저
       if (!token) { token = crypto.randomBytes(12).toString('hex'); state.accounts[token] = { x: null, y: null, scene: 'ground', room: null }; }
       const acc = state.accounts[token];
       // 이름: 중복 금지. 이미 정한 이름은 그대로, 새 계정은 겹치지 않는 임시 이름
@@ -1354,7 +1406,7 @@ function adminStatus() {
   return {
     ok: true, now: Date.now(), bgm: state.settings.bgm || 'peace', bgmFiles: state.bgmFiles || [], kstDay: kstDay(), clock: gameClock(), clockMode: (state.clock || {}).mode || 'auto', doomDay: doomDay(), riftNext: world.s.riftNext, goneCount: Object.keys(world.s.gone).length, waveDays: [1, 2, 3, 4, 5].map(waveDay), uptimeSec: Math.round((Date.now() - BOOT_AT) / 1000), storage: store ? store.kind : '없음',
     online: online.size, accounts: Object.keys(state.accounts).length, nations, battles: world.s.battles.length, night: world.s.night,
-    lastResolved: state.lastResolved || null, testMode: testMode(), envTestMode: ENV_TEST_MODE, settings: state.settings, foundingOpen: foundingOpen(),
+    lastResolved: state.lastResolved || null, testMode: testMode(), envTestMode: ENV_TEST_MODE, rosterLogin: rosterOn(), mailOn: mailOn(), mailFrom: MAIL_FROM, rosterCount: Object.keys(state.roster || {}).length, settings: state.settings, foundingOpen: foundingOpen(),
     foundingLastDay: FOUNDING_LAST_DAY, puzzles: bank().length, puzzleFile: path.basename(PUZZLE_FILE), samplePuzzlesOnly: SAMPLE_FILE && !state.puzzles.length, notice: state.notice || null, coupons,
     wander: state.wander.length,
   };
@@ -1457,6 +1509,33 @@ async function adminOp(m) {
     }
     case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
     case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
+    case 'rosterMode': state.settings.rosterLogin = !!m.on; dirty = true; return { ok: true, on: rosterOn() };
+    case 'rosterImport': { // 명단 붙여 넣기: 한 줄에 학번 이름 메일 (탭·쉼표·띄어쓰기)
+      state.roster = state.roster || {}; const seen = new Set(); let add = 0, upd = 0, bad = [];
+      for (const line of String(m.text || '').split(/\r?\n/)) {
+        const words = line.trim().split(/[\t,;\s]+/).filter(Boolean); if (!words.length) continue;
+        const sid = words.find((w) => /^\d{3,10}$/.test(w)), email = words.find((w) => /@/.test(w)), name = words.filter((w) => w !== sid && w !== email).join(' ').trim();
+        if (!sid || !name) { if (line.trim()) bad.push(line.trim().slice(0, 40)); continue; }
+        seen.add(sid); const r = state.roster[sid]; if (r) { r.name = name.slice(0, 20); if (email) r.email = email.toLowerCase().slice(0, 80); upd++; } else { state.roster[sid] = { sid, name: name.slice(0, 20), email: email ? email.toLowerCase().slice(0, 80) : '', token: null, lv: 1 }; add++; }
+      }
+      let removed = 0; if (m.replace) for (const [k, r] of Object.entries(state.roster)) if (!seen.has(k) && !r.token) { delete state.roster[k]; removed++; }
+      dirty = true; return { ok: true, add, upd, removed, bad: bad.slice(0, 10) };
+    }
+    case 'rosterList': return { ok: true, list: Object.values(state.roster || {}).map((r) => { const a = r.token && state.accounts[r.token], n = r.token && world.nationOfPlayer(r.token); return { sid: r.sid, name: r.name, email: r.email, linked: !!a, nick: a && a.nameSet ? a.name : '', nation: n ? n.name : '', online: !!r.token && [...online.values()].some((o) => o.token === r.token), last: r.last || 0, banned: !!r.banned }; }).sort((a, b) => a.sid.localeCompare(b.sid)) };
+    case 'rosterCode': { // 입장 코드 만들기 → 메일로 보내고, 관리자 화면에도 보여 줌 (메일이 안 되면 직접 알려 주기)
+      const r = (state.roster || {})[String(m.sid)]; if (!r) return { ok: false, err: '명단에 없어요' };
+      const code = newCode(r); const mail = r.email && mailOn() ? await codeMail(r, code) : { ok: false, err: r.email ? '메일 설정 없음' : '메일 주소 없음' };
+      return { ok: true, code, mailed: mail.ok, mailErr: mail.ok ? '' : mail.err };
+    }
+    case 'rosterReset': { const r = (state.roster || {})[String(m.sid)]; if (!r) return { ok: false, err: '명단에 없어요' }; r.lv = (r.lv | 0) + 1; r.code = null; r.sends = []; dirty = true; rosterKick(r, '선생님이 로그인을 초기화했어요. 다시 로그인해 주세요'); return { ok: true }; }
+    case 'rosterBan': { const r = (state.roster || {})[String(m.sid)]; if (!r) return { ok: false, err: '명단에 없어요' }; r.banned = !!m.ban; dirty = true; if (r.banned) rosterKick(r, '이 계정은 쓸 수 없어요'); return { ok: true }; }
+    case 'rosterWipe': { // 진행 초기화: 개인 물건·직업·조각·위치 (나라 소속은 그대로)
+      const r = (state.roster || {})[String(m.sid)]; const a = r && r.token && state.accounts[r.token]; if (!a) return { ok: false, err: '아직 로그인한 적이 없어요' };
+      Object.assign(a, { pcoin: 0, bag: {}, hats: {}, tools: {}, job: null, frags: {}, side: null, hp: NUM.pvp.hp, notoriety: 0, arrestStack: 0, carry: null, jailUntil: 0, solved: [], x: null, y: null, scene: 'ground', room: null });
+      dirty = true; rosterKick(r, '선생님이 진행 상황을 초기화했어요. 다시 로그인해 주세요'); r.lv = (r.lv | 0) + 1; return { ok: true };
+    }
+    case 'rosterDel': { const r = (state.roster || {})[String(m.sid)]; if (!r) return { ok: false }; rosterKick(r, '명단에서 빠졌어요'); delete state.roster[r.sid]; dirty = true; return { ok: true }; }
+    case 'mailTest': { const to = String(m.to || '').trim(); if (!/@/.test(to)) return { ok: false, err: '메일 주소를 적어 주세요' }; const r = await sendMail(to, '[MP 2026] 메일 시험', '<p>MP 2026 메일 보내기가 잘 돼요 ✓</p>'); return r.ok ? { ok: true } : r; }
     case 'boardList': return { ok: true, posts: (state.board || []).map(({ tok, ...r }) => ({ ...r, real: (state.accounts[tok] || {}).realName || '' })) };
     case 'boardDel': { state.board = (state.board || []).filter((q) => q.id !== (m.id | 0)); dirty = true; broadcastBoard(); return { ok: true }; }
     case 'players': { // 학생 목록 (직업 정하기용)
@@ -1586,7 +1665,7 @@ async function adminOp(m) {
       for (const a of Object.values(state.accounts)) { a.solved = []; a.carry = null; a.arrests = null; a.jailUntil = 0; a.stunUntil = 0; a.mined = null; a.stoleAt = null; if (m.positions) { a.x = null; a.y = null; a.scene = 'ground'; a.room = null; } }
       for (const a of Object.values(state.accounts)) { a.hp = NUM.pvp.hp; a.frags = {}; a.side = null; a.notoriety = 0; a.arrestStack = 0; if (m.personal) { a.pcoin = 0; a.bag = {}; a.hats = {}; a.tools = {}; a.job = null; } }
       state.story = { frags: {} }; LOOT.clear(); trades.clear(); contracts.clear(); state.weather = null;
-      if (m.accounts) { for (const k of Object.keys(state.accounts)) delete state.accounts[k]; state.emails = {}; }
+      if (m.accounts) { for (const k of Object.keys(state.accounts)) delete state.accounts[k]; state.emails = {}; for (const r of Object.values(state.roster || {})) { r.token = null; r.code = null; r.lv = (r.lv | 0) + 1; } }
       dirty = true; await saveState();
       console.log(`[관리자] 초기화 (계정 ${m.accounts ? '삭제' : '유지'}, 쿠폰 ${m.coupons ? '삭제' : '유지'})`);
       for (const o of online.values()) { send(o.ws, { t: 'wiped', full: !!m.accounts }); setTimeout(() => o.ws.close(4001, 'reset'), 300); } // 모두 새로고침 (본 장면 기록도 지움)
