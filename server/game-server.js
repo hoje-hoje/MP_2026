@@ -370,7 +370,7 @@ wss.on('connection', (ws) => {
       if (nat) { world.refreshActions(nat, actionDayKey()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       send(ws, {
         t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
-        chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
+        chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander.map(({ token, ...r }) => r), board: boardPub(),
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
         frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], job: acc.job || null, tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
@@ -1095,16 +1095,40 @@ wss.on('connection', (ws) => {
         notifyNation(n.id, `🔓 ${s.acc.name}님이 보석금 ${bail}을 내고 ${a.name}님을 꺼냈어요`);
         break;
       }
-      case 'wander': { // 유랑민 등록소: 귀화 신청 / 용병 등록 / 건국 대기
-        if (s.scene !== 'sky' || s.room !== 'wander') return;
-        const kind = ['naturalize', 'mercenary', 'found'].includes(m.kind) ? m.kind : null;
+      case 'wander': { // 유랑민 등록소 (회담장·유랑민 캠프): 귀화 신청 / 용병 등록 / 건국 대기 / 나라 이름으로 인재 모집
+        if (s.scene !== 'sky' || !['wander', 'council'].includes(s.room)) return;
+        const kind = ['naturalize', 'mercenary', 'found', 'recruit'].includes(m.kind) ? m.kind : null;
         if (!kind) return;
+        const nat = world.nationOfPlayer(s.token);
+        if (kind === 'recruit' && !m.cancel && !nat) return send(ws, { t: 'err', text: '나라가 있어야 인재 모집을 올릴 수 있어요' });
+        if (kind !== 'recruit' && !m.cancel && nat) return send(ws, { t: 'err', text: '이미 나라가 있어요 · 나라 이름으로 인재 모집을 올려 보세요' });
+        let target = clean(m.target, 16);
+        if (kind === 'naturalize' && !m.cancel) { const tn = Object.values(world.s.nations).find((n) => !n.dead && n.name === target); if (!tn) return send(ws, { t: 'err', text: '그런 나라가 없어요' }); }
+        if (kind === 'recruit') target = clean(m.target, 40); // 모집 한 줄 (예: 용병 2명, 퍼즐 잘하는 사람)
         state.wander = state.wander.filter((w) => w.token !== s.token);
-        if (!m.cancel) state.wander.push({ token: s.token, id: s.id, name: s.acc.name, kind, target: clean(m.target, 12), ts: Date.now() });
+        if (!m.cancel) state.wander.push({ token: s.token, id: s.id, name: s.acc.name, kind, target, nation: nat ? nat.name : '', color: nat ? nat.color : '', ts: Date.now() });
         dirty = true;
         const pub = state.wander.map(({ token, ...rest }) => rest);
-        for (const o of online.values()) if (o.scene === 'sky' && o.room === 'wander') send(o.ws, { t: 'wander', list: pub });
+        for (const o of online.values()) if (o.scene === 'sky' && ['wander', 'council'].includes(o.room)) send(o.ws, { t: 'wander', list: pub });
         send(ws, { t: 'wander', list: pub });
+        break;
+      }
+      case 'boardPost': { // 하늘 신전 자유 게시판에 글 올리기 (한 사람 3개까지, 30초에 한 번)
+        if (s.scene !== 'sky' || s.room !== 'temple') return;
+        const title = clean(m.title, 30), body = clean(m.body, 160); if (!title) return send(ws, { t: 'err', text: '제목을 적어 주세요' });
+        if (Date.now() - (s.acc.lastPost || 0) < 30e3) return send(ws, { t: 'err', text: '글은 30초에 하나씩 올릴 수 있어요' });
+        state.board = state.board || []; if (state.board.filter((q) => q.tok === s.token).length >= 3) return send(ws, { t: 'err', text: '글은 한 사람당 3개까지예요 · 예전 글을 지우고 올려 주세요' });
+        const nat = world.nationOfPlayer(s.token), asN = !!m.asNation && !!nat;
+        state.board.push({ id: (state.boardSeq = (state.boardSeq || 0) + 1), tok: s.token, name: s.acc.name, nat: nat ? nat.id : null, nation: asN ? nat.name : '', color: asN ? nat.color : '', title, body, ts: Date.now() });
+        if (state.board.length > 100) state.board.splice(0, state.board.length - 100);
+        s.acc.lastPost = Date.now(); dirty = true; broadcastBoard(); send(ws, { t: 'ok', text: '게시판에 글을 올렸어요' });
+        break;
+      }
+      case 'boardDel': { // 내 글 지우기 (나라 이름으로 올린 글은 그 나라 왕도 지울 수 있음)
+        const b = (state.board || []).find((q) => q.id === (m.id | 0)); if (!b) return;
+        const nat = world.nationOfPlayer(s.token), ok = b.tok === s.token || (b.nation && nat && nat.id === b.nat && nat.king === s.token);
+        if (!ok) return send(ws, { t: 'err', text: '내가 쓴 글만 지울 수 있어요' });
+        state.board = state.board.filter((q) => q !== b); dirty = true; broadcastBoard();
         break;
       }
     }
@@ -1253,6 +1277,8 @@ function fragList() {
   return out;
 }
 const myFrags = (acc) => Object.keys(acc.frags || {}).map(Number);
+const boardPub = () => (state.board || []).map(({ tok, nat, ...r }) => r);
+function broadcastBoard() { const msg = JSON.stringify({ t: 'board', posts: boardPub() }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); }
 function clockMsg() { const c = gameClock(); return { t: 'clock', frags: fragList(), day: c.day, slot: c.slot, weather: curWeather(), doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
 function onEnter(c) {
   if (c.slot === 'lunch' || c.slot === 'night') resolveNight(`${c.day}일차 ${SLOT_LABEL[c.slot]}`, slotIdx(c.day, c.slot));
@@ -1431,6 +1457,8 @@ async function adminOp(m) {
     }
     case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
     case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
+    case 'boardList': return { ok: true, posts: (state.board || []).map(({ tok, ...r }) => ({ ...r, real: (state.accounts[tok] || {}).realName || '' })) };
+    case 'boardDel': { state.board = (state.board || []).filter((q) => q.id !== (m.id | 0)); dirty = true; broadcastBoard(); return { ok: true }; }
     case 'players': { // 학생 목록 (직업 정하기용)
       const list = Object.entries(state.accounts).filter(([, a]) => a.nameSet && a.name).map(([k, a]) => { const n = world.nationOfPlayer(k); return { name: a.name, real: a.realName || '', email: a.email || '', nation: n ? n.name : '', job: a.job || '', online: [...online.values()].some((o) => o.token === k), pcoin: a.pcoin || 0 }; }).sort((x, y) => (x.nation || '힣').localeCompare(y.nation || '힣') || x.name.localeCompare(y.name));
       return { ok: true, players: list };
@@ -1553,7 +1581,7 @@ async function adminOp(m) {
       if (m.confirm !== '초기화') return { ok: false, err: "확인 칸에 '초기화'라고 써 주세요" };
       if (store && store.backup) await store.backup(state, 'before-reset-' + new Date().toISOString().replace(/[:.]/g, '-'));
       world.s = require('../client/rules.js').emptyState(); state.world = world.s;
-      state.chats = {}; state.wander = []; state.lastResolved = null; state.notice = null; state.lastClockKey = null;
+      state.chats = {}; state.wander = []; state.board = []; state.lastResolved = null; state.notice = null; state.lastClockKey = null;
       if (m.coupons) state.coupons = {};
       for (const a of Object.values(state.accounts)) { a.solved = []; a.carry = null; a.arrests = null; a.jailUntil = 0; a.stunUntil = 0; a.mined = null; a.stoleAt = null; if (m.positions) { a.x = null; a.y = null; a.scene = 'ground'; a.room = null; } }
       for (const a of Object.values(state.accounts)) { a.hp = NUM.pvp.hp; a.frags = {}; a.side = null; a.notoriety = 0; a.arrestStack = 0; if (m.personal) { a.pcoin = 0; a.bag = {}; a.hats = {}; a.tools = {}; a.job = null; } }

@@ -477,6 +477,18 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .gIn { background: #fffaf0; border: 4px solid #2b2340; box-shadow: 0 0 0 4px #b8862b, 0 8px 0 #2b2340; padding: 24px 28px; margin: 0 16px; max-width: 420px; text-align: center; color: #2b2340; display: grid; gap: 12px; justify-items: center; }
 .gIn b { font-family: var(--font-display); font-weight: 400; font-size: 32px; color: #6a3ad0; } .gIn p { margin: 0; font-size: 16px; line-height: 1.5; } .gIn small { font-size: 13px; color: #6a6280; }
 .gErr { color: #c8203c !important; font-weight: 700; min-height: 1em; }
+#boardPanel { position: fixed; z-index: 19; right: 16px; top: 140px; width: min(440px, calc(100vw - 32px)); background: #17110d; border: 3px solid #6b5034; box-shadow: 0 0 0 3px #2b2340, inset 0 0 0 2px #3a2a1c; color: #f4ecd8; font-family: var(--font-body); }
+#boardPanel[hidden] { display: none; }
+.bpHead { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: #2a1e14; border-bottom: 2px solid #6b5034; } .bpHead b { font-family: var(--font-display); font-weight: 400; color: #e8d9a8; letter-spacing: 1px; } .bpHead span { color: #ffd84d; font-size: 13px; font-weight: 700; }
+.bpList { max-height: 230px; overflow-y: auto; padding: 4px 0; scrollbar-color: #8a6a44 #2a1e14; }
+.bpRow { display: grid; grid-template-columns: 30px 84px 40px 1fr; gap: 6px; width: 100%; padding: 3px 10px; line-height: 1.25; background: none; border: 0; color: #f4ecd8; font: 600 14px var(--font-body); text-align: left; cursor: pointer; }
+.bpRow:hover { background: #2e2218; } .bpRow.on { background: #4a3520; color: #fff; } .bpRow .n { color: #ffd84d; text-align: right; } .bpRow .a, .bpRow .t { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } .bpRow .a { color: #c9e0ff; } .bpRow .d { color: #b9a888; }
+.bpEmpty { margin: 0; padding: 18px 12px; color: #b9a888; font-size: 14px; text-align: center; }
+.bpView { padding: 10px 14px; max-height: 230px; overflow-y: auto; } .bpView h3 { margin: 0 0 2px; font-size: 17px; color: #ffd84d; } .bpView small { color: #b9a888; } .bpView p { margin: 8px 0 0; font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+.bpForm { display: grid; gap: 6px; padding: 10px 12px; } .bpForm input[type=text], .bpForm input:not([type]) { font: 600 15px var(--font-body); padding: 6px 8px; background: #2a1e14; color: #fff; border: 2px solid #6b5034; } .bpForm label { font-size: 13px; color: #e8d9a8; } .bpForm label[hidden] { display: none; }
+.bpForm button { justify-self: end; }
+.bpBtns { display: flex; gap: 6px; padding: 6px 8px; background: #2a1e14; border-top: 2px solid #6b5034; } .bpBtns button, .bpForm button { flex: 1; font: 700 13px var(--font-body); padding: 5px 8px; background: linear-gradient(#8a5a2b, #5a3416); color: #ffe9b8; border: 2px solid #2b1a0c; box-shadow: inset 0 1px 0 #b8823e; cursor: pointer; } .bpBtns button:disabled { opacity: 0.45; cursor: default; }
+.wrow.recruit { background: #fff6d8; border-left: 4px solid #e8c260; padding-left: 6px; } .wrow small { color: #6a6280; }
 #dead { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(40,0,10,0.35), rgba(60,0,15,0.75)); pointer-events: none; }
 #dead[hidden] { display: none; }
 .deadIn { text-align: center; color: #fff; text-shadow: 0 2px 0 #2b2340; display: grid; gap: 6px; padding: 18px 24px; margin: 0 16px; background: rgba(28,10,26,0.88); border: 4px solid #2b2340; box-shadow: 0 0 0 3px #7a1430; }
@@ -653,6 +665,13 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 </div></div>
 <button id="atkBtn" type="button" hidden title="공격 (J) · 꾹 = 차징">⚔</button>
 <div id="gLogin" hidden><div class="gIn"><b>MP 이세계</b><p>학교 구글 계정(<span id="gDomain">@kbs.hs.kr</span>)으로 로그인해 주세요.<br><small>계정 하나에 캐릭터 하나예요. 다른 기기에서 로그인해도 이어서 할 수 있어요.</small></p><div id="gBtn"></div><small id="gErr" class="gErr"></small></div></div>
+<div id="boardPanel" hidden>
+  <div class="bpHead"><b>BOARD</b><span>자유 게시판 · 인재 모집 · 동맹 구함</span></div>
+  <div id="bpList" class="bpList"></div>
+  <div id="bpView" class="bpView" hidden></div>
+  <div id="bpForm" class="bpForm" hidden><input id="bpTitle" maxlength="30" placeholder="제목 (30자)" autocomplete="off"><input id="bpBody" maxlength="160" placeholder="내용 (160자)" autocomplete="off"><label><input type="checkbox" id="bpAsNat"> <span id="bpNatName"></span> 이름으로 올리기</label><button id="bpSend" type="button">올리기</button></div>
+  <div class="bpBtns"><button id="bpViewBtn" type="button">보기</button><button id="bpNew" type="button">새 글</button><button id="bpDel" type="button">지우기</button><button id="bpQuit" type="button">닫기</button></div>
+</div>
 <div id="dead" hidden><div class="deadIn"><b>💫 기절했어요</b><p><span id="deadBy"></span><em id="deadWho"></em>에게 당했어요</p><p class="deadHow" id="deadHow"></p><div class="deadSec">부활 중… <span id="deadSec">10</span>초 뒤 우리 수도에서 일어나요</div><div class="deadBar"><i id="deadFill"></i></div><small id="deadDrops"></small><small>훔친 물건은 원래 나라로 돌아갔어요</small></div></div>
 <div id="fishBar" hidden><b>🎣 지금! 노란 칸에서 E (스페이스)</b><div class="fbTrack"><div id="fishZone"></div><div id="fishPerfect"></div><div id="fishMark"></div></div></div>
 <div id="contract" class="modalbox" hidden><div class="ctPaper">
@@ -740,8 +759,10 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div class="panel card">
     <h2>유랑민 등록소</h2>
     <p id="wanderMsg" class="msg"></p>
-    <div><label for="wanderTarget">귀화할 나라 (팀 번호)</label><input id="wanderTarget" type="text" maxlength="12" autocomplete="off"></div>
-    <div class="seg wrap"><button id="btnNat" type="button">귀화 신청</button><button id="btnMerc" type="button">용병 등록</button><button id="btnFound" type="button">건국 대기 (4명)</button></div>
+    <div id="wanderSolo"><div><label for="wanderTarget">귀화할 나라</label><select id="wanderTarget"></select></div>
+    <div class="seg wrap"><button id="btnNat" type="button">귀화 신청</button><button id="btnMerc" type="button">용병 등록</button><button id="btnFound" type="button">건국 대기 (4명)</button></div></div>
+    <div id="wanderNat" hidden><label for="wanderRecruit"><b id="wanderNatName"></b> 이름으로 인재 모집</label><input id="wanderRecruit" type="text" maxlength="40" autocomplete="off" placeholder="예: 용병 2명 · 퍼즐 잘하는 사람 환영">
+    <div class="seg"><button id="btnRecruit" type="button">인재 모집 올리기</button></div></div>
     <div><label>지금 등록한 사람들</label><div id="wanderList" class="wlist"></div></div>
     <div class="seg"><button id="btnWanderCancel" type="button">내 등록 취소</button><button id="btnWanderClose" type="button">닫기</button></div>
   </div>

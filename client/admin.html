@@ -134,6 +134,12 @@ tr.editing td { background: #fff1b8; }
   </section>
 
   <section class="card">
+    <h2>📜 자유 게시판 관리 <span class="hint">하늘 신전 게시판에 올라온 글 · 나쁜 글은 지우기</span></h2>
+    <div class="row"><button id="bdLoad" type="button">글 불러오기</button><span class="muted" id="bdInfo"></span></div>
+    <div class="tablewrap" style="max-height:320px"><table><thead><tr><th>번호</th><th>쓴 사람</th><th>제목 · 내용</th><th></th></tr></thead><tbody id="bdList"></tbody></table></div>
+  </section>
+
+  <section class="card">
     <h2>👛 학생에게 내 코인 주기 <span class="hint">이벤트·발표 보상 · 학생 개인 지갑으로 들어가요 (머리 장식·작업 도구를 살 수 있어요)</span></h2>
     <div class="row"><label>닉네임 <input id="gpName" placeholder="게임 닉네임" style="width:140px"></label><label>코인 <input id="gpN" type="number" value="100" style="width:90px"></label><label>이유 <input id="gpWhy" placeholder="예: 퀴즈 1등" style="width:160px"></label><button id="gpGo" class="primary" type="button">주기</button><span class="muted" id="gpRes"></span></div>
     <p class="muted">빼려면 마이너스로 적어요 (예: -50). 접속 중이면 학생 화면에 바로 알림이 떠요.</p>
@@ -281,6 +287,9 @@ tr.editing td { background: #fff1b8; }
   const JOBS = { '': '— 없음 —', knight: '⚔ 기사 · 수정 5번에 첩보', rogue: '🗡 도적 · 털기 2배', mage: '🔥 마법사 · 벽 2배 빨리 부숨', mechanic: '🔧 정비공 · 우리 벽 고치기', farmer: '🌾 농사꾼 · 작물 2배 빨리', fisher: '🎣 어부 · 낚시 2배', builder: '🧱 건축업자 · 벽 내구도 2배' };
   let jobPlayers = [];
   const drawJobs = () => { const q = ($('jobFind').value || '').trim(); $('jobList').innerHTML = jobPlayers.filter((p) => !q || p.name.includes(q) || (p.real || '').includes(q) || (p.email || '').includes(q)).map((p) => `<tr><td>${p.name}${p.real || p.email ? `<br><small class="muted">${p.real || ''} ${p.email ? '· ' + p.email.split('@')[0] : ''}</small>` : ''}</td><td>${p.nation || '<span class="muted">유랑민</span>'}</td><td>${p.online ? '🟢' : ''}</td><td><select data-job="${p.name}">${Object.entries(JOBS).map(([k, v]) => `<option value="${k}" ${k === p.job ? 'selected' : ''}>${v}</option>`).join('')}</select></td></tr>`).join(''); $('jobInfo').textContent = `${jobPlayers.length}명 · 직업 있음 ${jobPlayers.filter((p) => p.job).length}명`; };
+  const escA = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  async function loadBoard() { const r = await api('boardList'); const L = (r.posts || []).slice().reverse(); $('bdInfo').textContent = `${L.length}개`; $('bdList').innerHTML = L.map((q) => `<tr><td>${q.id}</td><td>${escA(q.name)}${q.real ? `<br><small class="muted">${escA(q.real)}</small>` : ''}${q.nation ? `<br><small>■ ${escA(q.nation)}</small>` : ''}</td><td><b>${escA(q.title)}</b><br><small>${escA(q.body)}</small></td><td><button type="button" class="danger" data-bdel="${q.id}">지우기</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">글이 없어요</td></tr>'; }
+  document.addEventListener('click', async (e) => { if (e.target.id === 'bdLoad') loadBoard(); const d = e.target.dataset && e.target.dataset.bdel; if (d && confirm('이 글을 지울까요?')) { await api('boardDel', { id: +d }); loadBoard(); } });
   document.addEventListener('click', async (e) => { if (e.target.id !== 'jobLoad') return; try { jobPlayers = (await api('players')).players; drawJobs(); } catch (er) {} });
   document.addEventListener('input', (e) => { if (e.target.id === 'jobFind') drawJobs(); });
   document.addEventListener('change', async (e) => { const n = e.target.dataset && e.target.dataset.job; if (!n) return; try { await api('setJob', { name: n, job: e.target.value }); const p = jobPlayers.find((x) => x.name === n); if (p) p.job = e.target.value; drawJobs(); say(`${n} → ${JOBS[e.target.value]}`); } catch (er) {} });

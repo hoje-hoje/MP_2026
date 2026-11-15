@@ -707,6 +707,18 @@
     for (const dx of [-200, -120, 120, 200]) pix(g, dx < 0 ? 'banner3' : 'banner6', x + dx, y + 4, 2);
     sign(g, x, y - 40, '이벤트 무대');
   }
+  let BOARD = [];
+  function bigBoard(g, x, y) { // 하늘 신전 자유 게시판: 최근 글 4개가 쪽지로 붙어 보임
+    g.fillStyle = '#5a4630'; g.fillRect(x - 128, y - 50, 8, 50); g.fillRect(x + 120, y - 50, 8, 50);
+    g.fillStyle = '#2b2340'; g.fillRect(x - 140, y - 150, 280, 108); g.fillStyle = '#8a6a44'; g.fillRect(x - 136, y - 146, 272, 100); g.fillStyle = '#6b5034'; g.fillRect(x - 128, y - 138, 256, 84);
+    g.fillStyle = '#e8c260'; g.fillRect(x - 136, y - 146, 272, 4); g.fillRect(x - 136, y - 50, 272, 4);
+    const last = BOARD.slice(-4).reverse(), cols = ['#fff6d6', '#ffe3e3', '#e3f6ff', '#e8ffe3'];
+    g.font = `700 10px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 0; i < 4; i++) { const px = x - 122 + i * 62, py = y - 132 + (i % 2) * 6, q = last[i];
+      g.fillStyle = q ? cols[i] : 'rgba(255,255,255,0.18)'; g.fillRect(px, py, 54, 64); g.fillStyle = '#c0392b'; g.fillRect(px + 25, py - 2, 4, 4);
+      if (q) { g.fillStyle = q.color || '#2b2340'; const t = q.title; for (let L = 0; L < 4; L++) { const seg = t.slice(L * 5, L * 5 + 5); if (!seg) break; g.fillText(seg, px + 27, py + 12 + L * 13); } } }
+    plaque(g, x, y - 166, '자유 게시판');
+  }
   function posterBoard(g, x, y) {
     g.fillStyle = '#5a4630'; g.fillRect(x - 56, y - 60, 6, 60); g.fillRect(x + 50, y - 60, 6, 60);
     g.fillStyle = '#8a6a44'; g.fillRect(x - 60, y - 96, 120, 50); g.fillStyle = '#6b5034'; g.fillRect(x - 60, y - 50, 120, 4);
@@ -859,7 +871,7 @@
     seed: { name: '정원 천사 플로라', ch: 'Villager2', color: '#3fa37a', shop: 'seed', lines: ['어서 와요! 밭·수로·씨앗·비료가 있어요.', '우리 땅에 밭을 갈고(설치 모드 농사 탭) 그 위에 서서 씨앗을 심어요.', '수로 2칸 안은 20% 빨리 자라고, 비료를 주면 남은 시간이 절반!', '다 자라면 E로 수확해서 저한테 팔아요.', '낚시로 잡은 물고기도 사요! 비 오는 날엔 귀한 물고기가 잘 잡힌대요.'] },
     stylist: { name: '꾸미기 천사 루나', ch: 'Noble', color: '#b07ae6', shop: 'hat', lines: ['어머, 모자 하나 써 볼래요? 머리 장식은 내 코인(개인 지갑)으로 사요.', '내 코인은 물고기를 팔거나(100%), 작물을 팔면(20%) 모여요.', '산 모자는 꾸미기 창에서 언제든 바꿔 쓸 수 있어요!'] },
     war: { name: '전쟁의 천사 미카', ch: 'KnightGold', color: '#c22f53', rules: true, lines: ['나는 전쟁의 규칙을 지키는 천사.', '3일차부터 영역전이 열린다. 그때 규칙서를 보여 주지.'] },
-    clerk: { name: '등록 천사 노엘', ch: 'Villager', color: '#277a58', desk: true, lines: ['나라가 없나요? 여기서 귀화·용병·건국을 등록해요.'] },
+    clerk: { name: '등록 천사 노엘', ch: 'Villager', color: '#277a58', desk: true, lines: ['나라가 없나요? 여기서 귀화·용병·건국을 등록해요.', '나라가 있다면 나라 이름으로 인재 모집을 올릴 수도 있어요.'] },
     rest: { name: '쉼터지기 하루', ch: 'Monk2', color: '#4bb3c4', lines: ['조용히 쉬어 가요.', '여긴 나중에 쓰일지도 몰라요. 지금은 쉼터예요.'] },
   };
   const npcProp = (id, x, y) => ({ x, y, w: 1, h: 1, npc: id, draw: (g, X, Y) => { drawAngel(g, NPCS[id].ch, X, Y); nameTag(g, X, Y - 64, NPCS[id].name.split(' ').pop(), NPCS[id].color); } });
@@ -1395,6 +1407,23 @@
     OPL.push(side === 'angel' ? { who: '여신', text: '고마워요…… 끝까지, 함께해요.' } : { who: '악마', text: '크크, 현명한 선택이야. 무너지는 걸 같이 구경하자고.', devil: true, dark: true });
     OP.i++; showLine();
   }
+  // ------------------------------------------------------------ 자유 게시판 (가까이 가면 위에 작게 뜸 · 움직일 수 있음)
+  const BP = { view: 'list', sel: null, closed: false, open: false };
+  const fmtMD = (ts) => { const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()}`; };
+  function nearBigBoard() { if (player.scene !== 'sky' || !player.room) return false; for (const sp of player.room.sprites) if (sp.prop && sp.prop.bigBoard && Math.abs(sp.x - player.x) < 220 && player.y - sp.y < 170) return true; return false; }
+  function tickBoard() {
+    const nb = nearBigBoard(); if (!nb) BP.closed = false;
+    const show = nb && !BP.closed && ONLINE; if (show !== BP.open) { BP.open = show; $('boardPanel').hidden = !show; if (show) { BP.view = 'list'; renderBoard(); } }
+  }
+  function renderBoard() {
+    if (!BP.open) return; const list = BOARD.slice().reverse(), me = player.name;
+    $('bpList').hidden = BP.view !== 'list'; $('bpView').hidden = BP.view !== 'view'; $('bpForm').hidden = BP.view !== 'new';
+    if (BP.view === 'list') $('bpList').innerHTML = list.length ? list.map((q) => `<button type="button" class="bpRow ${BP.sel === q.id ? 'on' : ''}" data-id="${q.id}"><span class="n">${q.name === me ? '★' : q.id}</span><span class="a" style="${q.color ? `color:${esc(q.color)}` : ''}">${esc(q.nation || q.name)}</span><span class="d">${fmtMD(q.ts)}</span><span class="t">${esc(q.title)}</span></button>`).join('') : '<p class="bpEmpty">아직 글이 없어요 · 새 글로 인재 모집, 동맹 구함 같은 걸 올려 보세요</p>';
+    if (BP.view === 'view') { const q = BOARD.find((x) => x.id === BP.sel); if (!q) { BP.view = 'list'; return renderBoard(); } $('bpView').innerHTML = `<h3>${esc(q.title)}</h3><small>${q.nation ? `<b style="color:${esc(q.color)}">■ ${esc(q.nation)}</b> · ` : ''}${esc(q.name)} · ${fmtMD(q.ts)}</small><p>${esc(q.body || '(내용 없음)')}</p>`; }
+    if (BP.view === 'new') { $('bpAsNat').parentElement.hidden = !MY_NID; if (MY_NID) $('bpNatName').textContent = natName(MY_NID); }
+    const sel = BOARD.find((x) => x.id === BP.sel); $('bpDel').disabled = !(sel && sel.name === me) || BP.view === 'new'; $('bpViewBtn').textContent = BP.view === 'list' ? '보기' : '목록';
+    for (const b of $('bpList').querySelectorAll('[data-id]')) { b.onclick = () => { BP.sel = +b.dataset.id; renderBoard(); }; b.ondblclick = () => { BP.sel = +b.dataset.id; BP.view = 'view'; renderBoard(); }; }
+  }
   let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {}, MY_PCOIN = 0, MY_HATS = {}, MY_JOB = null;
   const jobIcon = (j) => (j && MPRules.JOBS[j] ? MPRules.JOBS[j].icon + ' ' : '');
   const TOOL_HINT = (k) => `${MPRules.TOOLS[k].name}이(가) 있어야 해요 · 하늘 천상 상점가 '치유의 샘'에서 사요`;
@@ -1546,12 +1575,13 @@
       name: '하늘 신전', desc: '신들의 공지 · 신탁 제단 · 멸망의 탑', w: 30, h: 18, pos: [1, 1], crowd: 10,
       floor: 'marble_w', wall: true, carpets: [[14, 2, 3, 16], [1, 7, 28, 3]], trim: '#e2b93b',
       emotes: ['신탁 봤어?', '오늘 공지 뭐임', '!', '?', '내일 어디 무너짐?', '탑이 빛난다'],
-      doors: [{ side: 'W', at: 8, to: 'market' }, { side: 'E', at: 8, to: 'council' }, { side: 'N', at: 15, to: 'plaza' }, { side: 'S', at: 15, to: 'ground' }],
+      doors: [{ side: 'W', at: 8, to: 'market' }, { side: 'E', at: 8, to: 'council' }, { side: 'N', at: 24, to: 'plaza' }, { side: 'S', at: 15, to: 'ground' }],
       props: [
         banner(4, 'blue'), banner(10, 'white'), banner(19, 'white'), banner(25, 'blue'),
-        P1(4, 4, column), P1(4, 12, column), P1(25, 4, column), P1(25, 12, column), P1(12, 4, column), P1(18, 4, column),
+        P1(4, 4, column), P1(4, 12, column), P1(25, 4, column), P1(25, 12, column), P1(10, 4, column), P1(20, 4, column),
         P1(2, 3, urn), P1(27, 3, urn), P1(2, 15, urn), P1(27, 15, urn),
         P1(12, 12, lantern), P1(18, 12, lantern),
+        { x: 11, y: 3, w: 8, h: 1, bigBoard: true, draw: bigBoard },
         { x: 5, y: 11, w: 3, h: 1, board: true, draw: (g, x, y) => { holyAltar(g, x, y, 40, 'book'); plaque(g, x, y - 92, '신탁 제단'); } },
         npcProp('priest', 9, 12),
         P1(11, 15, (g, x, y) => { g.fillStyle = '#d9d0c0'; g.fillRect(x - 18, y - 14, 36, 14); g.fillStyle = '#fffdf8'; g.fillRect(x - 16, y - 18, 32, 6); drawAngel(g, 'Princess', x, y - 16, true); }),
@@ -1577,7 +1607,7 @@
       ],
     },
     council: {
-      name: '회담장', desc: '나라끼리 조약을 맺는 곳 · 전쟁의 천사', w: 26, h: 16, pos: [2, 1], crowd: 7,
+      name: '회담장', desc: '나라끼리 조약을 맺는 곳 · 전쟁의 천사 · 유랑민 등록 창구', w: 26, h: 16, pos: [2, 1], crowd: 7,
       floor: 'marble_w', wall: true, carpets: [[8, 4, 10, 8], [0, 7, 8, 3]], trim: '#5b7fd6',
       emotes: ['불가침 조약 ㄱ?', '동맹 맺자', '조건이 뭔데', '배신하면 알지?', '왕끼리 얘기하자', '규칙서 읽어 봤어?'],
       doors: [{ side: 'W', at: 8, to: 'temple' }, { side: 'E', at: 4, to: 'secret1' }, { side: 'E', at: 12, to: 'secret2' }, { side: 'S', at: 13, to: 'jail' }],
@@ -1585,8 +1615,10 @@
         banner(5, 'red'), banner(13, 'white'), banner(20, 'red'),
         { x: 11, y: 6, w: 4, h: 2, draw: (g, x, y) => { holyAltar(g, x - 22, y, 34, 'book'); holyAltar(g, x + 40, y, 22, 'cup'); plaque(g, x, y - 96, '조약 제단'); } },
         npcProp('war', 17, 7),
+        { x: 5, y: 3, w: 4, h: 1, board: true, desk: 'wander', draw: (g, x, y) => { holyAltar(g, x, y, 36, 'book'); plaque(g, x, y - 92, '유랑민 등록 창구'); } },
+        npcProp('clerk', 3, 3),
         P1(9, 5, lantern), P1(16, 5, lantern), P1(9, 11, lantern), P1(16, 11, lantern),
-        P1(3, 12, column), P1(22, 12, column), P1(3, 3, urn), P1(22, 3, urn),
+        P1(3, 12, column), P1(22, 12, column), P1(22, 3, urn),
       ],
     },
     secret1: {
@@ -2033,7 +2065,7 @@
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
     if ((k === '[' || k === ']') && !ONLINE) { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { $('fragBook').hidden = true; $('pmenu').hidden = true; $('barracks').hidden = true; $('bagBox').hidden = true; closeTalk(); $('rulebook').hidden = true; $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
+    if (k === 'escape') { if (BP.open) { BP.closed = true; BP.open = false; $('boardPanel').hidden = true; } $('fragBook').hidden = true; $('pmenu').hidden = true; $('barracks').hidden = true; $('bagBox').hidden = true; closeTalk(); $('rulebook').hidden = true; $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
   });
   addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); if (k === 'j') atkUp(); });
   $('atkBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); atkDown(); });
@@ -2654,7 +2686,7 @@
         testMode = !!m.testMode; foundingOpen = m.foundingOpen !== false; applyWorld(m.owners, m.nations, m.view || null); showNotice(m.notice); unseenBattles();
         needFound = !m.view; if (!m.view) { if (titleDone) openFound('who'); } else $('found').hidden = true;
         chatLog = m.chat || []; renderChat();
-        wanderList = m.wander || [];
+        wanderList = m.wander || []; BOARD = m.board || [];
         const p = m.pos;
         if (p && p.scene === 'sky' && ROOMS[p.room]) { player.scene = 'sky'; player.room = ROOMS[p.room]; player.x = p.x; player.y = p.y; player.skyLeft = SKY_LIMIT; }
         else if (p && p.x != null && free(p.x, p.y, null)) { player.scene = 'ground'; player.room = null; player.x = p.x; player.y = p.y; }
@@ -2744,6 +2776,7 @@
       case 'fishBite': if (FISHING.on) FISHING.biteAt = performance.now() + m.wait; break;
       case 'fished': stopFishing(); toast(m.text); if (m.fish) { FISHPOP = { kind: m.fish, t0: performance.now() }; SND.play('coin'); } break;
       case 'needLogin': try { localStorage.removeItem('mp2026.token'); } catch (e) { /* 막힘 */ } showLogin(); break;
+      case 'board': BOARD = m.posts || []; renderBoard(); break;
       case 'frag': onFrag(m); break;
       case 'ko': onKo(m); break;
       case 'wiped': { // 관리자 초기화: 본 장면·전투 기록 지우고 새로고침 (계정까지 지웠으면 처음부터)
@@ -2830,31 +2863,41 @@
   for (const b of document.querySelectorAll('#chatTabs [data-ch]')) b.addEventListener('click', () => { chatCh = b.dataset.ch; renderChatTabs(); $('chatIn').focus(); });
 
   // 유랑민 등록소
-  const WANDER_KIND = { naturalize: '귀화 신청', mercenary: '용병 등록', found: '건국 대기' };
+  const WANDER_KIND = { naturalize: '귀화 신청', mercenary: '용병 등록', found: '건국 대기', recruit: '인재 모집' };
   function renderWander() {
     const box = $('wanderList'); box.textContent = '';
+    const hasNat = ONLINE && !!MY_NID; $('wanderSolo').hidden = hasNat; $('wanderNat').hidden = !hasNat;
+    if (hasNat) $('wanderNatName').textContent = natName(MY_NID);
+    const sel = $('wanderTarget'), cur = sel.value; sel.innerHTML = '<option value="">나라 고르기</option>' + Object.values(nationsPub || {}).filter((n) => n && !n.dead).map((n) => `<option>${esc(n.name)}</option>`).join(''); sel.value = cur;
     if (!wanderList.length) { box.textContent = '아직 등록한 사람이 없어요.'; return; }
-    for (const w of wanderList) {
-      const d = document.createElement('div');
-      d.textContent = `${WANDER_KIND[w.kind]} · ${w.name}${w.target ? ` → ${w.target}팀` : ''}`;
+    for (const w of wanderList.slice().sort((a, b) => (a.kind === 'recruit' ? 0 : 1) - (b.kind === 'recruit' ? 0 : 1))) {
+      const d = document.createElement('div'); d.className = 'wrow ' + w.kind;
+      d.innerHTML = w.kind === 'recruit' ? `<b style="color:${esc(w.color || '#2b2340')}">■ ${esc(w.nation)}</b> 인재 모집 · ${esc(w.target || '누구나 환영')} <small>(${esc(w.name)})</small>` : `${WANDER_KIND[w.kind]} · ${esc(w.name)}${w.target ? ` → ${esc(w.target)}` : ''}`;
       box.appendChild(d);
     }
   }
   function wanderRegister(kind, cancel) {
-    const target = $('wanderTarget').value.trim();
-    if (kind === 'naturalize' && !cancel && !target) { $('wanderMsg').textContent = '귀화할 나라(팀 번호)를 적어 주세요.'; return; }
+    const target = kind === 'recruit' ? $('wanderRecruit').value.trim() : $('wanderTarget').value.trim();
+    if (kind === 'naturalize' && !cancel && !target) { $('wanderMsg').textContent = '귀화할 나라를 골라 주세요.'; return; }
     if (ONLINE) { if (netOn) ws.send(JSON.stringify({ t: 'wander', kind, target, cancel: !!cancel })); }
     else {
       wanderList = wanderList.filter((w) => w.name !== player.name);
       if (!cancel) wanderList.push({ name: player.name, kind, target });
       renderWander();
     }
-    $('wanderMsg').textContent = cancel ? '등록을 취소했어요.' : `${WANDER_KIND[kind]} 완료! 왕들이 이 목록을 보고 연락해요.`;
+    $('wanderMsg').textContent = cancel ? '등록을 취소했어요.' : kind === 'recruit' ? '인재 모집을 올렸어요! 유랑민들이 이 목록을 보고 찾아와요.' : `${WANDER_KIND[kind]} 완료! 왕들이 이 목록을 보고 연락해요.`;
   }
   $('btnNat').addEventListener('click', () => wanderRegister('naturalize'));
   $('btnMerc').addEventListener('click', () => wanderRegister('mercenary'));
   $('btnFound').addEventListener('click', () => wanderRegister('found'));
-  $('btnWanderCancel').addEventListener('click', () => wanderRegister('mercenary', true));
+  $('btnWanderCancel').addEventListener('click', () => wanderRegister(MY_NID ? 'recruit' : 'mercenary', true));
+  $('btnRecruit').addEventListener('click', () => wanderRegister('recruit'));
+  $('bpViewBtn').addEventListener('click', () => { if (BP.view !== 'list') BP.view = 'list'; else if (BP.sel) BP.view = 'view'; else return toast('읽을 글을 먼저 골라 주세요'); renderBoard(); });
+  $('bpNew').addEventListener('click', () => { BP.view = BP.view === 'new' ? 'list' : 'new'; renderBoard(); if (BP.view === 'new') setTimeout(() => $('bpTitle').focus(), 30); });
+  $('bpDel').addEventListener('click', () => { if (BP.sel && confirm('이 글을 지울까요?')) { ws.send(JSON.stringify({ t: 'boardDel', id: BP.sel })); BP.sel = null; } });
+  $('bpQuit').addEventListener('click', () => { BP.closed = true; BP.open = false; $('boardPanel').hidden = true; });
+  $('bpSend').addEventListener('click', () => { const title = $('bpTitle').value.trim(); if (!title) return toast('제목을 적어 주세요'); ws.send(JSON.stringify({ t: 'boardPost', title, body: $('bpBody').value.trim(), asNation: $('bpAsNat').checked })); $('bpTitle').value = ''; $('bpBody').value = ''; BP.view = 'list'; renderBoard(); });
+  for (const id of ['bpTitle', 'bpBody']) $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (id === 'bpTitle') $('bpBody').focus(); else $('bpSend').click(); } if (e.key === 'Escape') e.target.blur(); });
   $('btnWanderClose').addEventListener('click', () => { $('wanderBox').hidden = true; });
 
   // 접속 화면
@@ -3165,7 +3208,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), room: (id) => testMode && enterRoom(id, 'ground') }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
@@ -3550,6 +3593,7 @@
 
     // 플레이어 이동
     stepPlayer(dt); tickHold(); tickFishing();
+    tickBoard();
     { const show = ONLINE && player.scene === 'ground' && matchMedia('(pointer: coarse)').matches && !TITLE.on; if ($('atkBtn').hidden === show) $('atkBtn').hidden = !show; }
     { const a = curAct(); if (a !== lastAct) { lastAct = a; if (netOn) ws.send(JSON.stringify({ t: 'act', a, fx: FISHING.x | 0, fy: FISHING.y | 0 })); } } // 도구를 주변에 알림
     if (player.scene === 'sky' && !(player.room.id === 'jail' && jailUntil > Date.now()) && !EDIT.on) {
