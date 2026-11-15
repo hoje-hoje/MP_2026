@@ -128,6 +128,12 @@ tr.editing td { background: #fff1b8; }
   </div>
 
   <section class="card">
+    <h2>🎓 직업 (오프라인 점심 전직) <span class="hint">학생마다 직업을 정해 주면 바로 그 학생 화면에 알림이 가요</span></h2>
+    <div class="row"><button id="jobLoad" type="button">학생 목록 불러오기</button><input id="jobFind" placeholder="닉네임 찾기" style="width:140px"><span class="muted" id="jobInfo"></span></div>
+    <div class="tablewrap" style="max-height:360px"><table><thead><tr><th>닉네임</th><th>나라</th><th>접속</th><th>직업</th></tr></thead><tbody id="jobList"></tbody></table></div>
+  </section>
+
+  <section class="card">
     <h2>👛 학생에게 내 코인 주기 <span class="hint">이벤트·발표 보상 · 학생 개인 지갑으로 들어가요 (머리 장식·작업 도구를 살 수 있어요)</span></h2>
     <div class="row"><label>닉네임 <input id="gpName" placeholder="게임 닉네임" style="width:140px"></label><label>코인 <input id="gpN" type="number" value="100" style="width:90px"></label><label>이유 <input id="gpWhy" placeholder="예: 퀴즈 1등" style="width:160px"></label><button id="gpGo" class="primary" type="button">주기</button><span class="muted" id="gpRes"></span></div>
     <p class="muted">빼려면 마이너스로 적어요 (예: -50). 접속 중이면 학생 화면에 바로 알림이 떠요.</p>
@@ -265,6 +271,12 @@ tr.editing td { background: #fff1b8; }
   let S = null, timer = null, msgTimer = null;
 
   function say(text) { const el = $('msg'); el.textContent = text; el.hidden = false; clearTimeout(msgTimer); msgTimer = setTimeout(() => { el.hidden = true; }, 3500); }
+  const JOBS = { '': '— 없음 —', knight: '⚔ 기사 · 수정 5번에 첩보', rogue: '🗡 도적 · 털기 2배', mage: '🔥 마법사 · 벽 2배 빨리 부숨', mechanic: '🔧 정비공 · 우리 벽 고치기', farmer: '🌾 농사꾼 · 작물 2배 빨리', fisher: '🎣 어부 · 낚시 2배', builder: '🧱 건축업자 · 벽 내구도 2배' };
+  let jobPlayers = [];
+  const drawJobs = () => { const q = ($('jobFind').value || '').trim(); $('jobList').innerHTML = jobPlayers.filter((p) => !q || p.name.includes(q)).map((p) => `<tr><td>${p.name}</td><td>${p.nation || '<span class="muted">유랑민</span>'}</td><td>${p.online ? '🟢' : ''}</td><td><select data-job="${p.name}">${Object.entries(JOBS).map(([k, v]) => `<option value="${k}" ${k === p.job ? 'selected' : ''}>${v}</option>`).join('')}</select></td></tr>`).join(''); $('jobInfo').textContent = `${jobPlayers.length}명 · 직업 있음 ${jobPlayers.filter((p) => p.job).length}명`; };
+  document.addEventListener('click', async (e) => { if (e.target.id !== 'jobLoad') return; try { jobPlayers = (await api('players')).players; drawJobs(); } catch (er) {} });
+  document.addEventListener('input', (e) => { if (e.target.id === 'jobFind') drawJobs(); });
+  document.addEventListener('change', async (e) => { const n = e.target.dataset && e.target.dataset.job; if (!n) return; try { await api('setJob', { name: n, job: e.target.value }); const p = jobPlayers.find((x) => x.name === n); if (p) p.job = e.target.value; drawJobs(); say(`${n} → ${JOBS[e.target.value]}`); } catch (er) {} });
   document.addEventListener('click', async (e) => { if (e.target.id !== 'gpGo') return; try { const r = await api('giveP', { name: $('gpName').value, n: +$('gpN').value, why: $('gpWhy').value || '신의 선물' }); $('gpRes').textContent = `${r.name} → 내 코인 ${r.pcoin}${r.online ? ' (접속 중 · 알림 보냄)' : ' (다음 접속 때 보여요)'}`; say('줬어요'); } catch (er) {} });
   async function api(op, data) {
     const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key, op }, data || {})) });

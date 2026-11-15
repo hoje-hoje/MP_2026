@@ -101,6 +101,7 @@ const world = new World(MAP, state.world || null);
 const MPRules = require('../client/rules.js');
 const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT, BUILD_BY, normItems, tileItem, CROPS, FISH, weatherOf, TOOLS } = MPRules;
 const needTool = (s, k) => !!(s.acc.tools && s.acc.tools[k]);
+const jobOf = (s) => (s && s.acc && s.acc.job) || null; // 직업
 // 거래할 수 있는 개인 물건: 내 가방(물고기) · 모자 · 도구
 function tradables(acc) { const out = []; for (const [k, v] of Object.entries(acc.bag || {})) if (v > 0) out.push({ k, n: v }); for (const k of Object.keys(acc.hats || {})) out.push({ k: 'hat:' + k, n: 1 }); for (const k of Object.keys(acc.tools || {})) out.push({ k: 'tool:' + k, n: 1 }); return out; }
 function okOffer(acc, items) { const need = {}; for (const q of items) need[q.k] = (need[q.k] || 0) + q.n; return Object.entries(need).every(([k, n]) => k.startsWith('hat:') ? n === 1 && (acc.hats || {})[k.slice(4)] : k.startsWith('tool:') ? n === 1 && (acc.tools || {})[k.slice(5)] : (BUILD_BY[k] && BUILD_BY[k].fish && (acc.bag || {})[k] >= n)); }
@@ -257,7 +258,7 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 65536 }); // 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function meta(s) {
   const n = world.nationOfPlayer(s.token);
-  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
+  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), job: s.acc.job || null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
 }
 // 체포 횟수 (하루 단위), 감옥
 function arrestsToday(acc) { return acc.arrests && acc.arrests.day === gameDayKey() ? acc.arrests.n : 0; }
@@ -312,7 +313,7 @@ wss.on('connection', (ws) => {
         t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        job: acc.job || null, tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
       return;
@@ -709,7 +710,7 @@ wss.on('connection', (ws) => {
           if (mineFloor && k === 'floor') { const old = tileItem(cur); if (old === B.id) continue; n.items[old] = (n.items[old] || 0) + 1; } // 우리 바닥 위에 다른 디자인: 바꿔 깔기 (원래 바닥은 돌려받음)
           n.items[B.id]--; done++;
           if (k === 'trap') { world.s.traps[i] = n.id; sendTrap(n.id, i, true); }
-          else { world.s.tiles[i] = k === 'farm' || k === 'water' ? { k, n: n.id, id: B.id } : k === 'wall' ? { k, n: n.id, id: B.id, hp: NUM.buildHp } : { k, n: n.id, id: B.id }; if (under) world.s.tiles[i].under = under; sendTile(i); }
+          else { world.s.tiles[i] = k === 'farm' || k === 'water' ? { k, n: n.id, id: B.id } : k === 'wall' ? (jobOf(s) === 'builder' ? { k, n: n.id, id: B.id, hp: NUM.buildHp * 2, max: NUM.buildHp * 2 } : { k, n: n.id, id: B.id, hp: NUM.buildHp }) : { k, n: n.id, id: B.id }; if (under) world.s.tiles[i].under = under; sendTile(i); }
         }
         if (done || m.t === 'place') { dirty = true; sendViews([n.id]); }
         if (!done && why) send(ws, { t: 'err', text: why });
@@ -722,8 +723,9 @@ wss.on('connection', (ws) => {
         const x = m.x | 0, y = m.y | 0, e = world.s.tiles[tileIdx(x, y)];
         if (!nextTo(s, x, y, 1.8) || !(tileAt(x, y) === TT.WATER || (e && (e.k === 'water' || e.canal)))) return send(ws, { t: 'err', text: '물을 바라보고 던져요' });
         const day = gameDayKey(); s.acc.fished = s.acc.fished && s.acc.fished.day === day ? s.acc.fished : { day, n: 0 };
-        if (s.acc.fished.n >= NUM.fishPerDay) return send(ws, { t: 'err', text: `오늘은 물고기를 ${NUM.fishPerDay}마리 다 잡았어요 · 내일 또!` });
-        const rain = curWeather() === 'rain', [a, b] = NUM.fishBite, wait = (a + Math.random() * (b - a)) * (rain ? NUM.fishRainK : 1) * 1000;
+        const fk = jobOf(s) === 'fisher' ? 2 : 1, perDay = NUM.fishPerDay * fk; // 어부: 2배
+        if (s.acc.fished.n >= perDay) return send(ws, { t: 'err', text: `오늘은 물고기를 ${perDay}마리 다 잡았어요 · 내일 또!` });
+        const rain = curWeather() === 'rain', [a, b] = NUM.fishBite, wait = (a + Math.random() * (b - a)) * (rain ? NUM.fishRainK : 1) / fk * 1000;
         s.fishing = { at: now() + wait, rain }; send(ws, { t: 'fishBite', wait: Math.round(wait), rain });
         break;
       }
@@ -735,7 +737,7 @@ wss.on('connection', (ws) => {
         const list = Object.entries(FISH).map(([k, f]) => [k, f.w * (f.rare ? (F.rain ? 1.5 : 1) * (m.grade === 'perfect' ? 1.6 : 1) : 1)]);
         let r = Math.random() * list.reduce((a, [, w]) => a + w, 0), pick = list[0][0]; for (const [k, w] of list) { if ((r -= w) <= 0) { pick = k; break; } }
         s.acc.bag = s.acc.bag || {}; s.acc.bag['fi_' + pick] = (s.acc.bag['fi_' + pick] || 0) + 1; s.acc.fished.n++; dirty = true; send(ws, { t: 'bag', bag: s.acc.bag }); // 물고기는 내 가방
-        send(ws, { t: 'fished', fish: pick, rare: !!FISH[pick].rare, text: `${FISH[pick].rare ? '✨ ' : ''}${FISH[pick].name}을(를) 낚았어요! (오늘 ${s.acc.fished.n}/${NUM.fishPerDay}) → 내 가방` });
+        send(ws, { t: 'fished', fish: pick, rare: !!FISH[pick].rare, text: `${FISH[pick].rare ? '✨ ' : ''}${FISH[pick].name}을(를) 낚았어요! (오늘 ${s.acc.fished.n}/${NUM.fishPerDay * (jobOf(s) === 'fisher' ? 2 : 1)}) → 내 가방` });
         if (pick === 'legend' || pick === 'goldcarp') notifyNation(n.id, `🎣 ${s.acc.name}님이 ${FISH[pick].name}을(를) 낚았어요!`);
         break;
       }
@@ -760,7 +762,7 @@ wss.on('connection', (ws) => {
             if (e.crop) { why = '이미 심은 칸이 있어요'; continue; }
             if (!(n.items[B.id] > 0)) { why = '씨앗이 모자라요 (하늘 정원 천사에게서 사요)'; break; }
             let near = false; for (let dy = -NUM.canalRange; dy <= NUM.canalRange && !near; dy++) for (let dx = -NUM.canalRange; dx <= NUM.canalRange; dx++) { const w2 = world.s.tiles[tileIdx(x + dx, y + dy)]; if (w2 && (w2.k === 'water' || w2.canal)) { near = true; break; } }
-            n.items[B.id]--; e.crop = { c: B.crop, at: Date.now(), d: Math.round(CROPS[B.crop].min * 60e3 * (near ? NUM.canalBoost : 1) / (+process.env.CROP_FAST || 1)), w: near ? 1 : 0 }; done++; sendTile(i);
+            n.items[B.id]--; e.crop = { c: B.crop, at: Date.now(), d: Math.round(CROPS[B.crop].min * 60e3 * (near ? NUM.canalBoost : 1) * (jobOf(s) === 'farmer' ? 0.5 : 1) / (+process.env.CROP_FAST || 1)), w: near ? 1 : 0 }; done++; sendTile(i);
           } else if (m.t === 'fert') {
             if (!e.crop) { why = '심은 작물이 없어요'; continue; }
             if (e.crop.f) { why = '이미 비료를 준 작물이에요'; continue; }
@@ -847,13 +849,20 @@ wss.on('connection', (ws) => {
         notifyNation(n.id, `🧺 ${s.acc.name}님이 ${B.name} ${cnt}개를 팔았어요 (나라 코인 +${coin - mine})`);
         break;
       }
+      case 'repairB': { // 정비공: 우리 벽·기둥 고치기 (한 번에 +20)
+        if (jobOf(s) !== 'mechanic') return send(ws, { t: 'err', text: '정비공만 고칠 수 있어요' });
+        const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y), e = world.s.tiles[i], n = world.nationOfPlayer(s.token);
+        if (!e || e.k !== 'wall' || !n || e.n !== n.id || !nextTo(s, x, y)) return;
+        if (now() - (s.lastRepair || 0) < 400) return; s.lastRepair = now();
+        const mx = e.max || NUM.buildHp; if ((e.hp ?? mx) >= mx) return; e.hp = Math.min(mx, (e.hp ?? mx) + 20); dirty = true; sendTile(i); break;
+      }
       case 'hitB': { // 남의 벽·기둥 때리기: 한 번에 내구도 −10, 0이 되면 부서짐 (내구도는 맞을 때만 보임)
         const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y), e = world.s.tiles[i];
         const n = world.nationOfPlayer(s.token);
         if (!e || e.k !== 'wall' || (n && n.id === e.n) || !nextTo(s, x, y)) return;
         if (now() - (s.lastHitB || 0) < NUM.hitCdMs) return; s.lastHitB = now();
         if (now() - (s.lastBreakAlert || 0) > 15000) { s.lastBreakAlert = now(); notifyNation(e.n, `🧱 ${(BUILD_BY[tileItem(e)] || {}).name || '벽'}이(가) 공격받고 있어요! (${(world.t[terrAtTile(x, y)] || {}).name} · ${n ? n.name + '의 ' : ''}${s.acc.name})`); }
-        e.hp = (e.hp ?? NUM.buildHp) - NUM.hitDmg; dirty = true;
+        e.hp = (e.hp ?? NUM.buildHp) - NUM.hitDmg * (jobOf(s) === 'mage' ? 2 : 1); dirty = true; // 마법사: 2배
         if (e.hp <= 0) { if (e.under) world.s.tiles[i] = { k: 'floor', n: e.n, id: e.under }; else delete world.s.tiles[i]; sendTile(i); notifyNation(e.n, `🧱 ${(world.t[terrAtTile(x, y)] || {}).name}의 ${(BUILD_BY[tileItem(e)] || {}).name || '벽'}이(가) 부서졌어요!`); send(ws, { t: 'ok', text: '부쉈어요!' }); }
         else sendTile(i);
         break;
@@ -905,7 +914,8 @@ wss.on('connection', (ws) => {
         }
         if (!s.stealing || s.stealing.nid !== V.id || now() - s.stealing.at < NUM.stealSec * 1000 - 300) return;
         s.stealing = null;
-        const coin = Math.min(NUM.stealMax.coin, Math.floor(V.coin * NUM.stealPct)), wood = Math.min(NUM.stealMax.wood, Math.floor((V.wood || 0) * NUM.stealPct));
+        const rk = jobOf(s) === 'rogue' ? 2 : 1; // 도적: 2배
+        const coin = Math.min(NUM.stealMax.coin * rk, Math.floor(V.coin * NUM.stealPct * rk)), wood = Math.min(NUM.stealMax.wood * rk, Math.floor((V.wood || 0) * NUM.stealPct * rk));
         if (!coin && !wood) return send(ws, { t: 'err', text: '저장소가 텅 비었어요' });
         V.coin -= coin; V.wood = (V.wood || 0) - wood; s.acc.carry = { coin, wood, from: V.id }; s.acc.stoleAt[V.id] = Date.now(); dirty = true;
         addNotoriety(s.acc, NUM.notoriety.steal); stat(s.acc, 'steals');
@@ -957,9 +967,10 @@ wss.on('connection', (ws) => {
         s.lastHit = now();
         s.acc.hits = s.acc.hits && s.acc.hits.terr === t.id && now() - s.acc.hits.at < NUM.scoutResetMin * 60e3 ? s.acc.hits : { terr: t.id, n: 0 };
         s.acc.hits.n++; s.acc.hits.at = now(); addNotoriety(s.acc, NUM.notoriety.hit); dirty = true;
-        send(ws, { t: 'hitn', terr: t.id, n: s.acc.hits.n, need: NUM.scoutHits });
+        const need = jobOf(s) === 'knight' ? 5 : NUM.scoutHits; // 기사: 5번
+        send(ws, { t: 'hitn', terr: t.id, n: s.acc.hits.n, need });
         if (s.acc.hits.n % 5 === 0) sendMeta(s); // 악명 표시 갱신
-        if (s.acc.hits.n >= NUM.scoutHits) {
+        if (s.acc.hits.n >= need) {
           s.acc.hits = null; const D = world.nation(own); stat(s.acc, 'scouts'); sendMeta(s);
           notifyNation(D.id, `🔍 누군가 우리 병력을 엿봤어요 (${t.name} 수정)`);
           // 첩보 카드: 이 나라가 우리를 공격할 때 전선 하나를 볼 수 있음 (사람마다 이 나라에서 2시간에 1장)
@@ -1298,6 +1309,17 @@ async function adminOp(m) {
     }
     case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
     case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
+    case 'players': { // 학생 목록 (직업 정하기용)
+      const list = Object.entries(state.accounts).filter(([, a]) => a.nameSet && a.name).map(([k, a]) => { const n = world.nationOfPlayer(k); return { name: a.name, nation: n ? n.name : '', job: a.job || '', online: [...online.values()].some((o) => o.token === k), pcoin: a.pcoin || 0 }; }).sort((x, y) => (x.nation || '힣').localeCompare(y.nation || '힣') || x.name.localeCompare(y.name));
+      return { ok: true, players: list };
+    }
+    case 'setJob': { // 전직 (관리자)
+      const ent = Object.entries(state.accounts).find(([, a]) => a.name === String(m.name || '')); if (!ent) return { ok: false, err: '그 학생이 없어요' };
+      const job = MPRules.JOBS[m.job] ? m.job : null; ent[1].job = job; dirty = true;
+      const o = [...online.values()].find((x) => x.token === ent[0]);
+      if (o) { send(o.ws, { t: 'job', job, text: job ? `🎓 전직! 이제 ${MPRules.JOBS[job].name}${((MPRules.JOBS[job].name.charCodeAt(MPRules.JOBS[job].name.length - 1) - 0xac00) % 28) ? '이에요' : '예요'} · ${MPRules.JOBS[job].perk}` : '직업이 없어졌어요' }); sendMeta(o); }
+      return { ok: true };
+    }
     case 'giveP': { // 학생에게 내 코인 주기 (이벤트 보상) — 닉네임으로 찾음
       const name = String(m.name || '').trim(), amt = Math.trunc(+m.n || 0);
       if (!name || !amt || Math.abs(amt) > 100000) return { ok: false, err: '닉네임과 숫자를 확인해 주세요' };

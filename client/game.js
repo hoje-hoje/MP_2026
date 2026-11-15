@@ -1037,8 +1037,8 @@
   }
   const HPSEEN = new Map(); // 칸 → 마지막으로 맞은 시각 (내구도 바는 맞은 뒤 3초만 보임)
   function drawHpBar(g, x, y, e, i) {
-    const at = HPSEEN.get(i); if (!at || performance.now() - at > 3000 || e.hp == null || e.hp >= BHP) return;
-    const r = Math.max(0, e.hp / BHP), w = 34, L = Math.round(x - w / 2), T = Math.round(y - 76);
+    const MX = e.max || BHP, at = HPSEEN.get(i); if (!at || performance.now() - at > 3000 || e.hp == null || e.hp >= MX) return;
+    const r = Math.max(0, e.hp / MX), w = 34, L = Math.round(x - w / 2), T = Math.round(y - 76);
     g.fillStyle = '#2b2340'; g.fillRect(L - 2, T - 2, w + 4, 9); g.fillStyle = '#4a3f5e'; g.fillRect(L, T, w, 5);
     g.fillStyle = r > 0.5 ? '#5ad16a' : r > 0.25 ? '#ffd34d' : '#ff5a4a'; g.fillRect(L, T, Math.round(w * r), 5); g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(L, T, Math.round(w * r), 2);
   }
@@ -1180,7 +1180,8 @@
       ctx.fillStyle = 'rgba(235,245,255,0.95)'; const hgt = Math.sin(k * Math.PI) * 9; ctx.fillRect(x - 5 - k * 5, y - hgt, 2, 2); ctx.fillRect(x + 4 + k * 5, y - hgt, 2, 2); ctx.fillRect(x - 1, y - hgt * 1.4, 2, 2); }
     ctx.globalAlpha = 1; ctx.restore();
   }
-  let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {}, MY_PCOIN = 0, MY_HATS = {};
+  let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {}, MY_PCOIN = 0, MY_HATS = {}, MY_JOB = null;
+  const jobIcon = (j) => (j && MPRules.JOBS[j] ? MPRules.JOBS[j].icon + ' ' : '');
   const TOOL_HINT = (k) => `${MPRules.TOOLS[k].name}이(가) 있어야 해요 · 하늘 천상 상점가 '치유의 샘'에서 사요`;
   // ------------------------------------------------------------ 동맹 계약서 (두 왕이 만나서 서명)
   const CONTRACT = { cid: null, me: null, signed: {}, drawing: false, dirty: false };
@@ -1261,7 +1262,7 @@
   function myTradables() { const out = []; for (const [k, v] of Object.entries(MY_BAG)) if (v > 0) out.push({ k, n: v }); for (const k of Object.keys(MY_HATS)) out.push({ k: 'hat:' + k, n: 1 }); for (const k of Object.keys(MY_TOOLS)) out.push({ k: 'tool:' + k, n: 1 }); return out; }
   function openBag() {
     const list = myTradables();
-    $('bagCoin').innerHTML = `👛 내 코인 <b>${MY_PCOIN.toLocaleString()}</b>`;
+    $('bagCoin').innerHTML = `${MY_JOB ? `<span class="bagJob">${jobIcon(MY_JOB)}${MPRules.JOBS[MY_JOB].name} · ${MPRules.JOBS[MY_JOB].perk}</span>` : '<span class="bagJob">직업 없음 (오프라인 점심 전직)</span>'} 👛 내 코인 <b>${MY_PCOIN.toLocaleString()}</b>`;
     $('bagBody').innerHTML = list.length ? list.map((q) => `<div class="stItem"><canvas data-pk="${q.k}" width="56" height="56"></canvas><span>${esc(persName(q.k))}</span>${q.n > 1 || !q.k.includes(':') ? `<i>${q.n}</i>` : ''}</div>`).join('') : '<p class="stEmpty">가방이 비었어요 · 낚시로 물고기를 잡거나, 상점에서 도구·모자를 사요</p>';
     for (const c of $('bagBody').querySelectorAll('[data-pk]')) persIcon(c, c.dataset.pk);
     $('bagDonate').hidden = !MY_NID; $('bagBox').hidden = false;
@@ -2016,6 +2017,7 @@
     }
     { const fe = TILES[fy * W + fx], wet = (tileAt(fx, fy) === T.WATER && !(fe && fe.k === 'bridge')) || (fe && fe.k === 'water') || (GFLOOR.size && isWater(GFLOOR.get(fy * W + fx))); if (wet && MY_NID && !build.on) return !MY_TOOLS.rod ? { kind: 'info', text: '🎣 물 · ' + TOOL_HINT('rod') } : { kind: 'fish', x: fx, y: fy, text: `낚시하기 (E)${WEATHER === 'rain' ? ' · 🌧 비 보너스' : ''}` }; } // 물을 바라보면 낚시
     if (treeAt(fx, fy) && MY_NID && ownerOf(terrAt(fx, fy)) === MY_NID) return { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '나무 베기 · E 꾹 누르기' };
+    if (e && e.k === 'wall' && e.n === MY_NID && MY_JOB === 'mechanic' && (e.hp ?? (e.max || MPRules.NUM.buildHp)) < (e.max || MPRules.NUM.buildHp)) return { kind: 'repairB', x: fx, y: fy, text: `🔧 ${(BUILD_BY[tileItem(e)] || {}).name || '벽'} 고치기 · E (꾹 = 계속) · 내구도 ${e.hp}/${e.max || MPRules.NUM.buildHp}` };
     if (e && e.k === 'wall' && e.n !== MY_NID) return { kind: 'hitB', x: fx, y: fy, text: `${natName(e.n)} ${(BUILD_BY[tileItem(e)] || {}).name || '벽'} 때리기 · E (꾹 = 계속) · 내구도 ${e.hp ?? MPRules.NUM.buildHp}/${MPRules.NUM.buildHp}` };
     return null;
   }
@@ -2025,7 +2027,7 @@
   let hitTimer = 0, hitOn = false;
   let farmFlash = 0;
   function curAct() { return performance.now() < farmFlash ? 'farm' : FISHING.on ? 'fish' : hitOn ? 'hit' : hold.on ? ({ chop: 'chop', mine: 'mine' }[hold.kind] || null) : null; }
-  function pressE() { if (near && near.kind === 'hitB') { const n = near, go = () => { if (netOn) ws.send(JSON.stringify({ t: 'hitB', x: n.x, y: n.y })); player.atkT = 0.2; }; go(); clearInterval(hitTimer); hitTimer = setInterval(go, 420); hitOn = true; return; } if (near && near.hold) startHold(near); else interact(); }
+  function pressE() { if (near && (near.kind === 'hitB' || near.kind === 'repairB')) { const n = near, go = () => { if (netOn) ws.send(JSON.stringify({ t: n.kind, x: n.x, y: n.y })); player.atkT = 0.2; }; go(); clearInterval(hitTimer); hitTimer = setInterval(go, 420); hitOn = true; return; } if (near && near.hold) startHold(near); else interact(); }
   function releaseE() { clearInterval(hitTimer); hitOn = false; if (hold.on) cancelHold(); }
   function startHold(n) {
     Object.assign(hold, { on: true, t0: performance.now(), ms: n.hold, kind: n.kind, x: n.x, y: n.y });
@@ -2424,7 +2426,7 @@
         myId = m.id; netOn = true; store('mp2026.token', m.token);
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
-        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {}; MY_PCOIN = m.pcoin | 0; MY_HATS = m.hats || {}; MY_BAG = m.bag || {}; if (player.look.hat && !MY_HATS[player.look.hat]) player.look.hat = ''; renderInv();
+        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {}; MY_JOB = m.job || null; MY_PCOIN = m.pcoin | 0; MY_HATS = m.hats || {}; MY_BAG = m.bag || {}; if (player.look.hat && !MY_HATS[player.look.hat]) player.look.hat = ''; renderInv();
         if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
         if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); GPROPS.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls, clear: m.groundEdits.clear, props: m.groundEdits.props }); invalidateChunks(); mapSig = ''; }
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
@@ -2447,7 +2449,7 @@
         if (!r) { r = { x: null, y: null, tx: null, ty: null, dir: 1, moving: false, emote: null, emoteT: 0 }; remotes.set(q.id, r); }
         r.name = q.name; r.team = q.team; r.tag = teamColor(q.team);
         r.look = Object.assign({ seed: (q.id * 0.37) % 3 }, q.look, { red: q.red | 0 });
-        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || ''; r.king = !!q.king;
+        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || ''; r.king = !!q.king; r.job = q.job || null;
         break;
       }
       case 'leave': remotes.delete(m.id); break;
@@ -2486,7 +2488,7 @@
         break;
       }
       case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
-      case 'tile': { const prev = TILES[m.i]; if (m.e && prev && m.e.hp != null && m.e.hp < (prev.hp ?? MPRules.NUM.buildHp)) { HPSEEN.set(m.i, performance.now()); SND.play('hit'); } else if (m.e && m.e.n === MY_NID && !prev) SND.play('place'); const wasW = prev && (prev.k === 'water' || prev.k === 'bridge'), isW = m.e && (m.e.k === 'water' || m.e.k === 'bridge'); if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); if (wasW || isW) { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx || dy) dirtyTile(m.i + dy * W + dx); if ((m.e || prev).k === 'bridge') for (let k = 3; k <= 16; k++) { dirtyTile(m.i + k); dirtyTile(m.i - k); dirtyTile(m.i + k * W); dirtyTile(m.i - k * W); } } break; } // 수로가 바뀌면 이웃 밭·수로 다시 그림
+      case 'tile': { const prev = TILES[m.i]; if (m.e && prev && m.e.hp != null && m.e.hp !== (prev.hp ?? (prev.max || MPRules.NUM.buildHp))) { HPSEEN.set(m.i, performance.now()); SND.play(m.e.hp < (prev.hp ?? 1e9) ? 'hit' : 'place'); } else if (m.e && m.e.n === MY_NID && !prev) SND.play('place'); const wasW = prev && (prev.k === 'water' || prev.k === 'bridge'), isW = m.e && (m.e.k === 'water' || m.e.k === 'bridge'); if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); if (wasW || isW) { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx || dy) dirtyTile(m.i + dy * W + dx); if ((m.e || prev).k === 'bridge') for (let k = 3; k <= 16; k++) { dirtyTile(m.i + k); dirtyTile(m.i - k); dirtyTile(m.i + k * W); dirtyTile(m.i - k * W); } } break; } // 수로가 바뀌면 이웃 밭·수로 다시 그림
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
@@ -2512,6 +2514,7 @@
       case 'tradeState': if (m.tid === TRADE.tid) { TRADE.offer = m.offer; TRADE.ready = m.ready; TRADE.go = m.go; renderTrade(); } break;
       case 'tradeDone': if (m.tid === TRADE.tid) { MY_PCOIN = m.pcoin | 0; MY_BAG = m.bag || {}; MY_HATS = m.hats || {}; MY_TOOLS = m.tools || {}; if (player.look.hat && !MY_HATS[player.look.hat]) { player.look.hat = ''; saveLook(); } renderInv(); $('trade').hidden = true; TRADE.tid = null; toast('🤝 거래 완료!'); SND.play('coin'); } break;
       case 'tradeEnd': if (m.tid === TRADE.tid) { $('trade').hidden = true; TRADE.tid = null; toast(m.text); } break;
+      case 'job': MY_JOB = m.job || null; toast(m.text); SND.play('war'); break;
       case 'contract': openContract(m); break;
       case 'contractSig': contractSig(m); break;
       case 'contractDone': contractDone(m); break;
@@ -3368,7 +3371,7 @@
     }
     for (const o of list) {
       if (o.draw) continue;
-      nameTag(ctx, o.x, o.y - 56, (o === player ? player.name : o.name) + (o.badge ? ' ' + o.badge : ''), o === player ? player.tag : o.tag); // 이름 옆 악명 (💀 / 체포왕 👮)
+      nameTag(ctx, o.x, o.y - 56, jobIcon(o === player ? MY_JOB : o.job) + (o === player ? player.name : o.name) + (o.badge ? ' ' + o.badge : ''), o === player ? player.tag : o.tag); // 이름 옆 악명 (💀 / 체포왕 👮)
       if (o.carry) { // 훔친 가방: 머리 옆에 큰 자루
         const b = Math.sin(performance.now() / 150) * 2, bx = o.x + 24, by = o.y - 40 + b;
         ctx.fillStyle = '#2b2340'; ctx.fillRect(bx - 12, by - 14, 24, 22); ctx.fillStyle = '#9a6a35'; ctx.fillRect(bx - 10, by - 12, 20, 18); ctx.fillStyle = '#c98c4a'; ctx.fillRect(bx - 10, by - 12, 20, 5);

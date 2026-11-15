@@ -736,6 +736,16 @@
   // 날씨: 일차·시간대마다 정해짐 (약 30% 비). 비 오면 낚시 입질이 빠르고 귀한 물고기가 잘 잡힘
   function weatherOf(ms = Date.now()) { const blk = Math.floor(ms / 1800e3); return hash(blk, 991, 17) < NUM.rainChance ? 'rain' : 'clear'; } // 가끔 30분씩 비 (30분 칸마다 정함)
   // 머리 장식 가격 (개인 지갑으로 삼)
+  // 직업 (오프라인 점심 전직 → 관리자가 정해 줌). w = 실시간 전투 무기
+  const JOBS = {
+    knight: { name: '기사', icon: '⚔', w: 'sword', perk: '적 수정을 5번만 때려도 첩보 (보통 10번)' },
+    rogue: { name: '도적', icon: '🗡', w: 'dagger', perk: '저장소를 털면 2배' },
+    mage: { name: '마법사', icon: '🔥', w: 'magic', perk: '벽·기둥을 2배 빨리 부숨' },
+    mechanic: { name: '정비공', icon: '🔧', w: 'axe', perk: '우리 벽·기둥 고치기 (터렛은 나중에)' },
+    farmer: { name: '농사꾼', icon: '🌾', w: 'spear', perk: '심은 작물이 2배 빨리 자람' },
+    fisher: { name: '어부', icon: '🎣', w: 'bow', perk: '입질 2배 빠름 · 하루 2배 낚음' },
+    builder: { name: '건축업자', icon: '🧱', w: 'axe', perk: '놓는 벽·기둥 내구도 2배' },
+  };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
