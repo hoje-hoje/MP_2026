@@ -4324,35 +4324,23 @@
   const TITLE = { on: false, x: 0, y: 0, vx: 0, vy: 0 };
   let lastDt = 0.016; const dt0 = () => lastDt;
   // 로고: MP 모노그램 (M의 오른쪽 기둥 = P의 기둥, 가운데 가로줄). 매끈한 글자 + 파스텔 그라데이션 + 두꺼운 남색 테두리 + 흰 안쪽 테두리 + 광택 + 반짝이
+  // 로고: 작게 그린 글자에 도트 테두리·그림자를 붙인 뒤 크게 키움 (MP)
   function makeLogo(cv) {
-    const S = 2, W2 = 500 * S, H2 = 300 * S; cv.width = W2; cv.height = H2; const g = cv.getContext('2d');
-    const mk = () => { const c = document.createElement('canvas'); c.width = W2; c.height = H2; return c; };
-    const ox = 44, oy = 14; // 글자 묶음을 가운데로
-    const shape = (q) => { // 글자 모양 (한 가지 색으로)
-      q.save(); q.scale(S, S); q.translate(ox, oy); q.fillStyle = '#000'; q.strokeStyle = '#000';
-      const R = (x, y, w, h) => q.fillRect(x, y, w, h), poly = (...pts) => { q.beginPath(); q.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) q.lineTo(pts[i], pts[i + 1]); q.closePath(); q.fill(); };
-      R(62, 46, 16, 190); R(44, 40, 44, 11); R(38, 230, 56, 12);               // M 왼쪽 기둥 + 세리프
-      poly(64, 40, 100, 40, 198, 236, 168, 236);                                // 굵은 대각선
-      poly(178, 236, 194, 236, 284, 44, 270, 44);                               // 가는 대각선
-      R(272, 44, 32, 192); R(254, 40, 92, 12); R(250, 230, 76, 12);             // 같이 쓰는 기둥 + 세리프
-      q.lineWidth = 24; q.beginPath(); q.moveTo(298, 52); q.lineTo(338, 52); q.arc(338, 101, 49, -Math.PI / 2, Math.PI / 2); q.lineTo(298, 150); q.stroke(); // P 고리
-      R(210, 140, 66, 9);                                                        // 가운데 가로줄
-      q.restore();
+    const font = getComputedStyle(document.documentElement).getPropertyValue('--font-display').trim() || 'monospace';
+    const W2 = 112, H2 = 50; cv.width = W2; cv.height = H2; const g = cv.getContext('2d');
+    const layer = (text, px, y, fill, edge, drop) => {
+      const m = document.createElement('canvas'); m.width = W2; m.height = H2; const mg = m.getContext('2d');
+      mg.font = `${px}px ${font}`; mg.textAlign = 'center'; mg.textBaseline = 'top'; mg.fillStyle = '#fff'; mg.fillText(text, W2 / 2, y);
+      const a = mg.getImageData(0, 0, W2, H2).data, on = (x, yy) => x >= 0 && yy >= 0 && x < W2 && yy < H2 && a[(yy * W2 + x) * 4 + 3] > 110;
+      const out = g.getImageData(0, 0, W2, H2), d = out.data, put = (x, yy, c) => { if (x < 0 || yy < 0 || x >= W2 || yy >= H2) return; const i = (yy * W2 + x) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; };
+      const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+      const E = hex(edge), D = hex(drop), F = hex(fill), F2 = hex('#ffffff');
+      for (let yy = 0; yy < H2; yy++) for (let x = 0; x < W2; x++) if (on(x, yy)) { for (let k = 1; k <= 3; k++) put(x, yy + k + 1, D); } // 아래 그림자
+      for (let yy = 0; yy < H2; yy++) for (let x = 0; x < W2; x++) if (on(x, yy)) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) put(x + dx, yy + dy, E); // 테두리
+      for (let yy = 0; yy < H2; yy++) for (let x = 0; x < W2; x++) if (on(x, yy)) put(x, yy, on(x, yy - 1) ? F : F2); // 글자 (윗줄은 밝게)
+      g.putImageData(out, 0, 0);
     };
-    const mask = mk(); shape(mask.getContext('2d'));
-    const tint = (fill) => { const c = mk(), q = c.getContext('2d'); q.drawImage(mask, 0, 0); q.globalCompositeOperation = 'source-in'; q.fillStyle = fill; q.fillRect(0, 0, W2, H2); return c; };
-    const ring = (c, r, dy = 0) => { for (let i = 0; i < 32; i++) { const a = i / 32 * Math.PI * 2; g.drawImage(c, Math.cos(a) * r, Math.sin(a) * r + dy); } g.drawImage(c, 0, dy); };
-    ring(tint('#7b5cd6'), 11 * S, 9 * S);   // 아래 보랏빛 그림자
-    ring(tint('#1d1f4f'), 11 * S);          // 두꺼운 남색 테두리
-    ring(tint('#ffffff'), 4.5 * S);         // 흰 안쪽 테두리
-    const gr = g.createLinearGradient(0, 40 * S, 0, 250 * S); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.35, '#e9e2ff'); gr.addColorStop(0.7, '#b9cbff'); gr.addColorStop(1, '#ffc9ea');
-    const body = tint(gr), bq = body.getContext('2d');
-    bq.globalCompositeOperation = 'source-atop'; const gl = bq.createLinearGradient(0, 40 * S, 0, 140 * S); gl.addColorStop(0, 'rgba(255,255,255,0.95)'); gl.addColorStop(1, 'rgba(255,255,255,0)');
-    bq.fillStyle = gl; bq.beginPath(); bq.ellipse(W2 / 2, 40 * S, W2 * 0.48, 92 * S, 0, 0, Math.PI * 2); bq.fill(); // 위쪽 광택
-    bq.fillStyle = 'rgba(123,92,214,0.18)'; bq.fillRect(0, 214 * S, W2, 40 * S); // 아래쪽 살짝 진하게
-    g.drawImage(body, 0, 0);
-    const star = (x, y, r, col) => { g.save(); g.translate(x * S, y * S); g.fillStyle = col; g.shadowColor = 'rgba(255,240,180,0.9)'; g.shadowBlur = 14 * S; g.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 - Math.PI / 2, rr = i % 2 ? r * 0.28 : r; g.lineTo(Math.cos(a) * rr * S, Math.sin(a) * rr * S); } g.closePath(); g.fill(); g.restore(); };
-    star(452, 46, 26, '#fff4b8'); star(478, 92, 11, '#ffffff'); star(54, 262, 16, '#ffd6f0'); star(30, 226, 8, '#ffffff'); star(410, 238, 9, '#d9e6ff');
+    layer('MP', 38, 2, '#f1ecff', '#2b2340', '#6b4fb3');
   }
   function startTitle() {
     for (const cv of document.querySelectorAll('canvas.logoCv')) if (!cv.dataset.done) { makeLogo(cv); cv.dataset.done = 1; }

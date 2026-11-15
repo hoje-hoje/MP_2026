@@ -313,8 +313,8 @@ body.titling .hud, body.titling #chat, body.titling #prompt, body.titling #stick
 @keyframes oplogo { 0% { transform: scale(2.2); opacity: 0; filter: brightness(3); } 25% { transform: scale(1); opacity: 1; filter: brightness(1.6); } 100% { transform: scale(1); opacity: 1; filter: brightness(1); } }
 .ophint { position: absolute; right: 14px; top: 10px; color: rgba(255,255,255,0.55); font-size: 12px; }
 body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 안내 등) */
-.logoCv { width: clamp(260px, 36vw, 480px); filter: drop-shadow(0 0 26px rgba(190,170,255,0.55)); }
-.tlogo.big .logoCv { width: clamp(300px, 46vw, 600px); }
+.logoCv { width: clamp(280px, 42vw, 560px); image-rendering: pixelated; filter: drop-shadow(0 0 18px rgba(190,140,255,0.85)); }
+.tlogo.big .logoCv { width: clamp(320px, 56vw, 720px); }
 
 #battle .frame { flex-direction: column; width: min(1100px, 100%); height: min(760px, calc(100vh - 30px)); background: #fff6d6; }
 #btHead { flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; background: #1b1430; color: #fff6d6; padding: 12px 18px; }
