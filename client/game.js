@@ -1509,7 +1509,7 @@
     const [x, y, dir, moving] = animalPos(name, hx, hy, seed, okAt), im = ART['u_' + name]; if (!im) return;
     const bob = moving ? (Math.floor(performance.now() / 140 + seed) % 2) : 0, w = im.width * 2, h = im.height * 2;
     g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, w * 0.32, 3);
-    const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.save(); g.translate(Math.round(x), Math.round(y - bob)); if (dir > 0) g.scale(-1, 1); // 동물 그림은 왼쪽을 보고 있어서 오른쪽으로 갈 때 뒤집음 g.drawImage(im, -Math.round(w / 2), -h, w, h); g.restore(); g.imageSmoothingEnabled = pv;
+    const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.save(); g.translate(Math.round(x), Math.round(y - bob)); if (dir > 0) g.scale(-1, 1); g.drawImage(im, -Math.round(w / 2), -h, w, h); g.restore(); g.imageSmoothingEnabled = pv; // 동물 그림은 왼쪽을 보고 있어서 오른쪽으로 갈 때 뒤집음
   }
   let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {}, MY_PCOIN = 0, MY_HATS = {}, MY_JOB = null;
   const jobIcon = (j) => (j && MPRules.JOBS[j] ? MPRules.JOBS[j].icon + ' ' : '');
