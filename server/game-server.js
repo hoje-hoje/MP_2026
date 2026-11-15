@@ -700,7 +700,7 @@ wss.on('connection', (ws) => {
         const day = gameDayKey(); s.acc.mined = s.acc.mined && s.acc.mined.day === day ? s.acc.mined : { day, ids: [] };
         if (s.acc.mined.ids.includes(tid)) return send(ws, { t: 'err', text: '이 금광은 오늘 이미 캤어요' });
         if (!s.mining || s.mining.tid !== tid || now() - s.mining.at < NUM.mineHoldMs - 300) return; s.mining = null;
-        const got = 300 + Math.floor(Math.random() * 31) * 10;
+        const got = Math.round((300 + Math.floor(Math.random() * 31) * 10) * (m.grade === 'perfect' ? 1.2 : 1)); // 문제를 빨리 맞히면 +20%
         s.acc.mined.ids.push(tid); n.coin += got; dirty = true; sendViews([n.id]);
         send(ws, { t: 'mined', terr: tid, text: `금광에서 코인 ${got}을 캤어요 (우리 저장소)` });
         break;
@@ -792,7 +792,7 @@ wss.on('connection', (ws) => {
       case 'fishCatch': { // 타이밍 결과: perfect / good / miss
         const n = world.nationOfPlayer(s.token); const F = s.fishing; s.fishing = null;
         if (!n || !F) return; const late = now() - F.at;
-        if (late < -250 || late > 5000) return send(ws, { t: 'fished', fish: null, text: '물고기가 도망갔어요…' });
+        if (late < -250 || late > 10000) return send(ws, { t: 'fished', fish: null, text: '물고기가 도망갔어요…' }); // 수학 문제 푸는 시간 (최대 8초)
         if (m.grade !== 'perfect' && m.grade !== 'good') return send(ws, { t: 'fished', fish: null, text: '아깝다! 놓쳤어요' });
         const list = Object.entries(FISH).map(([k, f]) => [k, f.w * (f.rare ? (F.rain ? 1.5 : 1) * (m.grade === 'perfect' ? 1.6 : 1) : 1)]);
         let r = Math.random() * list.reduce((a, [, w]) => a + w, 0), pick = list[0][0]; for (const [k, w] of list) { if ((r -= w) <= 0) { pick = k; break; } }

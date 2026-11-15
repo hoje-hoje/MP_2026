@@ -1163,21 +1163,21 @@
   function fishPress() { // 타이밍 바에서 E
     if (!FISHING.on) return false;
     if (FISHING.phase === 'wait') { stopFishing('너무 일찍 당겼어요! 물고기가 도망갔어요'); ws.send(JSON.stringify({ t: 'fishCatch', grade: 'miss' })); return true; }
-    if (FISHING.phase === 'bite') { const m = fishMarker(), z = FISHING.zone, grade = Math.abs(m - z.c) <= z.p ? 'perfect' : Math.abs(m - z.c) <= z.g ? 'good' : 'miss'; FISHING.on = false; $('fishBar').hidden = true; ws.send(JSON.stringify({ t: 'fishCatch', grade })); if (grade === 'perfect') toast('✨ 완벽한 타이밍!'); return true; }
+    if (FISHING.phase === 'bite') return true; // 문제는 1~4키·클릭으로
     return false;
   }
   function fishMarker() { const u = ((performance.now() - FISHING.bt) / 1000) * FISHING.speed; return Math.abs(((u % 2) + 2) % 2 - 1); } // 0~1 왕복
   function tickFishing() {
     if (!FISHING.on) return;
-    if (player.moving) { stopFishing('움직여서 낚시를 그만뒀어요'); ws.send(JSON.stringify({ t: 'fishCatch', grade: 'miss' })); return; }
+    if (player.moving) { cancelQuiz(); stopFishing('움직여서 낚시를 그만뒀어요'); ws.send(JSON.stringify({ t: 'fishCatch', grade: 'miss' })); return; }
     const now = performance.now();
     if (FISHING.phase === 'wait' && now >= FISHING.biteAt) { // 입질! 타이밍 바
       const rain = WEATHER === 'rain', g = rain ? 0.17 : 0.13;
-      FISHING.phase = 'bite'; FISHING.bt = now; FISHING.speed = 0.9 + Math.random() * 0.7; FISHING.zone = { c: 0.25 + Math.random() * 0.5, g, p: 0.045 };
-      const z = FISHING.zone; $('fishZone').style.left = `${(z.c - z.g) * 100}%`; $('fishZone').style.width = `${z.g * 200}%`; $('fishPerfect').style.left = `${(z.c - z.p) * 100}%`; $('fishPerfect').style.width = `${z.p * 200}%`;
-      $('fishBar').hidden = false; SND.play('hit');
+      FISHING.phase = 'bite'; FISHING.bt = now; void g;
+      showQuiz(rain ? '🎣 입질! (비 오는 날 · 시간 넉넉) 정답을 골라 낚아 올려요' : '🎣 입질! 정답을 골라 낚아 올려요', rain ? 8000 : 6000, (grade) => {
+        FISHING.on = false; ws.send(JSON.stringify({ t: 'fishCatch', grade })); if (grade === 'perfect') toast('✨ 완벽! 귀한 물고기가 잘 잡혀요');
+      });
     }
-    if (FISHING.phase === 'bite') { $('fishMark').style.left = `${fishMarker() * 100}%`; if (now - FISHING.bt > 3500) { stopFishing('놓쳤어요… 물고기가 도망갔어요'); ws.send(JSON.stringify({ t: 'fishCatch', grade: 'miss' })); } }
   }
   function drawFishLine(g, o, bx, by, bite, t) { // 낚싯줄 + 찌
     const [tx, ty] = rodTip(o), dip = bite ? 4 + Math.sin(t * 30) * 3 : Math.sin(t * 3) * 1.5;
@@ -1411,6 +1411,14 @@
   const BP = { view: 'list', sel: null, closed: false, open: false };
   const fmtMD = (ts) => { const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()}`; };
   function nearBigBoard() { if (player.scene !== 'sky' || !player.room) return false; for (const sp of player.room.sprites) if (sp.prop && sp.prop.bigBoard && Math.abs(sp.x - player.x) < 220 && player.y - sp.y < 170) return true; return false; }
+  function tickWelcome() { // 처음 세상에 들어오면 환영 인사 (한 번만)
+    if (!ONLINE || !netOn || !titleDone || TITLE.on || OP.on || store('mp2026.welcomed')) return;
+    if (document.querySelector('.modalbox:not([hidden]), #found:not([hidden]), #doomPop:not([hidden]), #closet:not([hidden]), #loading:not([hidden])')) return;
+    store('mp2026.welcomed', 1); const el = $('welcome'), lines = ['환영합니다!', '영토를 확장하고 키워 나가 보세요!', '원하는 대로 행동하시면 됩니다!'];
+    el.hidden = false; SND.play('war'); let i = 0;
+    const next = () => { if (i >= lines.length) { el.classList.add('out'); setTimeout(() => { el.hidden = true; el.classList.remove('out'); }, 600); return; } $('wcText').textContent = lines[i]; $('wcText').classList.remove('pop'); void $('wcText').offsetWidth; $('wcText').classList.add('pop'); i++; setTimeout(next, i === 1 ? 1600 : 2400); };
+    next();
+  }
   function tickBoard() {
     const nb = nearBigBoard(); if (!nb) BP.closed = false;
     const show = nb && !BP.closed && ONLINE; if (show !== BP.open) { BP.open = show; $('boardPanel').hidden = !show; if (show) { BP.view = 'list'; renderBoard(); } }
@@ -1423,6 +1431,71 @@
     if (BP.view === 'new') { $('bpAsNat').parentElement.hidden = !MY_NID; if (MY_NID) $('bpNatName').textContent = natName(MY_NID); }
     const sel = BOARD.find((x) => x.id === BP.sel); $('bpDel').disabled = !(sel && sel.name === me) || BP.view === 'new'; $('bpViewBtn').textContent = BP.view === 'list' ? '보기' : '목록';
     for (const b of $('bpList').querySelectorAll('[data-id]')) { b.onclick = () => { BP.sel = +b.dataset.id; renderBoard(); }; b.ondblclick = () => { BP.sel = +b.dataset.id; BP.view = 'view'; renderBoard(); }; }
+  }
+  // ------------------------------------------------------------ MP 수학 문제 (낚시 입질 · 금광 곡괭이질): 4지선다, 1~4키나 클릭, 빨리 맞히면 '완벽'
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+  function mathQ() {
+    const R = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+    const K = [
+      () => { const a = R(12, 29), b = R(3, 9); return [`${a} × ${b}`, a * b]; },
+      () => { const a = R(11, 25); return [`${a}²`, a * a]; },
+      () => { const k = R(5, 12); return [`2의 ${k}제곱`, 2 ** k]; },
+      () => { const x = R(2, 15), a = R(2, 9), b = R(1, 20); return [`${a}x + ${b} = ${a * x + b}  →  x = ?`, x]; },
+      () => { const g = R(2, 12), a = g * R(2, 9), b = g * R(2, 9); return [`gcd(${a}, ${b})`, gcd(a, b)]; },
+      () => { const n = R(6, 20); return [`1 + 2 + … + ${n}`, n * (n + 1) / 2]; },
+      () => { const a = R(30, 99), b = R(4, 9); return [`${a}을 ${b}로 나눈 나머지`, a % b]; },
+      () => { const n = R(5, 12); return [`${n}C2 (${n}개 중 2개 고르기)`, n * (n - 1) / 2]; },
+      () => { const a = R(3, 9), b = R(3, 9); return [`${a * b} ÷ ${a} + ${b}²`, b + b * b]; },
+      () => { const a = R(2, 9); return [`${a}³`, a * a * a]; },
+    ];
+    const [q, ans] = K[Math.floor(Math.random() * K.length)](); const opts = new Set([ans]);
+    const near = [1, -1, 2, -2, 10, -10, 3, ans > 20 ? 5 : 4];
+    while (opts.size < 4) { const d = near[Math.floor(Math.random() * near.length)] * (Math.random() < 0.2 ? 2 : 1), v = ans + d; if (v >= 0) opts.add(v); }
+    return { q, ans, opts: [...opts].sort(() => Math.random() - 0.5) };
+  }
+  const MQ = { on: false };
+  function showQuiz(title, limit, done) {
+    const Q = mathQ(); Object.assign(MQ, { on: true, Q, t0: performance.now(), limit, done });
+    $('mqTitle').textContent = title; $('mqQ').textContent = Q.q;
+    $('mqOpts').innerHTML = Q.opts.map((v, i) => `<button type="button" data-mq="${i}"><kbd>${i + 1}</kbd>${v}</button>`).join('');
+    for (const b of $('mqOpts').querySelectorAll('[data-mq]')) b.onclick = () => answerQuiz(+b.dataset.mq);
+    $('mathQuiz').hidden = false; SND.play('hit');
+  }
+  function answerQuiz(i) {
+    if (!MQ.on) return; const t = performance.now() - MQ.t0, ok = i >= 0 && MQ.Q.opts[i] === MQ.Q.ans;
+    const grade = ok ? (t <= MQ.limit * 0.45 ? 'perfect' : 'good') : 'miss'; MQ.on = false;
+    for (const b of $('mqOpts').querySelectorAll('[data-mq]')) { const v = MQ.Q.opts[+b.dataset.mq]; b.classList.toggle('right', v === MQ.Q.ans); b.classList.toggle('wrong', +b.dataset.mq === i && !ok); b.disabled = true; }
+    $('mqTitle').textContent = ok ? (grade === 'perfect' ? '✨ 완벽! 빠르고 정확해요' : '⭕ 정답!') : i < 0 ? `⏰ 시간 끝! 정답은 ${MQ.Q.ans}` : `❌ 아쉬워요! 정답은 ${MQ.Q.ans}`;
+    setTimeout(() => { if (!MQ.on) $('mathQuiz').hidden = true; }, ok ? 700 : 1500);
+    const d = MQ.done; MQ.done = null; if (d) d(grade);
+  }
+  function cancelQuiz() { if (!MQ.on) return; MQ.on = false; MQ.done = null; $('mathQuiz').hidden = true; }
+  function tickQuiz() { if (!MQ.on) return; const k = 1 - (performance.now() - MQ.t0) / MQ.limit; $('mqTime').style.width = `${Math.max(0, k) * 100}%`; if (k <= 0) answerQuiz(-1); }
+  function startMine(n) { // 금광: 곡괭이질 하는 동안 문제 하나 → 맞히면 캐짐 (최소 곡괭이질 시간은 서버가 확인)
+    if (MQ.on) return; Object.assign(hold, { on: true, t0: performance.now(), ms: 1e9, kind: 'mine', terr: n.terr, nx: n.nx, ny: n.ny, x: n.x, y: n.y });
+    ws.send(JSON.stringify({ t: 'mineStart', terr: n.terr })); const t0 = performance.now();
+    showQuiz('⛏ 곡괭이질! 정답을 맞히면 금이 나와요', 8000, (grade) => {
+      if (grade === 'miss') { hold.on = false; toast('곡괭이가 빗나갔어요… 다시 E'); return; }
+      const wait = Math.max(0, MPRules.NUM.mineHoldMs - (performance.now() - t0) + 80);
+      setTimeout(() => { hold.on = false; if (netOn) ws.send(JSON.stringify({ t: 'mine', terr: n.terr, grade })); }, wait);
+    });
+  }
+  // ------------------------------------------------------------ 동물: 집 자리 둘레를 일정한 속도로 왔다 갔다 (모두 같은 시간 공식이라 다른 사람 화면과 비슷)
+  const ANIMAL_SPD = { chick: 26, hen: 22, pig: 18, rabbit: 40, cow: 14, slime: 16, slime2: 16, mushroom: 12, cactus: 0, rat: 34, dog: 36 };
+  function animalPos(name, hx, hy, seed, okAt) {
+    const sp = ANIMAL_SPD[name] ?? 20; if (!sp) return [hx, hy, 1];
+    const L = 44, walk = L / sp, pause = 1.6 + hash(seed, 3, 9) * 2.4, P = walk + pause, t = performance.now() / 1000 + hash(seed, 5, 9) * 50;
+    const leg = Math.floor(t / P), u = (t - leg * P) / walk, k = Math.min(1, u), pair = Math.floor(leg / 2);
+    let a = hash(seed, pair, 11) * Math.PI * 2, ex = hx + Math.cos(a) * L, ey = hy + Math.sin(a) * L * 0.7;
+    if (okAt && !okAt(ex, ey)) { a += Math.PI; ex = hx + Math.cos(a) * L; ey = hy + Math.sin(a) * L * 0.7; if (!okAt(ex, ey)) return [hx, hy, 1]; }
+    const out = leg % 2 === 0, fx = out ? hx : ex, fy = out ? hy : ey, tx2 = out ? ex : hx, ty2 = out ? ey : hy;
+    return [fx + (tx2 - fx) * k, fy + (ty2 - fy) * k, tx2 < fx ? -1 : 1, u < 1];
+  }
+  function drawAnimal(g, name, hx, hy, seed, okAt) {
+    const [x, y, dir, moving] = animalPos(name, hx, hy, seed, okAt), im = ART['u_' + name]; if (!im) return;
+    const bob = moving ? (Math.floor(performance.now() / 140 + seed) % 2) : 0, w = im.width * 2, h = im.height * 2;
+    g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, w * 0.32, 3);
+    const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.save(); g.translate(Math.round(x), Math.round(y - bob)); if (dir < 0) g.scale(-1, 1); g.drawImage(im, -Math.round(w / 2), -h, w, h); g.restore(); g.imageSmoothingEnabled = pv;
   }
   let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {}, MY_PCOIN = 0, MY_HATS = {}, MY_JOB = null;
   const jobIcon = (j) => (j && MPRules.JOBS[j] ? MPRules.JOBS[j].icon + ' ' : '');
@@ -1650,8 +1723,8 @@
         ...[[7, 15], [12, 15], [7, 18], [12, 18]].map(([x, y]) => ({ x, y, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'log', X, Y + 2, 2) })),
         P1(45, 16, cloudBench, { w: 2 }), P1(45, 19, cloudBench, { w: 2 }),
         ...gardenProps(4, 4), ...gardenProps(39, 4), ...gardenProps(4, 23), ...gardenProps(39, 23),
-        { x: 8, y: 7, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:chick', x, y + 2, 2) }, { x: 44, y: 8, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:rabbit', x, y + 2, 2) },
-        { x: 10, y: 26, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:hen', x, y + 2, 2) }, { x: 46, y: 27, w: 2, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:pig', x, y + 2, 2) },
+        { x: 8, y: 7, w: 1, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'chick', x, y + 2, 101) }, { x: 44, y: 8, w: 1, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'rabbit', x, y + 2, 102) },
+        { x: 10, y: 26, w: 1, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'hen', x, y + 2, 103) }, { x: 46, y: 27, w: 2, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'pig', x, y + 2, 104) },
         { x: 2, y: 2, w: 1, h: 1, walk: true, draw: (g, x, y) => cloudAt(g, 0, x + 20, y + 20, 110) }, { x: 53, y: 2, w: 1, h: 1, walk: true, draw: (g, x, y) => cloudAt(g, 1, x - 10, y + 20, 110) },
         { x: 2, y: 31, w: 1, h: 1, walk: true, draw: (g, x, y) => cloudAt(g, 2, x + 20, y + 10, 100) }, { x: 53, y: 31, w: 1, h: 1, walk: true, draw: (g, x, y) => cloudAt(g, 0, x - 10, y + 10, 100) },
       ],
@@ -1681,7 +1754,7 @@
         { x: 25, y: 11, w: 2, h: 1, draw: bonfire },
         ...[[23, 10], [28, 10], [23, 13], [28, 13]].map(([x, y]) => ({ x, y, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'log', X, Y + 2, 2) })),
         { x: 2, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'woodpile', x, y + 2, 3) }, { x: 29, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'woodpile', x, y + 2, 3) },
-        { x: 21, y: 15, w: 2, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:cow', x, y + 2, 2) }, { x: 10, y: 15, w: 1, h: 1, walk: true, draw: (g, x, y) => pix(g, 'u:rabbit', x, y + 2, 2) },
+        { x: 21, y: 15, w: 2, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'cow', x, y + 2, 105) }, { x: 10, y: 15, w: 1, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'rabbit', x, y + 2, 106) },
         ...[[3, 11], [10, 9], [27, 15], [22, 8], [29, 9]].map(([x, y], i) => ({ x, y, w: 1, h: 1, walk: true, draw: (g, X, Y) => pix(g, ['flower_y', 'fern', 'mushroom', 'berry', 'flower_r'][i], X, Y + 2, 2) })),
         { x: 24, y: 6, w: 1, h: 1, draw: (g, x, y) => { g.fillStyle = '#5a4630'; g.fillRect(x - 2, y - 40, 4, 40); sign(g, x, y - 44, '유랑민 캠프'); } },
       ],
@@ -2060,6 +2133,7 @@
     if ((k === 'e' || k === ' ') && !$('talk').hidden) { e.preventDefault(); if (!e.repeat) talkNext(); return; }
     if ((k === 'e' || k === ' ') && FISHING.on) { e.preventDefault(); if (!e.repeat) fishPress(); return; } // 낚시 중: E(스페이스)로 당기기
     if (k === 'e' && !e.repeat && !document.querySelector('.modalbox:not([hidden]), #closet:not([hidden])')) pressE(); // 창이 열려 있으면 E 무시 (상점 연 뒤 대화창이 또 뜨던 버그)
+    if (MQ.on && k >= '1' && k <= '4') { if (!e.repeat) answerQuiz(+k - 1); return; }
     if (k === 'j' && !e.repeat) atkDown();
     if (k === 'g' && ONLINE) setBuild(!build.on);
     if (k >= '1' && k <= '8') emote(+k - 1);
@@ -2173,7 +2247,7 @@
         for (const [i] of STORE_AT) if (n && Math.hypot((i % W) * TILE + 16 - player.x, Math.floor(i / W) * TILE + 16 - player.y) < nd) n = null; // 저장소가 더 가까우면 저장소
         const tp = portalOf(t);
         if (tp && Math.hypot(tp[0] + 0.5 - tx, tp[1] + 0.5 - ty) < 1.8) best = { kind: 'portal', t, text: '하늘로 올라가기' };
-        else if (n && !build.on) best = mined.has(n.id) ? { kind: 'info', text: '오늘은 다 캤어요 (내일 다시)' } : ONLINE && !MY_TOOLS.pick ? { kind: 'info', text: '⛏ 금광 · ' + TOOL_HINT('pick') } : ONLINE ? { kind: 'mine', n, terr: n.id, nx: n.x, ny: n.y, hold: MPRules.NUM.mineHoldMs, text: '금광 캐기 · E 꾹 (곡괭이질)' } : { kind: 'node', n, text: '금광 캐기 · 코인' };
+        else if (n && !build.on) best = mined.has(n.id) ? { kind: 'info', text: '오늘은 다 캤어요 (내일 다시)' } : ONLINE && !MY_TOOLS.pick ? { kind: 'info', text: '⛏ 금광 · ' + TOOL_HINT('pick') } : ONLINE ? { kind: 'mine', n, terr: n.id, nx: n.x, ny: n.y, text: '⛏ 금광 캐기 · E (수학 문제를 맞히면 캐져요)' } : { kind: 'node', n, text: '금광 캐기 · 코인' };
         else if (Math.hypot(t.altar[0] + 0.5 - tx, t.altar[1] + 0.5 - ty) < 2.4) {
           const own = ownerOf(t.id), mine = myView && own === myView.me.id;
           const canClaim = myView && !own && Object.keys(owners).some((k) => owners[k] === myView.me.id && terrs[k] && terrs[k].neighbors.includes(t.id));
@@ -2278,8 +2352,8 @@
   let hitTimer = 0, hitOn = false;
   let farmFlash = 0;
   function curAct() { return performance.now() < farmFlash ? 'farm' : FISHING.on ? 'fish' : hitOn ? 'hit' : hold.on ? ({ chop: 'chop', mine: 'mine' }[hold.kind] || null) : null; }
-  function pressE() { if (near && (near.kind === 'hitB' || near.kind === 'repairB')) { const n = near, go = () => { if (netOn) ws.send(JSON.stringify({ t: n.kind, x: n.x, y: n.y })); player.atkT = 0.2; }; go(); clearInterval(hitTimer); hitTimer = setInterval(go, 420); hitOn = true; return; } if (near && near.hold) startHold(near); else interact(); }
-  function releaseE() { clearInterval(hitTimer); hitOn = false; if (hold.on) cancelHold(); }
+  function pressE() { if (near && near.kind === 'mine') { startMine(near); return; } if (near && (near.kind === 'hitB' || near.kind === 'repairB')) { const n = near, go = () => { if (netOn) ws.send(JSON.stringify({ t: n.kind, x: n.x, y: n.y })); player.atkT = 0.2; }; go(); clearInterval(hitTimer); hitTimer = setInterval(go, 420); hitOn = true; return; } if (near && near.hold) startHold(near); else interact(); }
+  function releaseE() { clearInterval(hitTimer); hitOn = false; if (hold.on && hold.kind !== 'mine') cancelHold(); }
   function startHold(n) {
     Object.assign(hold, { on: true, t0: performance.now(), ms: n.hold, kind: n.kind, x: n.x, y: n.y });
     hold.nid = n.nid; hold.terr = n.terr; hold.nx = n.nx; hold.ny = n.ny;
@@ -2616,7 +2690,7 @@
     $('closet').hidden = true; startOpening('rename');
   });
   $('btnCloset').addEventListener('click', () => { $('nick').value = player.name; $('nickMsg').textContent = ''; renderNameBox(); closetUI(); $('closet').hidden = false; closetPreview(); });
-  $('btnClosetDone').addEventListener('click', () => { $('closet').hidden = true; });
+  $('btnClosetDone').addEventListener('click', () => { $('closet').hidden = true; if (OP.closetWait) { OP.closetWait = false; OP.closetDone = true; $('closet').style.zIndex = ''; $('btnClosetDone').textContent = '✕'; $('btnClosetDone').classList.remove('wide'); saveLook(); opAdvance(); } });
 
   // 쿠폰 (오프라인에서 받은 1회용 코드). 실제 게임에서는 서버가 확인하고, 한 번 쓰면 모두에게 사라진다.
   const DEMO_CODES = { 'MP-TEST-0001': { coin: 1000 }, 'MP-TEST-0002': { army: 30 }, 'MP-TEST-0003': { vaccine: 1 } };
@@ -3208,7 +3282,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), room: (id) => testMode && enterRoom(id, 'ground') }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), room: (id) => testMode && enterRoom(id, 'ground'), quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
@@ -3593,7 +3667,7 @@
 
     // 플레이어 이동
     stepPlayer(dt); tickHold(); tickFishing();
-    tickBoard();
+    tickBoard(); tickQuiz(); tickWelcome();
     { const show = ONLINE && player.scene === 'ground' && matchMedia('(pointer: coarse)').matches && !TITLE.on; if ($('atkBtn').hidden === show) $('atkBtn').hidden = !show; }
     { const a = curAct(); if (a !== lastAct) { lastAct = a; if (netOn) ws.send(JSON.stringify({ t: 'act', a, fx: FISHING.x | 0, fy: FISHING.y | 0 })); } } // 도구를 주변에 알림
     if (player.scene === 'sky' && !(player.room.id === 'jail' && jailUntil > Date.now()) && !EDIT.on) {
@@ -3751,7 +3825,7 @@
       if (k) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => spr(g, k, X, Y) });
       else if (USER.animals.length && tileAt(tx, ty) === T.GRASS && !noTree[ty * W + tx]) {
         const ha = hash(tx, ty, 21);
-        if (ha < 0.0025) { const a = USER.animals[(ha * 1e6 | 0) % 6]; list.push({ x: tx * TILE + 16, y: ty * TILE + 28, draw: (g, X, Y) => pix(g, 'u:' + a, X, Y - (Math.floor(performance.now() / 400 + tx) % 2), 2) }); }
+        if (ha < 0.0025) { const a = USER.animals[(ha * 1e6 | 0) % 6], hx = tx * TILE + 16, hy = ty * TILE + 28, sd = tx * 7 + ty * 13, okAt = (x, y) => !blocked(Math.floor(x / TILE), Math.floor(y / TILE)), pos = animalPos(a, hx, hy, sd, okAt); list.push({ x: pos[0], y: pos[1], draw: (g) => drawAnimal(g, a, hx, hy, sd, okAt) }); }
       }
     }
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
@@ -4249,24 +4323,26 @@
   let needFound = false, titleDone = false, BGM_CUR = 'peace'; // 관리자가 고른 게임 안 배경음악
   const TITLE = { on: false, x: 0, y: 0, vx: 0, vy: 0 };
   let lastDt = 0.016; const dt0 = () => lastDt;
-  // 로고: 작게 그린 글자에 도트 테두리·그림자를 붙인 뒤 크게 키움 (MP + 이세계)
+  // 로고: MP 모노그램 (M의 오른쪽 기둥 = P의 기둥, 가운데 가로줄) 을 직접 찍은 도트. 남색 판 위 흰 세리프 글자
   function makeLogo(cv) {
-    const font = getComputedStyle(document.documentElement).getPropertyValue('--font-display').trim() || 'monospace';
-    const W2 = 112, H2 = 74; cv.width = W2; cv.height = H2; const g = cv.getContext('2d');
-    const layer = (text, px, y, fill, edge, drop) => {
-      const m = document.createElement('canvas'); m.width = W2; m.height = H2; const mg = m.getContext('2d');
-      mg.font = `${px}px ${font}`; mg.textAlign = 'center'; mg.textBaseline = 'top'; mg.fillStyle = '#fff'; mg.fillText(text, W2 / 2, y);
-      const a = mg.getImageData(0, 0, W2, H2).data, on = (x, yy) => x >= 0 && yy >= 0 && x < W2 && yy < H2 && a[(yy * W2 + x) * 4 + 3] > 110;
-      const out = g.getImageData(0, 0, W2, H2), d = out.data, put = (x, yy, c) => { if (x < 0 || yy < 0 || x >= W2 || yy >= H2) return; const i = (yy * W2 + x) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; };
-      const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-      const E = hex(edge), D = hex(drop), F = hex(fill), F2 = hex('#ffffff');
-      for (let yy = 0; yy < H2; yy++) for (let x = 0; x < W2; x++) if (on(x, yy)) { for (let k = 1; k <= 3; k++) put(x, yy + k + 1, D); } // 아래 그림자
-      for (let yy = 0; yy < H2; yy++) for (let x = 0; x < W2; x++) if (on(x, yy)) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) put(x + dx, yy + dy, E); // 테두리
-      for (let yy = 0; yy < H2; yy++) for (let x = 0; x < W2; x++) if (on(x, yy)) put(x, yy, on(x, yy - 1) ? F : F2); // 글자 (윗줄은 밝게)
-      g.putImageData(out, 0, 0);
-    };
-    layer('MP', 38, 2, '#f1ecff', '#2b2340', '#6b4fb3');
-    layer('이세계', 17, 50, '#ffd34d', '#2b2340', '#c22f53');
+    const W2 = 60, H2 = 35; cv.width = W2; cv.height = H2; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+    const m = document.createElement('canvas'); m.width = W2; m.height = H2; const q = m.getContext('2d'); q.fillStyle = '#fff';
+    const R = (x, y, w, h) => q.fillRect(x, y, w, h);
+    const line = (x0, y0, x1, y1, w) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) { const x = Math.round(x0 + (x1 - x0) * i / n), y = Math.round(y0 + (y1 - y0) * i / n); R(x, y, w, 1); } };
+    const ox = 8, oy = 5; // 글자 자리 (판 안쪽)
+    R(ox + 2, oy + 1, 2, 22); R(ox, oy, 6, 2); R(ox, oy + 22, 7, 2);           // M 왼쪽 기둥 + 위·아래 세리프
+    line(ox + 3, oy + 1, ox + 14, oy + 22, 4);                                   // 굵은 대각선 (왼 위 → 가운데 아래)
+    line(ox + 15, oy + 21, ox + 24, oy + 2, 2);                                  // 가는 대각선 (가운데 아래 → 오른 위)
+    R(ox + 25, oy + 1, 4, 22); R(ox + 22, oy, 16, 2); R(ox + 22, oy + 22, 10, 2); // M·P가 같이 쓰는 굵은 기둥 + 세리프
+    R(ox + 37, oy + 1, 2, 2); R(ox + 38, oy + 2, 3, 2); R(ox + 39, oy + 3, 3, 8); R(ox + 38, oy + 10, 3, 2); R(ox + 29, oy + 11, 10, 2); // P 고리 (둥글게)
+    R(ox + 16, oy + 12, 9, 2);                                                   // 가운데 가로줄 (가는 대각선 → 기둥)
+    const a = q.getImageData(0, 0, W2, H2).data, on = (x, y) => x >= 0 && y >= 0 && x < W2 && y < H2 && a[(y * W2 + x) * 4 + 3] > 0;
+    // 남색 판: 테두리 + 위에서 아래로 진해지는 띠
+    g.fillStyle = '#0b1026'; g.fillRect(0, 0, W2, H2); const bands = ['#2a3a78', '#24326a', '#1f2b5e', '#1b2552', '#172047'];
+    for (let y = 2; y < H2 - 2; y++) { g.fillStyle = bands[Math.min(bands.length - 1, Math.floor((y - 2) / ((H2 - 4) / bands.length)))]; g.fillRect(2, y, W2 - 4, 1); }
+    g.fillStyle = '#3d52a0'; g.fillRect(2, 2, W2 - 4, 1); g.fillStyle = '#0b1026'; g.fillRect(0, 0, 1, 1); g.fillRect(W2 - 1, 0, 1, 1); g.fillRect(0, H2 - 1, 1, 1); g.fillRect(W2 - 1, H2 - 1, 1, 1);
+    for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) if (on(x, y) && !on(x + 1, y + 1)) { g.fillStyle = '#0b1026'; g.fillRect(x + 1, y + 1, 1, 1); } // 그림자
+    for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) if (on(x, y)) { g.fillStyle = !on(x, y + 1) && on(x, y - 1) ? '#c9d3ee' : '#ffffff'; g.fillRect(x, y, 1, 1); } // 흰 글자 (아래 가장자리만 살짝 회색)
   }
   function startTitle() {
     for (const cv of document.querySelectorAll('canvas.logoCv')) if (!cv.dataset.done) { makeLogo(cv); cv.dataset.done = 1; }
@@ -4308,13 +4384,14 @@
     { who: '여신', text: '당신은 이 세계에 초대되었습니다. 부디 이곳을 함께 꾸려 나가 주세요.' },
     { who: '여신', text: '먼저…… 당신의 이름은 무엇인가요?', input: true },
     { who: '여신', text: () => `${player.name}님…… 좋은 이름이에요.` },
+    { who: '여신', text: '그럼 이 세계에서 지낼 모습도 골라 볼까요? 마음에 드는 모습을 골라 주세요.', closet: true },
     { who: '여신', text: '이 땅은 227개의 영토로 나뉘어 있어요. 동료들과 나라를 세우고, 제단의 퍼즐을 풀어 땅을 넓혀 주세요.' },
     { who: '여신', text: '3일차부터는 영역전이 시작돼요. 매일 점심 1시와 밤 10시, 전선에 병력을 나눠 싸우게 될 거예요.' },
     { who: '여신', text: '그리고…… 아니에요. 그 이야기는 조금 나중에 할게요.' },
     { who: '여신', text: '자, 이제 당신의 나라를 세우러 가 볼까요?' },
   ];
   // 다시 보기: 이름은 이미 아니까 묻지 않음 / 이름 바꾸기: 여신이 나와서 새 이름을 물어봄
-  const OP_REPLAY = OP_LINES.map((L) => (L.input ? { who: '여신', text: () => `당신의 이름은…… '${player.name}'(이)군요.` } : L)).filter((L, i) => i !== 7);
+  const OP_REPLAY = OP_LINES.map((L) => (L.input ? { who: '여신', text: () => `당신의 이름은…… '${player.name}'(이)군요.` } : L)).filter((L, i) => i !== 7 && !L.closet);
   const OP_RENAME = [
     { who: '여신', text: () => `${player.name}님, 부르셨나요?` },
     { who: '여신', text: () => `이름을 바꾸고 싶으신가요? 새 이름을 다시 알려주세요. (남은 변경 ${renamesLeft}번)`, input: true },
@@ -4339,6 +4416,8 @@
     const L = OPL[OP.i];
     if (OP.typing) { OP.typing = false; OP.shown = opText(L).length; tickType(); if (L.choice) { $('opChoice').hidden = false; return; } if (L.input) { $('opInput').hidden = false; setTimeout(() => $('opNick').focus(), 30); } else $('opNext').hidden = false; return; }
     if (L.input || L.choice) return; // 이름을 정해야 / 편을 골라야 넘어감
+    if (L.closet && !OP.closetDone) { OP.closetWait = true; $('nick').value = player.name; $('nickMsg').textContent = ''; renderNameBox(); closetUI(); $('closet').style.zIndex = 70; $('closet').hidden = false; $('btnClosetDone').textContent = '이걸로 할게요 ✓'; $('btnClosetDone').classList.add('wide'); closetPreview(); return; } // 오프닝에서 생김새 고르기
+    OP.closetDone = false;
     if (++OP.i < OPL.length) showLine(); else finishOpening();
   }
   function opName() {
@@ -4382,6 +4461,7 @@
     if (!(TITLE.on || OP.on) || (e.target && e.target.tagName === 'INPUT')) return;
     e.stopImmediatePropagation(); // 타이틀·오프닝 중에는 게임 키(E, 채팅 등)가 안 먹게
     if (TITLE.on && (e.key === 'Enter' || e.key === ' ') && $('coupon').hidden) { e.preventDefault(); endTitle(); return; }
+    if (OP.on && OP.closetWait) return; // 생김새 고르는 중
     if (OP.on && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); opAdvance(); }
   }, true);
   // 오프닝 화면: 별이 흐르는 밤하늘 + 빛나는 여신 (후광·날개)

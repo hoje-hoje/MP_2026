@@ -313,8 +313,8 @@ body.titling .hud, body.titling #chat, body.titling #prompt, body.titling #stick
 @keyframes oplogo { 0% { transform: scale(2.2); opacity: 0; filter: brightness(3); } 25% { transform: scale(1); opacity: 1; filter: brightness(1.6); } 100% { transform: scale(1); opacity: 1; filter: brightness(1); } }
 .ophint { position: absolute; right: 14px; top: 10px; color: rgba(255,255,255,0.55); font-size: 12px; }
 body #toast { z-index: 60; } /* 오프닝 위에서도 보이게 (이름 겹침 안내 등) */
-.logoCv { width: clamp(280px, 42vw, 560px); image-rendering: pixelated; filter: drop-shadow(0 0 18px rgba(190,140,255,0.85)); }
-.tlogo.big .logoCv { width: clamp(320px, 56vw, 720px); }
+.logoCv { width: clamp(240px, 34vw, 460px); image-rendering: pixelated; filter: drop-shadow(0 6px 0 rgba(11,16,38,0.55)) drop-shadow(0 0 22px rgba(160,190,255,0.55)); }
+.tlogo.big .logoCv { width: clamp(300px, 46vw, 600px); }
 
 #battle .frame { flex-direction: column; width: min(1100px, 100%); height: min(760px, calc(100vh - 30px)); background: #fff6d6; }
 #btHead { flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; background: #1b1430; color: #fff6d6; padding: 12px 18px; }
@@ -489,6 +489,18 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .bpForm button { justify-self: end; }
 .bpBtns { display: flex; gap: 6px; padding: 6px 8px; background: #2a1e14; border-top: 2px solid #6b5034; } .bpBtns button, .bpForm button { flex: 1; font: 700 13px var(--font-body); padding: 5px 8px; background: linear-gradient(#8a5a2b, #5a3416); color: #ffe9b8; border: 2px solid #2b1a0c; box-shadow: inset 0 1px 0 #b8823e; cursor: pointer; } .bpBtns button:disabled { opacity: 0.45; cursor: default; }
 .wrow.recruit { background: #fff6d8; border-left: 4px solid #e8c260; padding-left: 6px; } .wrow small { color: #6a6280; }
+#btnClosetDone.wide { width: auto; padding: 0 14px; font-size: 15px; white-space: nowrap; }
+#mathQuiz { position: fixed; z-index: 27; left: 50%; bottom: calc(140px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(460px, calc(100vw - 32px)); background: #fffaf0; border: 4px solid #2b2340; box-shadow: 0 0 0 3px #6b4fb3, 0 6px 0 #2b2340; padding: 10px 14px 12px; text-align: center; color: #2b2340; display: grid; gap: 8px; }
+#mathQuiz[hidden] { display: none; } #mathQuiz > b { font-size: 15px; color: #6a3ad0; } #mathQuiz small { font-size: 12px; color: #6a6280; }
+.mqQ { font-family: var(--font-display); font-size: 30px; padding: 4px 0; }
+.mqOpts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .mqOpts button { font: 700 20px var(--font-body); padding: 8px; background: #f1ecff; border: 3px solid #2b2340; box-shadow: 0 3px 0 #2b2340; cursor: pointer; color: #2b2340; }
+.mqOpts button kbd { font: 700 12px var(--font-body); background: #2b2340; color: #fff; padding: 0 5px; margin-right: 8px; vertical-align: middle; }
+.mqOpts button.right { background: #c8f5c8; } .mqOpts button.wrong { background: #ffc8cc; } .mqOpts button:disabled { cursor: default; }
+.mqTrack { height: 8px; background: #e2dcf0; border: 2px solid #2b2340; } .mqTrack i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #e8423c, #f0c23a, #5fd36a); }
+#welcome { position: fixed; inset: 0; z-index: 26; display: grid; place-items: center; pointer-events: none; }
+#welcome[hidden] { display: none; } #welcome.out { opacity: 0; transition: opacity 0.6s; }
+#wcText { font-family: var(--font-display); font-size: clamp(28px, 5vw, 54px); color: #fff; text-align: center; padding: 18px 34px; margin: 0 16px; background: rgba(27,37,82,0.82); border: 4px solid #0b1026; box-shadow: 0 0 0 3px #e8c260, 0 8px 0 rgba(11,16,38,0.6); text-shadow: 0 3px 0 #0b1026; }
+#wcText.pop { animation: wcpop 0.45s ease-out; } @keyframes wcpop { from { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } to { transform: scale(1); } }
 #dead { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(40,0,10,0.35), rgba(60,0,15,0.75)); pointer-events: none; }
 #dead[hidden] { display: none; }
 .deadIn { text-align: center; color: #fff; text-shadow: 0 2px 0 #2b2340; display: grid; gap: 6px; padding: 18px 24px; margin: 0 16px; background: rgba(28,10,26,0.88); border: 4px solid #2b2340; box-shadow: 0 0 0 3px #7a1430; }
@@ -664,7 +676,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div class="hvTabs" id="shopTabs"></div><div class="hvCoin" id="shopCoin"></div><div class="hvGrid" id="shopBody"></div>
 </div></div>
 <button id="atkBtn" type="button" hidden title="공격 (J) · 꾹 = 차징">⚔</button>
-<div id="gLogin" hidden><div class="gIn"><b>MP 이세계</b><p>학교 구글 계정(<span id="gDomain">@kbs.hs.kr</span>)으로 로그인해 주세요.<br><small>계정 하나에 캐릭터 하나예요. 다른 기기에서 로그인해도 이어서 할 수 있어요.</small></p><div id="gBtn"></div><small id="gErr" class="gErr"></small></div></div>
+<div id="gLogin" hidden><div class="gIn"><b>MP</b><p>학교 구글 계정(<span id="gDomain">@kbs.hs.kr</span>)으로 로그인해 주세요.<br><small>계정 하나에 캐릭터 하나예요. 다른 기기에서 로그인해도 이어서 할 수 있어요.</small></p><div id="gBtn"></div><small id="gErr" class="gErr"></small></div></div>
 <div id="boardPanel" hidden>
   <div class="bpHead"><b>BOARD</b><span>자유 게시판 · 인재 모집 · 동맹 구함</span></div>
   <div id="bpList" class="bpList"></div>
@@ -672,6 +684,8 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div id="bpForm" class="bpForm" hidden><input id="bpTitle" maxlength="30" placeholder="제목 (30자)" autocomplete="off"><input id="bpBody" maxlength="160" placeholder="내용 (160자)" autocomplete="off"><label><input type="checkbox" id="bpAsNat"> <span id="bpNatName"></span> 이름으로 올리기</label><button id="bpSend" type="button">올리기</button></div>
   <div class="bpBtns"><button id="bpViewBtn" type="button">보기</button><button id="bpNew" type="button">새 글</button><button id="bpDel" type="button">지우기</button><button id="bpQuit" type="button">닫기</button></div>
 </div>
+<div id="mathQuiz" hidden><b id="mqTitle"></b><div class="mqQ" id="mqQ"></div><div class="mqOpts" id="mqOpts"></div><div class="mqTrack"><i id="mqTime"></i></div><small>숫자키 1~4 또는 클릭 · 빨리 맞히면 ✨완벽</small></div>
+<div id="welcome" hidden><div id="wcText"></div></div>
 <div id="dead" hidden><div class="deadIn"><b>💫 기절했어요</b><p><span id="deadBy"></span><em id="deadWho"></em>에게 당했어요</p><p class="deadHow" id="deadHow"></p><div class="deadSec">부활 중… <span id="deadSec">10</span>초 뒤 우리 수도에서 일어나요</div><div class="deadBar"><i id="deadFill"></i></div><small id="deadDrops"></small><small>훔친 물건은 원래 나라로 돌아갔어요</small></div></div>
 <div id="fishBar" hidden><b>🎣 지금! 노란 칸에서 E (스페이스)</b><div class="fbTrack"><div id="fishZone"></div><div id="fishPerfect"></div><div id="fishMark"></div></div></div>
 <div id="contract" class="modalbox" hidden><div class="ctPaper">
@@ -790,7 +804,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 <div id="stick" hidden><div></div></div>
 
 <div id="title" hidden>
-  <div class="tlogo"><canvas class="logoCv" aria-label="MP 이세계"></canvas></div>
+  <div class="tlogo"><canvas class="logoCv" aria-label="MP"></canvas></div>
   <div class="tsub">신들의 땅따먹기 · 2026</div>
   <div class="tstart">Enter를 눌러 시작</div>
   <div class="tmenu"><button id="tStart" type="button">▶ 시작하기</button><button id="tSettings" type="button">⚙ 설정</button><button id="tCoupon" type="button">🎟 쿠폰</button></div>
@@ -798,7 +812,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 </div>
 <div id="opening" hidden>
   <canvas id="opCanvas"></canvas>
-  <div id="opLogo" class="tlogo big" hidden><canvas class="logoCv" aria-label="MP 이세계"></canvas></div>
+  <div id="opLogo" class="tlogo big" hidden><canvas class="logoCv" aria-label="MP"></canvas></div>
   <div id="opBox" class="opbox"><b id="opWho">???</b><p id="opText"></p>
     <div id="opInput" hidden><input id="opNick" type="text" maxlength="10" autocomplete="off" placeholder="이름 (10자까지)"><button id="opOk" type="button">이걸로 할게요</button></div>
     <div id="opChoice" hidden><button id="opAngel" type="button">😇 여신과 함께 세계를 지킨다</button><button id="opDevil" type="button">😈 악마의 편에 선다</button><button id="opLater" type="button" class="later">조금 더 생각해 볼게요</button></div>
