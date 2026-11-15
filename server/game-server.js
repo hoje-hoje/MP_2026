@@ -246,12 +246,12 @@ function uniqueName(base, token) { base = base.slice(0, 8); if (!nameTaken(base,
 function filterBad(text) { let t = text; for (const w of BANNED) t = t.split(w).join('♡'.repeat(w.length)); return t; }
 
 // ------------------------------------------------------------ WebSocket
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 65536 }); // 동맹 계약서 서명 그림 때문에 64KB (서명은 60KB 아래로 확인)
 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function meta(s) {
   const n = world.nationOfPlayer(s.token);
-  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
+  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
 }
 // 체포 횟수 (하루 단위), 감옥
 function arrestsToday(acc) { return acc.arrests && acc.arrests.day === gameDayKey() ? acc.arrests.n : 0; }
@@ -502,11 +502,39 @@ wss.on('connection', (ws) => {
         dirty = true; broadcastOwners(); notifyNation(n.id, `🛡 우리 병력의 종족: ${{ human: '인간 (검)', elf: '엘프 (활)', dwarf: '드워프 (도끼)' }[n.race]}`);
         break;
       }
-      case 'allyPropose': case 'allyAnswer': case 'allyLeave': case 'allyJoin': { // 동맹 (왕만)
+      case 'allyMeet': { // 동맹은 왕끼리 직접 만나서: 상대 왕 옆(3칸 안)에서 계약서를 펼침
+        const n = world.nationOfPlayer(s.token), o = online.get(m.id | 0), N2 = o && world.nationOfPlayer(o.token);
+        if (!n || n.king !== s.token) return send(ws, { t: 'err', text: '동맹 계약은 왕만 할 수 있어요' });
+        if (!o || !N2 || N2.king !== o.token) return send(ws, { t: 'err', text: '상대 나라의 왕과만 계약할 수 있어요' });
+        if (o.scene !== s.scene || o.room !== s.room || s.x == null || o.x == null || Math.hypot(o.x - s.x, o.y - s.y) > NUM.allyMeetTiles * 32) return send(ws, { t: 'err', text: '두 왕이 바로 옆에 있어야 계약할 수 있어요' });
+        const err = world.allyCheck(n.id, N2.id); if (err) return send(ws, { t: 'err', text: err });
+        const cid = 'c' + (++contractSeq), C = { cid, a: { s, nid: n.id }, b: { s: o, nid: N2.id }, sig: {} };
+        contracts.set(cid, C);
+        const info = (x) => ({ nid: x.nid, nation: world.nation(x.nid).name, king: x.s.acc.name, color: world.nation(x.nid).color });
+        for (const [side, x] of [['a', C.a], ['b', C.b]]) send(x.s.ws, { t: 'contract', cid, me: side, a: info(C.a), b: info(C.b) });
+        break;
+      }
+      case 'contractSign': case 'contractCancel': {
+        const C = contracts.get(String(m.cid || '')); if (!C) return;
+        const side = C.a.s === s ? 'a' : C.b.s === s ? 'b' : null; if (!side) return;
+        const both = (msg) => { for (const x of [C.a, C.b]) send(x.s.ws, msg); };
+        if (m.t === 'contractCancel') { contracts.delete(C.cid); both({ t: 'contractEnd', cid: C.cid, text: `${s.acc.name} 왕이 계약서를 찢었어요` }); break; }
+        const sig = String(m.sig || ''); if (!/^data:image\/png;base64,/.test(sig) || sig.length > 60000) return;
+        C.sig[side] = sig; both({ t: 'contractSig', cid: C.cid, side, sig });
+        if (C.sig.a && C.sig.b) {
+          contracts.delete(C.cid);
+          if (Math.hypot(C.a.s.x - C.b.s.x, C.a.s.y - C.b.s.y) > NUM.allyMeetTiles * 32 * 2) return both({ t: 'contractEnd', cid: C.cid, text: '두 왕이 멀어져서 계약이 무효가 됐어요' });
+          const r = world.allyForm(C.a.nid, C.b.nid); if (!r.ok) return both({ t: 'contractEnd', cid: C.cid, text: r.err });
+          dirty = true; sendViews(r.members); broadcastOwners(); both({ t: 'contractDone', cid: C.cid });
+          for (const x of r.members) notifyNation(x, `🤝 동맹 계약 체결! ${r.members.map((y) => world.nation(y).name).join(' · ')}`);
+        }
+        break;
+      }
+      case 'allyLeave': case 'allyJoin': { // 동맹 나가기(언제든) · 참전 (왕만)
         const n = world.nationOfPlayer(s.token); if (!n) return;
         if (n.king !== s.token) return send(ws, { t: 'err', text: '동맹은 왕만 정할 수 있어요' });
         const T2 = String(m.nid || '');
-        if (m.t === 'allyPropose') { const r = world.allyPropose(n.id, T2); if (!r.ok) return send(ws, { t: 'err', text: r.err }); dirty = true; sendViews([n.id, T2]); notifyNation(T2, `🤝 ${n.name}이(가) 동맹을 제안했어요 · 왕이 나라 창(B) → 동맹에서 받을 수 있어요`); send(ws, { t: 'ok', text: '동맹을 제안했어요' }); }
+        if (false) { const r = world.allyPropose(n.id, T2); if (!r.ok) return send(ws, { t: 'err', text: r.err }); dirty = true; sendViews([n.id, T2]); notifyNation(T2, `🤝 ${n.name}이(가) 동맹을 제안했어요 · 왕이 나라 창(B) → 동맹에서 받을 수 있어요`); send(ws, { t: 'ok', text: '동맹을 제안했어요' }); }
         else if (m.t === 'allyAnswer') { const before = world.allyGroup(T2); const r = world.allyAnswer(n.id, T2, !!m.yes); if (!r.ok) return send(ws, { t: 'err', text: r.err }); dirty = true; if (r.declined) { sendViews([n.id, T2]); notifyNation(T2, `🤝 ${n.name}이(가) 동맹 제안을 거절했어요`); } else { sendViews(r.members); broadcastOwners(); for (const x of r.members) notifyNation(x, `🤝 동맹 결성! ${r.members.map((y) => world.nation(y).name).join(' · ')}`); } void before; }
         else if (m.t === 'allyLeave') { const r = world.allyLeave(n.id); if (!r.ok) return send(ws, { t: 'err', text: r.err }); dirty = true; sendViews([n.id, ...r.left]); broadcastOwners(); for (const x of r.left) notifyNation(x, `🤝 ${n.name}이(가) 동맹에서 나갔어요`); send(ws, { t: 'ok', text: '동맹에서 나왔어요' }); }
         else { const r = world.allyJoin(n.id, m.battle | 0, m.troops); if (!r.ok) return send(ws, { t: 'err', text: r.err }); dirty = true; const b = r.battle, main = r.side === 'att' ? b.att : b.def; sendViews([n.id, main]); notifyNation(main, `🤝 동맹 ${n.name}이(가) ${world.t[b.target].name} 전투에 참전했어요! (병력 ${m.troops.reduce((x, y) => x + (y | 0), 0)})`); send(ws, { t: 'ok', text: '참전했어요 · 이 병력은 뺄 수 없어요' }); }
@@ -913,6 +941,7 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     clearInterval(refill);
     if (!s) return;
+    for (const C of [...contracts.values()]) if (C.a.s === s || C.b.s === s) { contracts.delete(C.cid); for (const x of [C.a, C.b]) if (x.s !== s) send(x.s.ws, { t: 'contractEnd', cid: C.cid, text: '상대 왕의 접속이 끊겨서 계약이 취소됐어요' }); }
     if (s.acc.carry) { // 훔친 걸 들고 접속이 끊기면 원래 나라로 돌아감
       const c = s.acc.carry, V = world.nation(c.from); if (V && !V.dead) { V.coin += c.coin; V.wood = (V.wood || 0) + c.wood; notifyNation(V.id, `💰 도둑 ${s.acc.name}의 접속이 끊겨서 훔쳐 간 코인 ${c.coin}${c.wood ? `, 목재 ${c.wood}` : ''}을(를) 돌려받았어요`); }
       s.acc.carry = null; dirty = true;
@@ -1022,7 +1051,9 @@ setInterval(() => {
 // 시계가 다음 시간대로 넘어갈 때: 점심·밤 → 전투 처리, 아침 → 멸망 선포·균열 예고·균열 웨이브
 const doomDay = () => state.doomDay || 5;
 const waveDay = (k) => doomDay() + 2 * k - 1; // 선포 다음 날부터 이틀마다 (기본 6·8·10·12·14일차)
-function curWeather() { const c = gameClock(); return state.weather === 'rain' || state.weather === 'clear' ? state.weather : weatherOf(c.day, c.slot); } // 관리자가 정하면 그 날씨
+function curWeather() { return state.weather === 'rain' || state.weather === 'clear' ? state.weather : weatherOf(Date.now()); }
+let lastWeather = null, contractSeq = 0; const contracts = new Map(); // 동맹 계약서 (서명 기다리는 중)
+setInterval(() => { const w = curWeather(); if (w !== lastWeather) { lastWeather = w; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); } }, 20e3); // 날씨가 바뀌면 알림 // 관리자가 정하면 그 날씨
 function clockMsg() { const c = gameClock(); return { t: 'clock', day: c.day, slot: c.slot, weather: curWeather(), doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
 function onEnter(c) {
   if (c.slot === 'lunch' || c.slot === 'night') resolveNight(`${c.day}일차 ${SLOT_LABEL[c.slot]}`, slotIdx(c.day, c.slot));

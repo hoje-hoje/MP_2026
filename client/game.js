@@ -1141,10 +1141,81 @@
     ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = 'rgba(40,60,100,0.16)'; ctx.fillRect(0, 0, vw, vh);
     ctx.strokeStyle = 'rgba(200,225,255,0.55)'; ctx.lineWidth = 1.5; ctx.beginPath();
     for (let i = 0; i < 140; i++) { const sp = 700 + (i % 7) * 60, x = (hash(i, 3, 5) * (vw + 200) - t * 120) % (vw + 200), y = (hash(i, 4, 5) * (vh + 100) + t * sp) % (vh + 100) - 50; const X = x < -100 ? x + vw + 200 : x; ctx.moveTo(X, y); ctx.lineTo(X - 4, y + 14); }
-    ctx.stroke(); ctx.restore();
+    ctx.stroke();
+    for (let i = 0; i < 46; i++) { const sp = 2.2 + hash(i, 9, 3), u = t * sp + hash(i, 7, 3), cyc = Math.floor(u), k = u - cyc, x = hash(i, cyc, 11) * vw, y = hash(i, cyc, 13) * vh; // 물방울 튀기
+      ctx.globalAlpha = 1 - k; ctx.strokeStyle = 'rgba(225,240,255,0.9)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(x, y, 3 + k * 9, 1 + k * 3, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(235,245,255,0.95)'; const hgt = Math.sin(k * Math.PI) * 9; ctx.fillRect(x - 5 - k * 5, y - hgt, 2, 2); ctx.fillRect(x + 4 + k * 5, y - hgt, 2, 2); ctx.fillRect(x - 1, y - hgt * 1.4, 2, 2); }
+    ctx.globalAlpha = 1; ctx.restore();
   }
   let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {};
   const TOOL_HINT = (k) => `${MPRules.TOOLS[k].name}이(가) 있어야 해요 · 하늘 천상 상점가 '치유의 샘'에서 사요`;
+  // ------------------------------------------------------------ 동맹 계약서 (두 왕이 만나서 서명)
+  const CONTRACT = { cid: null, me: null, signed: {}, drawing: false, dirty: false };
+  const CONTRACT_ARTICLES = [
+    ['제1조 (동맹)', '두 나라는 이 계약서에 두 왕이 서명한 때부터 동맹이 된다. 동맹은 최대 3나라까지다.'],
+    ['제2조 (불가침)', '동맹국끼리는 서로 선전포고할 수 없다.'],
+    ['제3조 (참전)', '동맹국이 싸우면 왕은 병력을 정해 전선에 직접 보낼 수 있다. 한 전투에 한 번만, 보낸 병력은 뺄 수 없다.'],
+    ['제4조 (보상)', '함께 이기면 빼앗은 재료를 낸 병력 비율로 나눈다. 살아남은 참전 병력은 참전한 나라로 돌아간다.'],
+    ['제5조 (탈퇴)', '어느 나라든 언제든지 동맹에서 나갈 수 있다. 나가면 다시 서로 공격할 수 있다.'],
+  ];
+  function openContract(m) {
+    Object.assign(CONTRACT, { cid: m.cid, me: m.me, signed: {}, dirty: false });
+    $('ctParties').innerHTML = ['a', 'b'].map((k) => `<div class="ctParty"><span>${k === 'a' ? '갑' : '을'}</span><b style="color:${m[k].color}">■ ${esc(m[k].nation)}</b><small>왕 ${esc(m[k].king)}</small></div>`).join('<i>🤝</i>');
+    $('ctBody').innerHTML = CONTRACT_ARTICLES.map(([h, t]) => `<p><b>${h}</b> ${t}</p>`).join('');
+    for (const k of ['a', 'b']) { const cv = $('ctSig_' + k), g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); cv.classList.toggle('mine', k === m.me); $('ctName_' + k).textContent = `${k === 'a' ? '갑' : '을'} · ${m[k].nation} 왕 ${m[k].king}`; $('ctState_' + k).textContent = k === m.me ? '여기에 서명하세요' : '상대 왕의 서명을 기다리는 중…'; }
+    $('ctSeal').hidden = true; $('ctSign').disabled = false; $('contract').hidden = false; SND.play('ok');
+  }
+  function contractPad() { // 내 서명 칸에 마우스·손가락으로 그리기
+    const pos = (cv, e) => { const r = cv.getBoundingClientRect(), p = e.touches ? e.touches[0] : e; return [(p.clientX - r.left) * cv.width / r.width, (p.clientY - r.top) * cv.height / r.height]; };
+    for (const k of ['a', 'b']) {
+      const cv = $('ctSig_' + k), g = cv.getContext('2d');
+      const down = (e) => { if (CONTRACT.me !== k || CONTRACT.signed[k]) return; e.preventDefault(); CONTRACT.drawing = true; const [x, y] = pos(cv, e); g.strokeStyle = '#2b2340'; g.lineWidth = 3; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath(); g.moveTo(x, y); };
+      const move = (e) => { if (!CONTRACT.drawing || CONTRACT.me !== k) return; e.preventDefault(); const [x, y] = pos(cv, e); g.lineTo(x, y); g.stroke(); CONTRACT.dirty = true; };
+      const up = () => { CONTRACT.drawing = false; };
+      cv.addEventListener('pointerdown', down); cv.addEventListener('pointermove', move); addEventListener('pointerup', up);
+    }
+    $('ctClear').onclick = () => { const k = CONTRACT.me; if (!k || CONTRACT.signed[k]) return; $('ctSig_' + k).getContext('2d').clearRect(0, 0, 260, 90); CONTRACT.dirty = false; };
+    $('ctSign').onclick = () => { const k = CONTRACT.me; if (!k || CONTRACT.signed[k]) return; if (!CONTRACT.dirty) { toast('서명 칸에 이름을 써 주세요'); return; } ws.send(JSON.stringify({ t: 'contractSign', cid: CONTRACT.cid, sig: $('ctSig_' + k).toDataURL('image/png') })); $('ctSign').disabled = true; };
+    $('ctTear').onclick = () => { if (CONTRACT.cid) ws.send(JSON.stringify({ t: 'contractCancel', cid: CONTRACT.cid })); $('contract').hidden = true; CONTRACT.cid = null; };
+  }
+  function contractSig(m) {
+    if (m.cid !== CONTRACT.cid) return; CONTRACT.signed[m.side] = true;
+    const cv = $('ctSig_' + m.side), g = cv.getContext('2d'), im = new Image(); im.onload = () => { g.clearRect(0, 0, cv.width, cv.height); g.drawImage(im, 0, 0, cv.width, cv.height); }; im.src = m.sig;
+    $('ctState_' + m.side).textContent = '✒ 서명 완료'; SND.play('place');
+  }
+  function contractDone(m) { if (m.cid !== CONTRACT.cid) return; $('ctSeal').hidden = false; SND.play('war'); setTimeout(() => { $('contract').hidden = true; CONTRACT.cid = null; }, 2600); }
+  function contractEnd(m) { if (m.cid !== CONTRACT.cid) return; $('contract').hidden = true; CONTRACT.cid = null; toast(m.text); }
+  // 내가 왕이고, 바로 옆에 다른 나라 왕이 있으면 → 동맹 계약 제안
+  function kingNearby() {
+    if (!ONLINE || !myView || !myView.me.isKing) return null;
+    const allies = new Set((myView.allies || []).map((a) => a.id));
+    for (const [id, r] of remotes) if (r.x != null && r.king && r.nid && r.nid !== MY_NID && !allies.has(r.nid) && Math.hypot(r.x - player.x, r.y - player.y) < MPRules.NUM.allyMeetTiles * TILE) return { kind: 'allyMeet', id, text: `🤝 ${natName(r.nid)}의 왕 ${r.name}에게 동맹 계약서 내밀기` };
+    return null;
+  }
+  // ------------------------------------------------------------ 병영: 종족별 병력 (인간·엘프·드워프)
+  const RACE_DESC = { human: ['균형 잡힌 기사단', '반짝이는 검으로 적을 베어요.', '검 베기'], elf: ['숲의 궁수대', '멀리서 화살을 쏘아요.', '화살 쏘기'], dwarf: ['산의 도끼 전사', '무거운 도끼로 내려찍어요.', '도끼 내려찍기'] };
+  let BARRACK_SEL = null, barrackRaf = 0;
+  function openBarracks() {
+    if (!myView) return; BARRACK_SEL = (nationsPub[MY_NID] && nationsPub[MY_NID].race) || 'human';
+    renderBarracks(); $('barracks').hidden = false; cancelAnimationFrame(barrackRaf); barrackLoop();
+  }
+  function renderBarracks() {
+    const cur = (nationsPub[MY_NID] && nationsPub[MY_NID].race) || 'human', king = myView.me.isKing;
+    $('bkArmy').innerHTML = `우리 병력 <b>${myView.me.army.toLocaleString()}</b>명`;
+    $('bkCards').innerHTML = Object.entries(RACE_INFO).map(([k, v]) => `<button type="button" class="bkCard${k === BARRACK_SEL ? ' sel' : ''}" data-bk="${k}"><canvas width="96" height="96"></canvas><b>${v.icon} ${v.name}</b><small>${RACE_DESC[k][0]}</small><span class="bkW">무기 · ${v.weapon}</span>${k === cur ? '<i>지금 우리 병력</i>' : ''}</button>`).join('');
+    for (const c of $('bkCards').querySelectorAll('[data-bk]')) { const g = c.querySelector('canvas').getContext('2d'); g.imageSmoothingEnabled = false; const ch = RACE_INFO[c.dataset.bk].ch; if (ART.aether) g.drawImage(ART.aether, (ch % 8) * 32, Math.floor(ch / 8) * 32, 32, 32, 8, 8, 80, 80); c.onclick = () => { BARRACK_SEL = c.dataset.bk; renderBarracks(); }; }
+    const sel = RACE_INFO[BARRACK_SEL];
+    $('bkName').textContent = `${sel.icon} ${sel.name} · ${RACE_DESC[BARRACK_SEL][0]}`;
+    $('bkDesc').textContent = `${RACE_DESC[BARRACK_SEL][1]} 영역전 화면에서 우리 병사가 이 모습으로 ${RACE_DESC[BARRACK_SEL][2]}를 해요. (지금은 모습만 달라요 · 능력치는 같아요)`;
+    $('bkPick').disabled = !king || BARRACK_SEL === cur; $('bkPick').textContent = BARRACK_SEL === cur ? '✔ 지금 우리 병력' : king ? `${sel.name}(으)로 바꾸기` : '종족은 왕만 바꿀 수 있어요';
+  }
+  function barrackLoop() { // 미리보기: 고른 종족 병사 5명이 줄 맞춰 제자리 걸음
+    if ($('barracks').hidden) return; const cv = $('bkPrev'), g = cv.getContext('2d'), t = performance.now() / 1000; g.imageSmoothingEnabled = false;
+    const grd = g.createLinearGradient(0, 0, 0, cv.height); grd.addColorStop(0, '#bfe6ff'); grd.addColorStop(0.62, '#e9f7d8'); grd.addColorStop(0.62, '#8fcf6a'); grd.addColorStop(1, '#6fb052'); g.fillStyle = grd; g.fillRect(0, 0, cv.width, cv.height);
+    const ch = RACE_INFO[BARRACK_SEL].ch;
+    for (let i = 0; i < 5; i++) { const x = 30 + i * 56 + (i % 2) * 14, y = 150 + (i % 2) * 22, bob = Math.round(Math.sin(t * 6 + i) * 2); g.fillStyle = 'rgba(0,0,0,0.2)'; g.beginPath(); g.ellipse(x + 32, y + 62, 20, 5, 0, 0, 7); g.fill(); if (ART.aether) g.drawImage(ART.aether, (ch % 8) * 32, Math.floor(ch / 8) * 32, 32, 32, x, y - bob, 64, 64); }
+    barrackRaf = requestAnimationFrame(barrackLoop);
+  }
   const FARM_CATS = new Set(['farm', 'water', 'seed', 'fert']);
   const fmtLeft = (ms) => { const m = Math.ceil(ms / 60e3); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60 ? (m % 60) + '분' : ''}` : `${m}분`; };
   function itemIcon(cv, id) { // 상점·설치 카드 그림
@@ -1663,7 +1734,7 @@
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
     if ((k === '[' || k === ']') && !ONLINE) { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { closeTalk(); $('rulebook').hidden = true; $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
+    if (k === 'escape') { $('barracks').hidden = true; closeTalk(); $('rulebook').hidden = true; $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
   });
   addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); });
   // 패드·폰: 화면 아래 안내를 누르면 E (꾹 누르기도 됨)
@@ -1784,6 +1855,7 @@
     }
     if (player.scene === 'ground' && ONLINE && build.on && !(best && best.kind === 'portal')) { const b = groundAction(); if (b) best = b; } // 설치 모드에선 설치가 먼저 (포털만 예외)
     if (!best && player.scene === 'ground' && ONLINE) best = groundAction();
+    if (!best || best.kind === 'info') { const kn = kingNearby(); if (kn) best = kn; } // 다른 나라 왕 옆: 동맹 계약
     const key = best ? best.kind + best.text : '';
     if (key !== lastPKey) { lastPKey = key; // (설치 모드를 꺼도 안내가 남던 버그: 마지막으로 보여 준 글자와 비교)
       $('prompt').hidden = !best;
@@ -1963,6 +2035,9 @@
   $('chatHide').addEventListener('click', () => setChatTuck(true)); $('chatTab').addEventListener('click', () => setChatTuck(false));
   if (store('mp2026.chatTuck')) setTimeout(() => setChatTuck(true), 0);
   $('ruleClose').addEventListener('click', () => { $('rulebook').hidden = true; });
+  contractPad();
+  $('bkClose').addEventListener('click', () => { $('barracks').hidden = true; });
+  $('bkPick').addEventListener('click', () => { warAction('setRace', { race: BARRACK_SEL }); setTimeout(() => { if (!$('barracks').hidden) renderBarracks(); }, 600); });
   renderRulebook();
   function interact() {
     if (!near) return;
@@ -1970,6 +2045,7 @@
     if (near.kind === 'shop') { openShop(); return; }
     if (near.kind === 'npc') { openTalk(near.npc); return; }
     if (near.kind === 'fish') { startFishing(near.x, near.y); return; }
+    if (near.kind === 'allyMeet') { ws.send(JSON.stringify({ t: 'allyMeet', id: near.id })); toast('동맹 계약서를 펼쳤어요 · 두 왕 모두 서명해 주세요'); return; }
     if (near.kind === 'bail') { if (netOn) ws.send(JSON.stringify({ t: 'bailList' })); return; }
     if (near.kind === 'hit') { HITFX.set(near.t.id, performance.now() + 120); if (netOn) ws.send(JSON.stringify({ t: 'hit', terr: near.t.id })); return; }
     if (near.kind === 'pickB') { build.moving = near.what; near = null; toast('옮길 자리 바로 앞에서 E를 누르세요 (우리 땅, 다른 건물과 2칸 이상)'); return; }
@@ -2274,7 +2350,7 @@
         if (!r) { r = { x: null, y: null, tx: null, ty: null, dir: 1, moving: false, emote: null, emoteT: 0 }; remotes.set(q.id, r); }
         r.name = q.name; r.team = q.team; r.tag = teamColor(q.team);
         r.look = Object.assign({ seed: (q.id * 0.37) % 3 }, q.look, { red: q.red | 0 });
-        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || '';
+        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || ''; r.king = !!q.king;
         break;
       }
       case 'leave': remotes.delete(m.id); break;
@@ -2331,6 +2407,10 @@
         $('bailBox').hidden = false; break;
       }
       case 'mined': mined.add(m.terr); toast(m.text); SND.play('coin'); break;
+      case 'contract': openContract(m); break;
+      case 'contractSig': contractSig(m); break;
+      case 'contractDone': contractDone(m); break;
+      case 'contractEnd': contractEnd(m); break;
       case 'tools': MY_TOOLS = m.tools || {}; toast(m.text); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'fishBite': if (FISHING.on) FISHING.biteAt = performance.now() + m.wait; break;
       case 'fished': stopFishing(); toast(m.text); if (m.fish) { FISHPOP = { kind: m.fish, t0: performance.now() }; SND.play('coin'); } break;
@@ -2767,7 +2847,7 @@
           mineE.map((tid) => `<div class="row"><span>${esc(terrLabel(tid))} · ${tid === me.capital ? '수도 (안전)' : `침식 ${EROSION[tid] | 0}%`}</span>${tid !== me.capital && (EROSION[tid] | 0) > 0 ? `<button data-vax="${tid}" ${me.vaccine > 0 ? '' : 'disabled'}>백신 쓰기</button>` : ''}</div>`).join('') + '</div>';
       }
       { const cur = (nationsPub[me.id] && nationsPub[me.id].race) || 'human';
-        h += `<div class="plan"><h3>🛡 병력 종족</h3><p class="msg">전투 장면에서 우리 병사의 모습과 무기가 바뀌어요 (지금은 모습만).</p><div class="targets">${Object.entries(RACE_INFO).map(([k, v]) => `<button class="tgt" data-race="${k}" aria-pressed="${k === cur}" ${king ? '' : 'disabled'}>${v.icon} ${v.name}<small>${v.weapon}</small></button>`).join('')}</div>${king ? '' : '<p class="note">종족은 왕만 정할 수 있어요.</p>'}</div>`; }
+        h += `<div class="plan"><h3>🛡 병영 · 병력 종족</h3><div class="row"><span>지금 우리 병력: <b>${RACE_INFO[cur].icon} ${RACE_INFO[cur].name}</b> (${RACE_INFO[cur].weapon}) · ${me.army}명</span><button id="btnBarracks" type="button">🛡 병영 열기</button></div></div>`; }
       h += `<h3>나라 정보</h3><div class="msg">수도 ${esc(terrLabel(me.capital))} · 영토 ${me.territories}곳 · 병력 ${me.army} · 코인 ${me.coin} · 행동력 ${me.actions}</div>`;
       // 천도: 왕이 코인을 내고 우리 영역 중 아무 곳으로 (전투 대기 중 불가, 하루에 한 번)
       const mineT = Object.keys(owners).filter((k) => owners[k] === me.id && +k !== me.capital).map(Number);
@@ -2777,14 +2857,13 @@
       const allies = v.allies || [], inReq = v.allyIn || [], out = new Set(v.allyOut || []);
       h += `<div class="plan"><h3>🤝 우리 동맹 (${allies.length + 1}/${MPRules.NUM.maxAlly}나라)</h3>${allies.length ? allies.map((a) => `<div class="row"><span><b style="color:${a.color}">■</b> ${esc(a.name)}</span></div>`).join('') + (king ? '<div class="row"><span class="msg">동맹에서 나가면 다시 서로 공격할 수 있어요</span><button id="btnAllyLeave">동맹 나가기</button></div>' : '') : '<p class="msg">아직 동맹이 없어요. 아래에서 다른 나라에 동맹을 제안해 보세요.</p>'}
         <p class="msg">동맹끼리는 선전포고할 수 없어요. 동맹이 싸우면 참전해서 병력을 보낼 수 있어요 (한 번만, 뺄 수 없음). 살아남은 참전 병력은 도와준 나라의 병력이 되고, 이기면 재료를 낸 병력 비율로 나눠요.</p></div>`;
-      if (inReq.length) h += `<div class="plan"><h3>📨 받은 동맹 제안</h3>${inReq.map((r) => `<div class="row"><span><b style="color:${r.color}">■</b> ${esc(r.name)}</span>${king ? `<span><button data-ally-yes="${r.from}">받기</button> <button data-ally-no="${r.from}">거절</button></span>` : '<span class="msg">왕이 정해요</span>'}</div>`).join('')}</div>`;
+      h += `<div class="plan"><h3>📜 동맹 맺는 법</h3><p class="msg">동맹은 <b>왕끼리 직접 만나야</b> 맺을 수 있어요. 상대 나라 왕 바로 옆(3칸 안)에서 E → 동맹 계약서가 두 왕에게 펼쳐지고, <b>둘 다 서명</b>하면 동맹이 돼요. 하늘 회담장에서 만나는 걸 추천해요.</p>${king ? '' : '<p class="note">동맹 계약은 왕만 할 수 있어요.</p>'}</div>`;
       const ab = v.allyBattles || [];
       h += `<h3>⚔ 동맹의 전투 (${ab.length})</h3>` + (ab.length ? '' : '<p class="msg">지금 동맹국이 싸우는 전투가 없어요.</p>');
       h += ab.map((b) => `<div class="plan"><div class="row"><span>${esc(terrLabel(b.target))} · <b style="color:${natColor(b.att)}">${esc(natName(b.att))}</b> → <b style="color:${natColor(b.def)}">${esc(natName(b.def))}</b></span><span>${slotText(b.slot)} · 전선 ${b.F}곳</span></div>
         <p class="msg">우리는 <b>${b.side === 'att' ? '공격' : '방어'}</b> 편 (${esc(natName(b.side === 'att' ? b.att : b.def))} 돕기)${b.helpers.length ? ` · 참전한 동맹 ${b.helpers.length}나라` : ''}</p>
         ${b.joined ? `<div class="fgrid">${b.joined.map((x, i) => `<span class="${b.side}"><b>${FN(i)}</b>${x}</span>`).join('')}</div><p class="msg">참전 완료 · 병력은 뺄 수 없어요</p>` : king ? `<div class="row"><span>보낼 병력 <input id="ajTotal${b.id}" type="number" min="0" value="${Math.min(me.army, 5 * b.F)}" style="width:80px"> <button data-aj-even="${b.id}">고르게</button></span></div>${troopInputs('aj' + b.id + '_', Array(b.F).fill(0), false)}<div class="row"><span id="ajSum${b.id}"></span><button data-ally-join="${b.id}" data-f="${b.F}">참전하기</button></div>` : '<p class="note">참전은 왕만 정할 수 있어요.</p>'}</div>`).join('');
-      const others = Object.values(nationsPub).filter((n) => !n.dead && n.id !== me.id && !allies.some((a) => a.id === n.id));
-      h += `<h3>동맹 제안하기</h3>` + (others.length ? `<div class="targets">${others.map((n) => `<button class="tgt" data-ally-ask="${n.id}" ${!king || out.has(n.id) ? 'disabled' : ''}><b style="color:${n.color}">■</b> ${esc(n.name)}<small>${out.has(n.id) ? '제안 보냄 · 대답 기다리는 중' : n.ally ? '다른 동맹에 있음' : '동맹 없음'}</small></button>`).join('')}</div>` : '<p class="msg">다른 나라가 없어요.</p>') + (king ? '' : '<p class="note">동맹 제안·받기는 왕만 할 수 있어요.</p>');
+      void inReq; void out;
     } else if (warTab === 'attack') {
       const mineSet = new Set(Object.keys(owners).filter((k) => owners[k] === me.id).map(Number));
       const targets = [];
@@ -2857,6 +2936,7 @@
       if ($('btnDeclare')) $('btnDeclare').onclick = () => { if (upd() && confirm('선전포고 뒤에는 배치를 바꿀 수 없고 병력도 뺄 수 없어요. 선전포고할까요?')) warAction('declare', { terr: warTarget, troops: troopsOf('atk', F) }); };
     }
     if ($('btnResolve')) $('btnResolve').onclick = () => warAction('resolveNow', {});
+    if ($('btnBarracks')) $('btnBarracks').onclick = () => openBarracks();
     for (const b of box.querySelectorAll('[data-ally-ask]')) b.onclick = () => warAction('allyPropose', { nid: b.dataset.allyAsk });
     for (const b of box.querySelectorAll('[data-ally-yes]')) b.onclick = () => warAction('allyAnswer', { nid: b.dataset.allyYes, yes: true });
     for (const b of box.querySelectorAll('[data-ally-no]')) b.onclick = () => warAction('allyAnswer', { nid: b.dataset.allyNo, yes: false });
@@ -3318,7 +3398,7 @@
   function setClock(c) {
     if (!c) return;
     const dayChanged = c.day !== DAY;
-    if (c.weather && c.weather !== WEATHER) { WEATHER = c.weather; whereDirty = true; if (WEATHER === 'rain' && !TITLE.on) toast('🌧 비가 와요 · 물고기 입질이 빨라지고 귀한 물고기가 잘 잡혀요'); }
+    if (c.weather && c.weather !== WEATHER) { WEATHER = c.weather; whereDirty = true; if (WEATHER === 'rain' && !TITLE.on) toast('🌧 비가 내리기 시작했어요 (30분쯤) · 물고기 입질이 빨라지고 귀한 물고기가 잘 잡혀요'); }
     DAY = c.day; SLOT = EDIT.on && EDIT.slot ? EDIT.slot : c.slot; DOOM_DAY = c.doomDay || 5; LAST_DAY = c.lastDay || 15; PHASE = phaseOf(DAY);
     DOOM = DAY > DOOM_DAY || (DAY === DOOM_DAY && SLOT !== 'morning'); // 선포일 점심부터
     if ('riftNext' in c) { RIFT_NEXT = c.riftNext; RIFT_SET = new Set(RIFT_NEXT ? RIFT_NEXT.terrs : []); }

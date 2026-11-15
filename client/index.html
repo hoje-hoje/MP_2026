@@ -462,6 +462,26 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .fbTrack { position: relative; height: 22px; background: #5fb6e6; border: 3px solid #2b2340; overflow: hidden; }
 #fishZone { position: absolute; top: 0; bottom: 0; background: #8fe0a8; } #fishPerfect { position: absolute; top: 0; bottom: 0; background: #ffd84d; }
 #fishMark { position: absolute; top: -3px; bottom: -3px; width: 6px; margin-left: -3px; background: #e8423c; border: 2px solid #2b2340; }
+
+/* 동맹 계약서: 양피지 + 서명 칸 + 도장 */
+.ctPaper { position: relative; width: min(680px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: radial-gradient(ellipse at 50% 40%, #fbf1d6, #ecd9a8); color: #3b2a14; border: 4px solid #8a5a2b; box-shadow: 0 0 0 3px #e8c260, 0 0 0 7px #2b2340, 0 18px 50px rgba(20, 10, 50, 0.5); padding: 18px 22px; }
+.ctPaper h2 { margin: 0 0 8px; text-align: center; font-family: var(--font-display); font-weight: 400; font-size: 28px; letter-spacing: 4px; }
+.ctParties { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 8px; } .ctParty { display: flex; flex-direction: column; align-items: center; } .ctParty span { font-size: 12px; color: #8a5a2b; } .ctParty b { font-size: 17px; } .ctParty small { font-size: 12px; } .ctParties i { font-style: normal; font-size: 22px; }
+.ctBody { border-top: 2px solid #c9a46a; border-bottom: 2px solid #c9a46a; padding: 6px 2px; font-size: 13.5px; line-height: 1.65; } .ctBody p { margin: 4px 0; } .ctBody b { color: #8a3a1a; }
+.ctSigs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; } .ctSig { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.ctSig canvas { width: 100%; max-width: 260px; height: auto; aspect-ratio: 26 / 9; background: rgba(255,255,255,0.5); border-bottom: 2px solid #3b2a14; touch-action: none; } .ctSig canvas.mine { background: #fffdf2; outline: 2px dashed #e8a23c; cursor: crosshair; }
+.ctSig b { font-size: 12px; } .ctSig small { font-size: 11px; color: #8a5a2b; }
+.ctBtns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; } .ctBtns button { min-height: 36px; font-size: 14px; }
+#contract, #barracks { z-index: 30; }
+#ctSeal { position: absolute; right: 40px; bottom: 70px; width: 110px; height: 110px; border-radius: 50%; border: 6px double #c22f53; color: #c22f53; display: grid; place-items: center; font-family: var(--font-display); font-size: 34px; transform: rotate(-14deg); background: rgba(255, 240, 240, 0.4); animation: sealIn 0.4s ease-out; } #ctSeal[hidden] { display: none; }
+@keyframes sealIn { from { transform: rotate(-14deg) scale(2.2); opacity: 0; } }
+/* 병영 */
+.bkHv { width: min(820px, 100%); } .bkArmy { margin-left: auto; margin-right: 44px; font-size: 14px; } .bkArmy b { font-family: var(--font-display); font-size: 20px; font-weight: 400; color: #5a3d10; }
+.bkWrap { display: grid; grid-template-columns: 360px 1fr; gap: 14px; } @media (max-width: 720px) { .bkWrap { grid-template-columns: 1fr; } }
+.bkLeft { display: flex; flex-direction: column; gap: 6px; } .bkLeft canvas { width: 100%; image-rendering: pixelated; border: 4px solid #e8c260; outline: 3px solid #2b2340; } .bkLeft b { font-family: var(--font-display); font-weight: 400; font-size: 20px; } .bkLeft p { margin: 0; font-size: 13px; line-height: 1.6; color: #4a3f5e; }
+.bkCards { display: flex; flex-direction: column; gap: 8px; } .bkCard { position: relative; display: grid; grid-template-columns: 96px 1fr; grid-template-rows: auto auto auto; column-gap: 10px; align-items: center; text-align: left; min-height: 0; padding: 6px 10px; background: #fff !important; color: #2b2340 !important; border: 3px solid #e8c260 !important; border-image: none !important; box-shadow: 3px 3px 0 #b8862b !important; text-shadow: none !important; }
+.bkCard canvas { grid-row: 1 / 4; width: 96px; height: 96px; image-rendering: pixelated; background: radial-gradient(circle, #fff6d6, #e3f2ff); } .bkCard b { font-family: var(--font-display); font-weight: 400; font-size: 20px; } .bkCard small { color: #6b6280; font-size: 12px; } .bkCard .bkW { font-size: 13px; color: #8a5a2b; }
+.bkCard i { position: absolute; right: 8px; top: 8px; font-style: normal; font-size: 11px; background: #3d5fb8; color: #fff; padding: 2px 6px; border: 2px solid #2b2340; } .bkCard.sel { outline: 4px solid #ffd84d; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -578,6 +598,17 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div class="hvTabs" id="shopTabs"></div><div class="hvCoin" id="shopCoin"></div><div class="hvGrid" id="shopBody"></div>
 </div></div>
 <div id="fishBar" hidden><b>🎣 지금! 노란 칸에서 E (스페이스)</b><div class="fbTrack"><div id="fishZone"></div><div id="fishPerfect"></div><div id="fishMark"></div></div></div>
+<div id="contract" class="modalbox" hidden><div class="ctPaper">
+  <h2>📜 동맹 계약서</h2><div class="ctParties" id="ctParties"></div>
+  <div class="ctBody" id="ctBody"></div>
+  <div class="ctSigs"><div class="ctSig"><canvas id="ctSig_a" width="260" height="90"></canvas><b id="ctName_a"></b><small id="ctState_a"></small></div><div class="ctSig"><canvas id="ctSig_b" width="260" height="90"></canvas><b id="ctName_b"></b><small id="ctState_b"></small></div></div>
+  <div class="ctBtns"><button id="ctTear" type="button">찢기 (취소)</button><button id="ctClear" type="button">다시 쓰기</button><button id="ctSign" type="button">✒ 서명하기</button></div>
+  <div id="ctSeal" hidden>동맹</div>
+</div></div>
+<div id="barracks" class="modalbox" hidden><div class="hv bkHv"><div class="hvClouds"></div>
+  <div class="hvTop"><h2>🛡 병영</h2><span id="bkArmy" class="bkArmy"></span><button id="bkClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
+  <div class="bkWrap"><div class="bkLeft"><canvas id="bkPrev" width="340" height="260"></canvas><b id="bkName"></b><p id="bkDesc"></p><button id="bkPick" type="button">바꾸기</button></div><div class="bkCards" id="bkCards"></div></div>
+</div></div>
 <div id="talk" hidden><div class="tkFace"><canvas id="talkFace" width="120" height="120"></canvas></div><div class="tkMain"><b id="talkName">천사</b><p id="talkText"></p><div class="tkFoot"><span id="talkMore"></span><div id="talkBtns"></div></div></div></div>
 <div id="rulebook" class="modalbox" hidden><div class="hv book"><div class="hvClouds"></div><div class="hvTop"><h2>📜 영역전 규칙서 <small>전쟁의 천사 미카</small></h2><button id="ruleClose" class="hvX" type="button" aria-label="닫기">✕</button></div><div id="ruleBody"></div></div></div>
 <div id="coupon" hidden>

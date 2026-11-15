@@ -72,7 +72,7 @@
     // 영지 (나라 공용 저장소)
     woodPerTree: 2,                // 나무 1그루 목재
     price: { floor: 20, wall: 60, deco: 30, trap: 150 }, // 건축 상점 가격 (코인, 1개 · 종류별로 같음, 테마는 모양만 다름)
-    maxAlly: 3,
+    maxAlly: 3, rainChance: 0.18, allyMeetTiles: 3,
     fishPerDay: 40, fishBite: [2.5, 6.5], fishRainK: 0.6, mineHoldMs: 2400,
     canalBoost: 0.8, canalRange: 2, maxFarms: 120, maxCanals: 60,
     buildHp: 100, hitDmg: 10, hitCdMs: 380, maxDeco: 80, // 벽·기둥 내구도: 한 번 때리면 −10 (E 꾹 = 0.4초마다)
@@ -330,6 +330,20 @@
       this.s.allyReq.push({ from, to, at: Date.now() });
       return { ok: true };
     }
+    allyCheck(a, b) { // 동맹을 맺을 수 있는지
+      const A = this.nation(a), B = this.nation(b);
+      if (!A || !B || A.dead || B.dead || a === b) return '잘못된 요청이에요';
+      if (this.allyOf(a).includes(b)) return '이미 동맹이에요';
+      const ga = this.allyGroup(a), gb = this.allyGroup(b);
+      if (ga.length + gb.length > NUM.maxAlly) return `동맹은 최대 ${NUM.maxAlly}나라까지예요`;
+      if (this.fighting(ga, gb)) return '서로 싸우는 중인 나라와는 동맹을 맺을 수 없어요';
+      return null;
+    }
+    allyForm(a, b) { // 계약서에 두 왕이 서명하면 동맹 결성
+      const err = this.allyCheck(a, b); if (err) return { ok: false, err };
+      this.s.allyReq = (this.s.allyReq || []).concat([{ from: a, to: b, at: Date.now() }]);
+      return this.allyAnswer(b, a, true);
+    }
     allyAnswer(nid, from, yes) {
       const req = (this.s.allyReq || []).find((r) => r.from === from && r.to === nid);
       if (!req) return { ok: false, err: '그 동맹 제안이 없어요' };
@@ -521,9 +535,10 @@
           else { survD += Math.min(d[i], Math.floor(Math.sqrt(Math.max(0, effD[i] ** 2 - aT[i] ** 2)) / NUM.defBonus)); survA += Math.floor(aT[i] * NUM.loserSurvive); }
         }
         const lossA = sum(aT) - survA, lossD = sum(d) - survD;
-        // 살아남은 병력: 낸 병력 비율로 나눔. 동맹 참전 병력도 도운 나라(공격·방어 본국)의 병력이 됨
-        A.army += survA; D.army += survD;
+        // 살아남은 병력: 낸 병력 비율로 나눔. 동맹 참전 병력은 살아남으면 참전한 나라로 돌아감
         const helpers = help.map((h) => { const H = this.nation(h.nid), tot = sum(h.side === 'att' ? aT : d) || 1, sent = sum(h.t), surv = Math.floor((h.side === 'att' ? survA : survD) * sent / tot); return { nid: h.nid, name: H.name, side: h.side, sent, surv, share: sent / tot }; });
+        for (const h of helpers) this.nation(h.nid).army += h.surv;
+        A.army += survA - helpers.filter((h) => h.side === 'att').reduce((x, h) => x + h.surv, 0); D.army += survD - helpers.filter((h) => h.side === 'def').reduce((x, h) => x + h.surv, 0);
         const rep = {
           id: b.id, night: b.night, slot: b.slot, target: b.target, att: b.att, def: b.def, attName: A.name, defName: D.name, F,
           a: aT, d, autoDef: auto, effA: aT, effD, fronts, attWon, defWon, winner: attWins ? 'att' : 'def', lossA, lossD,
@@ -714,6 +729,6 @@
   // 이름 옆 표시: 마이너스 = 체포왕 👮, 1~199 💀, 200~499 💀💀, 500 이상 💀💀💀
   const notorietyBadge = (v) => (v < 0 ? '👮' : v <= 0 ? '' : v < 200 ? '💀' : v < 500 ? '💀💀' : '💀💀💀');
   // 날씨: 일차·시간대마다 정해짐 (약 30% 비). 비 오면 낚시 입질이 빠르고 귀한 물고기가 잘 잡힘
-  function weatherOf(day, slot) { const h = hash(day * 7 + ({ morning: 1, lunch: 2, night: 3 }[slot] || 0), 991, 17); return h < 0.3 ? 'rain' : 'clear'; }
+  function weatherOf(ms = Date.now()) { const blk = Math.floor(ms / 1800e3); return hash(blk, 991, 17) < NUM.rainChance ? 'rain' : 'clear'; } // 가끔 30분씩 비 (30분 칸마다 정함)
   return { TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
