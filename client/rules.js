@@ -41,7 +41,7 @@
     crucian: { name: '붕어', w: 40, sell: 3 }, carp: { name: '잉어', w: 26, sell: 6 }, trout: { name: '송어', w: 16, sell: 10 },
     salmon: { name: '연어', w: 10, sell: 15, rare: 1 }, goldcarp: { name: '황금 잉어', w: 3, sell: 60, rare: 1 }, legend: { name: '전설의 하늘고래', w: 0.6, sell: 150, rare: 1 },
   };
-  const TOOLS = { pick: { name: '곡괭이', price: 300, use: '금광 캐기' }, rod: { name: '낚싯대', price: 200, use: '낚시' }, shovel: { name: '삽', price: 150, use: '씨앗 심기·수확' } }; // 작업 도구: 사람마다 하나씩 (나라 저장소 코인으로 삼)
+  const TOOLS = { pick: { name: '곡괭이', price: 300, use: '금광 캐기' }, rod: { name: '낚싯대', price: 200, use: '낚시' }, shovel: { name: '삽', price: 150, use: '씨앗 심기·수확' } }; // 작업 도구: 사람마다 하나씩 (내 코인 = 개인 지갑으로 삼)
   for (const [k, f] of Object.entries(FISH)) BUILD.push({ id: 'fi_' + k, cat: 'crop', theme: 'stone', name: f.name, sell: f.sell, fish: k });
   BUILD.push({ id: 'b_wood', cat: 'bridge', theme: 'forest', name: '나무 다리', price: 25 }, { id: 'b_stone', cat: 'bridge', theme: 'stone', name: '돌 다리', price: 25 });
   BUILD.push({ id: 'farm', cat: 'farm', theme: 'forest', name: '밭', price: 10 }, { id: 'canal', cat: 'water', theme: 'stone', name: '수로', price: 15 }, { id: 'fert', cat: 'fert', theme: 'forest', name: '비료', price: 40 });

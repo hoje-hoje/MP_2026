@@ -646,7 +646,7 @@ wss.on('connection', (ws) => {
         if (s.scene !== 'sky' || s.room !== 'market') return;
         const item = String(m.item), cnt = Math.max(1, Math.min(50, m.n | 0));
         let cost, label;
-        if (item.startsWith('tool_') && TOOLS[item.slice(5)]) { const k = item.slice(5); if (needTool(s, k)) return send(ws, { t: 'err', text: `이미 ${TOOLS[k].name}이(가) 있어요` }); if (n.coin < TOOLS[k].price) return send(ws, { t: 'err', text: `우리 저장소 코인이 ${TOOLS[k].price - n.coin} 모자라요` }); n.coin -= TOOLS[k].price; s.acc.tools = Object.assign({}, s.acc.tools, { [k]: 1 }); dirty = true; sendViews([n.id]); send(ws, { t: 'tools', tools: s.acc.tools, text: `${TOOLS[k].name}을(를) 샀어요! 이제 ${TOOLS[k].use}을(를) 할 수 있어요` }); return; } // 도구: 사람마다
+        if (item.startsWith('tool_') && TOOLS[item.slice(5)]) { const k = item.slice(5); if (needTool(s, k)) return send(ws, { t: 'err', text: `이미 ${TOOLS[k].name}이(가) 있어요` }); if ((s.acc.pcoin || 0) < TOOLS[k].price) return send(ws, { t: 'err', text: `내 코인이 ${TOOLS[k].price - (s.acc.pcoin || 0)} 모자라요` }); s.acc.pcoin -= TOOLS[k].price; s.acc.tools = Object.assign({}, s.acc.tools, { [k]: 1 }); dirty = true; send(ws, { t: 'tools', tools: s.acc.tools, pcoin: s.acc.pcoin, text: `${TOOLS[k].name}을(를) 샀어요! 이제 ${TOOLS[k].use}을(를) 할 수 있어요` }); return; } // 도구: 사람마다
         if (item === 'vaccine') { cost = NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0); label = '백신 1개'; }
         else if (BUILD_BY[item] && BUILD_BY[item].cat !== 'crop') { cost = (BUILD_BY[item].price ?? NUM.price[BUILD_BY[item].cat]) * cnt; label = `${BUILD_BY[item].name} ${cnt}개`; }
         else return;
@@ -1243,6 +1243,16 @@ async function adminOp(m) {
     }
     case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
     case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
+    case 'giveP': { // 학생에게 내 코인 주기 (이벤트 보상) — 닉네임으로 찾음
+      const name = String(m.name || '').trim(), amt = Math.trunc(+m.n || 0);
+      if (!name || !amt || Math.abs(amt) > 100000) return { ok: false, err: '닉네임과 숫자를 확인해 주세요' };
+      const ent = Object.entries(state.accounts).find(([, a]) => a.name === name); if (!ent) return { ok: false, err: `'${name}' 학생을 찾지 못했어요` };
+      const acc = ent[1]; acc.pcoin = Math.max(0, (acc.pcoin || 0) + amt); dirty = true;
+      const o = [...online.values()].find((x) => x.token === ent[0]);
+      if (o) send(o.ws, { t: 'pcoin', v: acc.pcoin, add: amt, why: String(m.why || '신의 선물').slice(0, 30) });
+      console.log(`[관리자] ${name} 내 코인 ${amt}`);
+      return { ok: true, name, pcoin: acc.pcoin, online: !!o };
+    }
     case 'nationAdjust': { // 나라 병력·코인 더하기/빼기
       const n = world.nation(String(m.nid || '')); if (!n || n.dead) return { ok: false, err: '없는 나라예요' };
       const da = Math.trunc(+m.army || 0), dc = Math.trunc(+m.coin || 0), dw = Math.trunc(+m.wood || 0);

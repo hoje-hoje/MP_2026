@@ -128,6 +128,12 @@ tr.editing td { background: #fff1b8; }
   </div>
 
   <section class="card">
+    <h2>👛 학생에게 내 코인 주기 <span class="hint">이벤트·발표 보상 · 학생 개인 지갑으로 들어가요 (머리 장식·작업 도구를 살 수 있어요)</span></h2>
+    <div class="row"><label>닉네임 <input id="gpName" placeholder="게임 닉네임" style="width:140px"></label><label>코인 <input id="gpN" type="number" value="100" style="width:90px"></label><label>이유 <input id="gpWhy" placeholder="예: 퀴즈 1등" style="width:160px"></label><button id="gpGo" class="primary" type="button">주기</button><span class="muted" id="gpRes"></span></div>
+    <p class="muted">빼려면 마이너스로 적어요 (예: -50). 접속 중이면 학생 화면에 바로 알림이 떠요.</p>
+  </section>
+
+  <section class="card">
     <h2>🏰 나라 <span class="hint">병력·코인 더하기(+)/빼기(−). 바꾸면 그 나라 학생들에게 알림이 가요</span></h2>
     <div class="tablewrap"><table>
       <thead><tr><th>나라</th><th>왕</th><th>국민 (접속)</th><th class="num">영토</th><th class="num">병력</th><th class="num">코인</th><th class="num">목재</th><th>초대 코드</th><th>조정</th></tr></thead>
@@ -259,6 +265,7 @@ tr.editing td { background: #fff1b8; }
   let S = null, timer = null, msgTimer = null;
 
   function say(text) { const el = $('msg'); el.textContent = text; el.hidden = false; clearTimeout(msgTimer); msgTimer = setTimeout(() => { el.hidden = true; }, 3500); }
+  document.addEventListener('click', async (e) => { if (e.target.id !== 'gpGo') return; try { const r = await api('giveP', { name: $('gpName').value, n: +$('gpN').value, why: $('gpWhy').value || '신의 선물' }); $('gpRes').textContent = `${r.name} → 내 코인 ${r.pcoin}${r.online ? ' (접속 중 · 알림 보냄)' : ' (다음 접속 때 보여요)'}`; say('줬어요'); } catch (er) {} });
   async function api(op, data) {
     const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key, op }, data || {})) });
     let j = null; try { j = await r.json(); } catch (e) { j = { ok: false, err: '서버 응답 오류 (' + r.status + ')' }; }
