@@ -2627,7 +2627,7 @@
     ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: store('mp2026.token'), name: player.name, team: 0, look: lookPayload() }));
     ws.binaryType = 'arraybuffer';
     ws.onmessage = (ev) => { try { if (typeof ev.data === 'string') onNet(JSON.parse(ev.data)); else onPositions(new DataView(ev.data)); } catch (e) { /* 무시 */ } };
-    ws.onclose = () => { netOn = false; remotes.clear(); setNet('연결이 끊겼어요 · 다시 연결하는 중…'); setTimeout(connect, 2000); };
+    ws.onclose = (ev) => { netOn = false; remotes.clear(); if (ev && ev.code === 4002) { setNet('학교 계정으로 로그인해 주세요'); return; } setNet('연결이 끊겼어요 · 다시 연결하는 중…'); setTimeout(connect, 2000); };
   }
   // 주변 사람 위치 (서버가 이진으로 보냄): [1][접속자 u16] + [id u32][x u16][y u16][방향·걷기·얼굴] × n
   function onPositions(v) {
@@ -2743,6 +2743,7 @@
       case 'tools': if (m.pcoin != null) { MY_PCOIN = m.pcoin; renderInv(); } MY_TOOLS = m.tools || {}; toast(m.text); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'fishBite': if (FISHING.on) FISHING.biteAt = performance.now() + m.wait; break;
       case 'fished': stopFishing(); toast(m.text); if (m.fish) { FISHPOP = { kind: m.fish, t0: performance.now() }; SND.play('coin'); } break;
+      case 'needLogin': try { localStorage.removeItem('mp2026.token'); } catch (e) { /* 막힘 */ } showLogin(); break;
       case 'frag': onFrag(m); break;
       case 'ko': onKo(m); break;
       case 'wiped': { // 관리자 초기화: 본 장면·전투 기록 지우고 새로고침 (계정까지 지웠으면 처음부터)
@@ -2861,7 +2862,26 @@
   function startOnline() {
     $('help').hidden = true; $('chat').hidden = false;
     setNet('서버에 연결하는 중…');
+    if (window.MP_GOOGLE && !store('mp2026.token')) { showLogin(); return; } // 학교 계정 로그인 먼저
     connect();
+  }
+  // 학교 구글 계정 로그인 (서버에 GOOGLE_CLIENT_ID 가 있을 때만)
+  let loginShown = false;
+  function showLogin(msg) {
+    const G = window.MP_GOOGLE; if (!G) return; $('gLogin').hidden = false; $('gDomain').textContent = '@' + G.domain; $('gErr').textContent = msg || '';
+    if (loginShown) return; loginShown = true;
+    const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true;
+    sc.onload = () => { google.accounts.id.initialize({ client_id: G.client, hd: G.domain, callback: onGoogle, ux_mode: 'popup' }); google.accounts.id.renderButton($('gBtn'), { theme: 'filled_blue', size: 'large', text: 'signin_with', shape: 'rectangular', width: 280 }); };
+    sc.onerror = () => { $('gErr').textContent = '구글 로그인 창을 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요.'; };
+    document.head.appendChild(sc);
+  }
+  async function onGoogle(resp) {
+    $('gErr').textContent = '확인하는 중…';
+    try {
+      const r = await fetch('/auth/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: resp.credential }) }), j = await r.json();
+      if (!j.ok) { $('gErr').textContent = j.err || '로그인하지 못했어요'; return; }
+      store('mp2026.token', j.token); $('gLogin').hidden = true; $('gErr').textContent = ''; if (!netOn) { try { ws && ws.close(); } catch (e) { /* 없음 */ } connect(); }
+    } catch (e) { $('gErr').textContent = '서버에 연결하지 못했어요. 다시 해 주세요.'; }
   }
   $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { sendChat(); } if (e.key === 'Escape') e.target.blur(); if (e.key === 'Tab') { e.preventDefault(); chatCh = chatCh === 'team' ? 'auto' : 'team'; renderChatTabs(); } });
   $('chatIn').addEventListener('focus', renderChatTabs);
@@ -4314,6 +4334,7 @@
   $('fbConfess').addEventListener('click', () => { $('fragBook').hidden = true; startOpening('confess'); });
   $('opNick').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.stopPropagation(); opName(); } });
   addEventListener('keydown', (e) => {
+    if (!$('gLogin').hidden) { e.stopImmediatePropagation(); return; } // 로그인 창이 떠 있으면 아무 키도 안 먹게
     if (!(TITLE.on || OP.on) || (e.target && e.target.tagName === 'INPUT')) return;
     e.stopImmediatePropagation(); // 타이틀·오프닝 중에는 게임 키(E, 채팅 등)가 안 먹게
     if (TITLE.on && (e.key === 'Enter' || e.key === ' ') && $('coupon').hidden) { e.preventDefault(); endTitle(); return; }

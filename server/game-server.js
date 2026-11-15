@@ -53,12 +53,36 @@ function publicWorld() {
   return worldPublic;
 }
 
+// ---- 학교 구글 계정 로그인 (GOOGLE_CLIENT_ID 를 넣으면 켜짐): @kbs.hs.kr 계정 하나 = 게임 계정 하나
+const GOOGLE_ID = (process.env.GOOGLE_CLIENT_ID || '').trim(), LOGIN_DOMAIN = (process.env.LOGIN_DOMAIN || 'kbs.hs.kr').trim().toLowerCase();
+const loginFails = new Map();
+function googleLogin(req, res) {
+  const out = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  if (!GOOGLE_ID) return out(404, { ok: false, err: '구글 로그인이 꺼져 있어요' });
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim(), g = loginFails.get(ip) || { n: 0, t: Date.now() };
+  if (Date.now() - g.t > 60e3) { g.n = 0; g.t = Date.now(); } if (++g.n > 30) return out(429, { ok: false, err: '잠시 뒤에 다시 해 주세요' }); loginFails.set(ip, g);
+  let body = ''; req.on('data', (c) => { body += c; if (body.length > 8192) req.destroy(); });
+  req.on('end', async () => {
+    let cred = ''; try { cred = String(JSON.parse(body).credential || ''); } catch (e) { return out(400, { ok: false, err: '잘못된 요청' }); }
+    if (!cred || cred.length > 4096) return out(400, { ok: false, err: '잘못된 요청' });
+    let info; try { const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(cred)); info = await r.json(); if (!r.ok) throw new Error(info.error_description || 'invalid'); }
+    catch (e) { return out(401, { ok: false, err: '구글 로그인 확인에 실패했어요. 다시 해 주세요' }); }
+    const email = String(info.email || '').toLowerCase();
+    if (info.aud !== GOOGLE_ID || !['accounts.google.com', 'https://accounts.google.com'].includes(info.iss) || String(info.email_verified) !== 'true' || +info.exp * 1000 < Date.now()) return out(401, { ok: false, err: '구글 로그인 확인에 실패했어요' });
+    if (!email.endsWith('@' + LOGIN_DOMAIN) || (info.hd && String(info.hd).toLowerCase() !== LOGIN_DOMAIN)) return out(403, { ok: false, err: `학교 계정(@${LOGIN_DOMAIN})으로만 들어올 수 있어요` });
+    state.emails = state.emails || {};
+    let token = state.emails[email]; if (!token || !state.accounts[token]) { token = crypto.randomBytes(16).toString('hex'); state.accounts[token] = { x: null, y: null, scene: 'ground', room: null }; state.emails[email] = token; }
+    const acc = state.accounts[token]; acc.email = email; acc.realName = String(info.name || '').slice(0, 40); dirty = true;
+    console.log('[로그인] 학교 계정 로그인'); out(200, { ok: true, token });
+  });
+}
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/config.js') {
     res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-store' });
-    return res.end('window.MP_ONLINE = true;');
+    return res.end('window.MP_ONLINE = true;' + (GOOGLE_ID ? `window.MP_GOOGLE = ${JSON.stringify({ client: GOOGLE_ID, domain: LOGIN_DOMAIN })};` : ''));
   }
+  if (url.pathname === '/auth/google' && req.method === 'POST') return googleLogin(req, res);
   if (url.pathname === '/admin/api') return adminHttp(req, res);
   if (url.pathname.startsWith('/puzzle-img/')) return puzzleImage(url.pathname.slice(12), res);
   if (url.pathname.startsWith('/bgm/')) return bgmFile(url.pathname.slice(5), res);
@@ -327,6 +351,7 @@ wss.on('connection', (ws) => {
       if (m.t !== 'hello') return;
       const team = Math.max(1, Math.min(TEAM_MAX, parseInt(m.team, 10) || 1));
       let token = typeof m.token === 'string' && state.accounts[m.token] ? m.token : null;
+      if (GOOGLE_ID && (!token || !state.accounts[token].email)) { send(ws, { t: 'needLogin', domain: LOGIN_DOMAIN }); setTimeout(() => ws.close(4002, 'login'), 200); return; } // 학교 계정 로그인 먼저
       if (!token) { token = crypto.randomBytes(12).toString('hex'); state.accounts[token] = { x: null, y: null, scene: 'ground', room: null }; }
       const acc = state.accounts[token];
       // 이름: 중복 금지. 이미 정한 이름은 그대로, 새 계정은 겹치지 않는 임시 이름
@@ -1407,7 +1432,7 @@ async function adminOp(m) {
     case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
     case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
     case 'players': { // 학생 목록 (직업 정하기용)
-      const list = Object.entries(state.accounts).filter(([, a]) => a.nameSet && a.name).map(([k, a]) => { const n = world.nationOfPlayer(k); return { name: a.name, nation: n ? n.name : '', job: a.job || '', online: [...online.values()].some((o) => o.token === k), pcoin: a.pcoin || 0 }; }).sort((x, y) => (x.nation || '힣').localeCompare(y.nation || '힣') || x.name.localeCompare(y.name));
+      const list = Object.entries(state.accounts).filter(([, a]) => a.nameSet && a.name).map(([k, a]) => { const n = world.nationOfPlayer(k); return { name: a.name, real: a.realName || '', email: a.email || '', nation: n ? n.name : '', job: a.job || '', online: [...online.values()].some((o) => o.token === k), pcoin: a.pcoin || 0 }; }).sort((x, y) => (x.nation || '힣').localeCompare(y.nation || '힣') || x.name.localeCompare(y.name));
       return { ok: true, players: list };
     }
     case 'setJob': { // 전직 (관리자)
@@ -1533,7 +1558,7 @@ async function adminOp(m) {
       for (const a of Object.values(state.accounts)) { a.solved = []; a.carry = null; a.arrests = null; a.jailUntil = 0; a.stunUntil = 0; a.mined = null; a.stoleAt = null; if (m.positions) { a.x = null; a.y = null; a.scene = 'ground'; a.room = null; } }
       for (const a of Object.values(state.accounts)) { a.hp = NUM.pvp.hp; a.frags = {}; a.side = null; a.notoriety = 0; a.arrestStack = 0; if (m.personal) { a.pcoin = 0; a.bag = {}; a.hats = {}; a.tools = {}; a.job = null; } }
       state.story = { frags: {} }; LOOT.clear(); trades.clear(); contracts.clear(); state.weather = null;
-      if (m.accounts) { for (const k of Object.keys(state.accounts)) delete state.accounts[k]; }
+      if (m.accounts) { for (const k of Object.keys(state.accounts)) delete state.accounts[k]; state.emails = {}; }
       dirty = true; await saveState();
       console.log(`[관리자] 초기화 (계정 ${m.accounts ? '삭제' : '유지'}, 쿠폰 ${m.coupons ? '삭제' : '유지'})`);
       for (const o of online.values()) { send(o.ws, { t: 'wiped', full: !!m.accounts }); setTimeout(() => o.ws.close(4001, 'reset'), 300); } // 모두 새로고침 (본 장면 기록도 지움)
