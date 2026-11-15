@@ -4323,26 +4323,36 @@
   let needFound = false, titleDone = false, BGM_CUR = 'peace'; // 관리자가 고른 게임 안 배경음악
   const TITLE = { on: false, x: 0, y: 0, vx: 0, vy: 0 };
   let lastDt = 0.016; const dt0 = () => lastDt;
-  // 로고: MP 모노그램 (M의 오른쪽 기둥 = P의 기둥, 가운데 가로줄) 을 직접 찍은 도트. 남색 판 위 흰 세리프 글자
+  // 로고: MP 모노그램 (M의 오른쪽 기둥 = P의 기둥, 가운데 가로줄). 매끈한 글자 + 파스텔 그라데이션 + 두꺼운 남색 테두리 + 흰 안쪽 테두리 + 광택 + 반짝이
   function makeLogo(cv) {
-    const W2 = 60, H2 = 35; cv.width = W2; cv.height = H2; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
-    const m = document.createElement('canvas'); m.width = W2; m.height = H2; const q = m.getContext('2d'); q.fillStyle = '#fff';
-    const R = (x, y, w, h) => q.fillRect(x, y, w, h);
-    const line = (x0, y0, x1, y1, w) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) { const x = Math.round(x0 + (x1 - x0) * i / n), y = Math.round(y0 + (y1 - y0) * i / n); R(x, y, w, 1); } };
-    const ox = 8, oy = 5; // 글자 자리 (판 안쪽)
-    R(ox + 2, oy + 1, 2, 22); R(ox, oy, 6, 2); R(ox, oy + 22, 7, 2);           // M 왼쪽 기둥 + 위·아래 세리프
-    line(ox + 3, oy + 1, ox + 14, oy + 22, 4);                                   // 굵은 대각선 (왼 위 → 가운데 아래)
-    line(ox + 15, oy + 21, ox + 24, oy + 2, 2);                                  // 가는 대각선 (가운데 아래 → 오른 위)
-    R(ox + 25, oy + 1, 4, 22); R(ox + 22, oy, 16, 2); R(ox + 22, oy + 22, 10, 2); // M·P가 같이 쓰는 굵은 기둥 + 세리프
-    R(ox + 37, oy + 1, 2, 2); R(ox + 38, oy + 2, 3, 2); R(ox + 39, oy + 3, 3, 8); R(ox + 38, oy + 10, 3, 2); R(ox + 29, oy + 11, 10, 2); // P 고리 (둥글게)
-    R(ox + 16, oy + 12, 9, 2);                                                   // 가운데 가로줄 (가는 대각선 → 기둥)
-    const a = q.getImageData(0, 0, W2, H2).data, on = (x, y) => x >= 0 && y >= 0 && x < W2 && y < H2 && a[(y * W2 + x) * 4 + 3] > 0;
-    // 남색 판: 테두리 + 위에서 아래로 진해지는 띠
-    g.fillStyle = '#0b1026'; g.fillRect(0, 0, W2, H2); const bands = ['#2a3a78', '#24326a', '#1f2b5e', '#1b2552', '#172047'];
-    for (let y = 2; y < H2 - 2; y++) { g.fillStyle = bands[Math.min(bands.length - 1, Math.floor((y - 2) / ((H2 - 4) / bands.length)))]; g.fillRect(2, y, W2 - 4, 1); }
-    g.fillStyle = '#3d52a0'; g.fillRect(2, 2, W2 - 4, 1); g.fillStyle = '#0b1026'; g.fillRect(0, 0, 1, 1); g.fillRect(W2 - 1, 0, 1, 1); g.fillRect(0, H2 - 1, 1, 1); g.fillRect(W2 - 1, H2 - 1, 1, 1);
-    for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) if (on(x, y) && !on(x + 1, y + 1)) { g.fillStyle = '#0b1026'; g.fillRect(x + 1, y + 1, 1, 1); } // 그림자
-    for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) if (on(x, y)) { g.fillStyle = !on(x, y + 1) && on(x, y - 1) ? '#c9d3ee' : '#ffffff'; g.fillRect(x, y, 1, 1); } // 흰 글자 (아래 가장자리만 살짝 회색)
+    const S = 2, W2 = 500 * S, H2 = 300 * S; cv.width = W2; cv.height = H2; const g = cv.getContext('2d');
+    const mk = () => { const c = document.createElement('canvas'); c.width = W2; c.height = H2; return c; };
+    const ox = 44, oy = 14; // 글자 묶음을 가운데로
+    const shape = (q) => { // 글자 모양 (한 가지 색으로)
+      q.save(); q.scale(S, S); q.translate(ox, oy); q.fillStyle = '#000'; q.strokeStyle = '#000';
+      const R = (x, y, w, h) => q.fillRect(x, y, w, h), poly = (...pts) => { q.beginPath(); q.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) q.lineTo(pts[i], pts[i + 1]); q.closePath(); q.fill(); };
+      R(62, 46, 16, 190); R(44, 40, 44, 11); R(38, 230, 56, 12);               // M 왼쪽 기둥 + 세리프
+      poly(64, 40, 100, 40, 198, 236, 168, 236);                                // 굵은 대각선
+      poly(178, 236, 194, 236, 284, 44, 270, 44);                               // 가는 대각선
+      R(272, 44, 32, 192); R(254, 40, 92, 12); R(250, 230, 76, 12);             // 같이 쓰는 기둥 + 세리프
+      q.lineWidth = 24; q.beginPath(); q.moveTo(298, 52); q.lineTo(338, 52); q.arc(338, 101, 49, -Math.PI / 2, Math.PI / 2); q.lineTo(298, 150); q.stroke(); // P 고리
+      R(210, 140, 66, 9);                                                        // 가운데 가로줄
+      q.restore();
+    };
+    const mask = mk(); shape(mask.getContext('2d'));
+    const tint = (fill) => { const c = mk(), q = c.getContext('2d'); q.drawImage(mask, 0, 0); q.globalCompositeOperation = 'source-in'; q.fillStyle = fill; q.fillRect(0, 0, W2, H2); return c; };
+    const ring = (c, r, dy = 0) => { for (let i = 0; i < 32; i++) { const a = i / 32 * Math.PI * 2; g.drawImage(c, Math.cos(a) * r, Math.sin(a) * r + dy); } g.drawImage(c, 0, dy); };
+    ring(tint('#7b5cd6'), 11 * S, 9 * S);   // 아래 보랏빛 그림자
+    ring(tint('#1d1f4f'), 11 * S);          // 두꺼운 남색 테두리
+    ring(tint('#ffffff'), 4.5 * S);         // 흰 안쪽 테두리
+    const gr = g.createLinearGradient(0, 40 * S, 0, 250 * S); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.35, '#e9e2ff'); gr.addColorStop(0.7, '#b9cbff'); gr.addColorStop(1, '#ffc9ea');
+    const body = tint(gr), bq = body.getContext('2d');
+    bq.globalCompositeOperation = 'source-atop'; const gl = bq.createLinearGradient(0, 40 * S, 0, 140 * S); gl.addColorStop(0, 'rgba(255,255,255,0.95)'); gl.addColorStop(1, 'rgba(255,255,255,0)');
+    bq.fillStyle = gl; bq.beginPath(); bq.ellipse(W2 / 2, 40 * S, W2 * 0.48, 92 * S, 0, 0, Math.PI * 2); bq.fill(); // 위쪽 광택
+    bq.fillStyle = 'rgba(123,92,214,0.18)'; bq.fillRect(0, 214 * S, W2, 40 * S); // 아래쪽 살짝 진하게
+    g.drawImage(body, 0, 0);
+    const star = (x, y, r, col) => { g.save(); g.translate(x * S, y * S); g.fillStyle = col; g.shadowColor = 'rgba(255,240,180,0.9)'; g.shadowBlur = 14 * S; g.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 - Math.PI / 2, rr = i % 2 ? r * 0.28 : r; g.lineTo(Math.cos(a) * rr * S, Math.sin(a) * rr * S); } g.closePath(); g.fill(); g.restore(); };
+    star(452, 46, 26, '#fff4b8'); star(478, 92, 11, '#ffffff'); star(54, 262, 16, '#ffd6f0'); star(30, 226, 8, '#ffffff'); star(410, 238, 9, '#d9e6ff');
   }
   function startTitle() {
     for (const cv of document.querySelectorAll('canvas.logoCv')) if (!cv.dataset.done) { makeLogo(cv); cv.dataset.done = 1; }
