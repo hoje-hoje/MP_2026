@@ -1296,6 +1296,8 @@
     if (a) { a.swing = performance.now(); a.swingLv = m.lv; a.face = m.dir; if (!isMe) a.dir = m.dir; }
     const W2 = MPRules.WEAPONS[m.w] || MPRules.WEAPONS.fist, flip = D[0] < 0, ang = D[1] ? (D[1] > 0 ? Math.PI / 2 : -Math.PI / 2) : 0, cy = ay - 20;
     const tgt = (h) => (h.id === myId ? player : remotes.get(h.id));
+    const vol = isMe ? 1 : Math.max(0.12, Math.min(0.85, 1 - Math.hypot(ax - player.x, ay - player.y) / 700)); // 멀수록 작게
+    SND.play({ sword: m.lv ? 'swingSpin' : 'swingSword', axe: m.lv ? 'slam' : 'swingHeavy', spear: 'stab', dagger: 'swingDagger', bow: 'bow', magic: 'fire', fist: m.lv ? 'pow' : 'punch' }[m.w] || 'punch', vol);
     const showHit = (h, delay) => setTimeout(() => {
       const o = tgt(h); if (!o) return; o.hpShow = performance.now(); o.hp = h.hp;
       { const dx = o.x - ax, dy = o.y - ay, L = Math.hypot(dx, dy) || 1; o.hitAt = performance.now(); o.hitDx = dx / L; o.hitDy = dy / L; if (m.a === myId) shakeT = Math.max(shakeT || 0, m.lv ? 0.16 : 0.08); }
@@ -1303,13 +1305,13 @@
       wfx(h.crit ? 'crit-hit' : m.w === 'axe' || m.w === 'fist' ? 'blunt-hit' : 'hit-spark', o.x, o.y - 24, { flip: o.x < ax });
       wfx(h.crit ? 'crit-number' : 'damage-number', o.x, o.y - 66, { text: h.crit ? h.dmg + '!' : '-' + h.dmg, seed: (Math.random() * 99) | 0 });
       if (h.dead) { o.downUntil = performance.now() + MPRules.NUM.pvp.respawnSec * 1000; wfx('shatter-death', o.x, o.y); }
-      SND.play(h.crit ? 'war' : 'hit');
+      SND.play(h.dead ? 'ko' : h.crit || m.lv ? 'smackHeavy' : 'smack', h.id === myId || isMe ? 1 : vol);
     }, delay);
     if (!W2.proj) {
       const fxn = (WPN_FX[m.w] || WPN_FX.fist)[m.lv ? 1 : 0];
       if (m.w === 'fist') { if (m.lv) wfx('cartoon-pow', ax + D[0] * 34, cy + D[1] * 26, {}); else wfx('hit-spark', ax + D[0] * 30, cy + D[1] * 22, { flip, angle: ang }); } // 주먹: 퍽 / 차징이면 POW!
       else wfx(fxn, ax + D[0] * 3, ay - (D[1] ? 20 : 0), { flip, angle: ang });
-      SND.play('chop'); (m.hits || []).forEach((h) => showHit(h, 110));
+      (m.hits || []).forEach((h) => showHit(h, 110));
     } else {
       const rays = m.w === 'bow' && m.lv ? [-0.22, 0, 0.22] : [0], sp = m.w === 'bow' ? 520 : 300, range = W2.range * (m.lv ? 1.3 : 1);
       const hits = (m.hits || []).slice();
@@ -1321,11 +1323,10 @@
         } else if (hits.length) { const o = tgt(hits[0]); if (o) dist = Math.max(10, Math.hypot(o.x - ax, o.y - 20 - cy)); }
         const T = dist / sp, vx = Math.cos(base) * sp, vy = Math.sin(base) * sp;
         wfx(m.w === 'bow' ? 'arrow' : 'fireball', ax + Math.cos(base) * 14, cy + Math.sin(base) * 14, { angle: base, light: m.lv ? 1.6 : 1 }, { vx, vy, life: T, onEnd: (e) => {
-          if (m.w === 'magic') { wfx('small-explosion', e.x, e.y + 14); if (m.lv) wfx('crit-hit', e.x, e.y + 8); (m.hits || []).forEach((h) => showHit(h, 0)); }
+          if (m.w === 'magic') { SND.play('boom', vol); wfx('small-explosion', e.x, e.y + 14); if (m.lv) wfx('crit-hit', e.x, e.y + 8); (m.hits || []).forEach((h) => showHit(h, 0)); }
           else if (hit) showHit(hit, 0); else wfx('poof', e.x, e.y + 8);
         } });
       });
-      SND.play('place');
     }
   }
   function onDead(m) {
@@ -3356,7 +3357,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), room: (id) => testMode && enterRoom(id, 'ground'), quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
@@ -3951,7 +3952,7 @@
     list.push(player);
     drawLoots(ctx, t);
     drawActors(list, t);
-    { const c = atkCharge(); if (c >= 0.25 && !ATK.chFx && PFXW) ATK.chFx = wfx('spell-charge', player.x, player.y, {}, { follow: player }); if (c >= 0) { ctx.strokeStyle = c >= 1 ? '#fff2a8' : 'rgba(159,211,255,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(player.x, player.y - 24, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c); ctx.stroke(); if (c >= 1) { ctx.font = `700 12px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff2a8'; ctx.fillText('차징!', player.x, player.y - 100); } } }
+    { const c = atkCharge(); if (c >= 0.25 && !ATK.chFx && PFXW) { ATK.chFx = wfx('spell-charge', player.x, player.y, {}, { follow: player }); SND.play('charge'); ATK.full = false; } if (c >= 1 && !ATK.full) { ATK.full = true; SND.play('chargeFull'); } if (c >= 0) { ctx.strokeStyle = c >= 1 ? '#fff2a8' : 'rgba(159,211,255,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(player.x, player.y - 24, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c); ctx.stroke(); if (c >= 1) { ctx.font = `700 12px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff2a8'; ctx.fillText('차징!', player.x, player.y - 100); } } }
     drawWfx(Math.min(0.05, lastDt || 0.016), groundCam.x, groundCam.y);
     if (hold.on) { // 꾹 누르기 게이지
       const k = Math.min(1, (performance.now() - hold.t0) / hold.ms);
@@ -4305,7 +4306,7 @@
   // ------------------------------------------------------------ 소리: 효과음 + 배경음악 (파일 없이 WebAudio로 만든 도트 게임 소리)
   // 배경음악은 나중에 받은 음악 파일로 바꿀 수 있게 SND.music(url) 자리를 남겨 둠
   const SND = (() => {
-    let ac = null, master = null, sfxBus = null, bgmBus = null, bgmOn = false, bgmTimer = 0, step = 0;
+    let ac = null, master = null, sfxBus = null, bgmBus = null, bgmOn = false, bgmTimer = 0, step = 0, OUT = null; // OUT: 이번 소리만 작게 (멀리서 난 소리)
     const vol = (k, d) => { const v = store(k); return (v == null ? d : v) / 100; };
     function init() {
       if (ac) return true;
@@ -4315,13 +4316,20 @@
       bgmBus = ac.createGain(); bgmBus.gain.value = vol('mp2026.bgm', 60) * 0.55; bgmBus.connect(master); // 배경음악 크게
       return true;
     }
-    function tone(freq, t0, dur, type = 'square', gain = 0.3, bus = sfxBus, slide = 0) {
+    function tone(freq, t0, dur, type = 'square', gain = 0.3, bus = OUT || sfxBus, slide = 0) {
       const o = ac.createOscillator(), g = ac.createGain();
       o.type = type; o.frequency.setValueAtTime(freq, t0); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * slide), t0 + dur);
       g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
       o.connect(g); g.connect(bus); o.start(t0); o.stop(t0 + dur + 0.02);
     }
-    function noise(t0, dur, gain = 0.3, hp = 800, bus = sfxBus) {
+    function sweep(t0, dur, f0, f1, gain = 0.3, q = 1.4) { // 휙: 띠 거르개를 훑는 바람 소리
+      const n = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * i / n);
+      const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = buf; f.type = 'bandpass'; f.Q.value = q;
+      f.frequency.setValueAtTime(f0, t0); f.frequency.exponentialRampToValueAtTime(f1, t0 + dur); g.gain.value = gain;
+      src.connect(f); f.connect(g); g.connect(OUT || sfxBus); src.start(t0);
+    }
+    function noise(t0, dur, gain = 0.3, hp = 800, bus = OUT || sfxBus) {
       const n = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
       for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
       const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(); src.buffer = buf; f.type = 'highpass'; f.frequency.value = hp; g.gain.value = gain;
@@ -4343,8 +4351,25 @@
       },
       open: (t) => [784, 988, 1175].forEach((f, i) => tone(f, t + i * 0.05, 0.1, 'triangle', 0.14)),
       bell: (t) => { tone(1568, t, 1.2, 'sine', 0.2); tone(2093, t, 0.8, 'sine', 0.08); },
+      // ---- 전투 (무기마다 휘두르는 소리 · 맞는 소리 · 차징)
+      swingSword: (t) => { sweep(t, 0.16, 700, 3200, 0.55); tone(2600, t + 0.05, 0.08, 'triangle', 0.05); },
+      swingSpin: (t) => { sweep(t, 0.35, 500, 2600, 0.5, 1); sweep(t + 0.12, 0.3, 900, 3600, 0.4, 1); tone(2900, t + 0.1, 0.2, 'triangle', 0.05, OUT || sfxBus, 0.8); },
+      swingHeavy: (t) => { sweep(t, 0.28, 220, 1100, 0.65, 0.9); tone(95, t + 0.18, 0.16, 'triangle', 0.35, OUT || sfxBus, 0.6); },
+      slam: (t) => { sweep(t, 0.22, 200, 900, 0.6, 0.9); tone(70, t + 0.2, 0.35, 'triangle', 0.55, OUT || sfxBus, 0.4); noise(t + 0.2, 0.25, 0.35, 90); },
+      stab: (t) => { sweep(t, 0.1, 1400, 4200, 0.5, 2); tone(520, t, 0.08, 'triangle', 0.12, OUT || sfxBus, 1.8); },
+      swingDagger: (t) => { sweep(t, 0.08, 1500, 4500, 0.45, 1.6); sweep(t + 0.09, 0.08, 1500, 4800, 0.4, 1.6); },
+      bow: (t) => { tone(330, t, 0.2, 'sawtooth', 0.12, OUT || sfxBus, 0.7); tone(660, t, 0.12, 'sine', 0.1); sweep(t + 0.02, 0.18, 2500, 6000, 0.3, 2); },
+      fire: (t) => { sweep(t, 0.4, 260, 1100, 0.5, 0.8); tone(160, t, 0.35, 'sawtooth', 0.06, OUT || sfxBus, 2.2); },
+      boom: (t) => { tone(70, t, 0.4, 'triangle', 0.55, OUT || sfxBus, 0.35); noise(t, 0.4, 0.45, 60); sweep(t, 0.3, 1800, 300, 0.25, 0.7); },
+      punch: (t) => { sweep(t, 0.07, 600, 1800, 0.35, 1.2); tone(120, t + 0.04, 0.09, 'triangle', 0.3, OUT || sfxBus, 0.5); },
+      pow: (t) => { sweep(t, 0.1, 400, 1600, 0.45, 1); tone(90, t + 0.06, 0.16, 'triangle', 0.5, OUT || sfxBus, 0.45); noise(t + 0.06, 0.12, 0.3, 150); tone(480, t + 0.12, 0.18, 'square', 0.08, OUT || sfxBus, 1.6); },
+      smack: (t) => { noise(t, 0.06, 0.4, 900); tone(180, t, 0.08, 'triangle', 0.3, OUT || sfxBus, 0.6); },
+      smackHeavy: (t) => { noise(t, 0.1, 0.5, 400); tone(110, t, 0.18, 'triangle', 0.5, OUT || sfxBus, 0.5); tone(1800, t, 0.12, 'triangle', 0.1, OUT || sfxBus, 0.6); },
+      charge: (t) => { tone(260, t, 0.55, 'sine', 0.14, OUT || sfxBus, 3); tone(390, t + 0.05, 0.5, 'triangle', 0.05, OUT || sfxBus, 3); },
+      chargeFull: (t) => { tone(1320, t, 0.18, 'square', 0.1); tone(1760, t + 0.06, 0.25, 'sine', 0.12); },
+      ko: (t) => { tone(440, t, 0.18, 'square', 0.14, OUT || sfxBus, 0.5); tone(220, t + 0.16, 0.4, 'square', 0.12, OUT || sfxBus, 0.5); noise(t, 0.3, 0.25, 300); },
     };
-    function play(name) { if (!init() || ac.state === 'suspended') { if (ac) ac.resume(); } if (!ac || !FX[name]) return; try { FX[name](ac.currentTime + 0.01); } catch (e) { /* 무시 */ } }
+    function play(name, v = 1) { if (!init() || ac.state === 'suspended') { if (ac) ac.resume(); } if (!ac || !FX[name]) return; try { if (v < 0.99) { OUT = ac.createGain(); OUT.gain.value = Math.max(0.05, v); OUT.connect(sfxBus); } FX[name](ac.currentTime + 0.01); } catch (e) { console.warn('효과음 오류', name, e.message); } OUT = null; }
     // 배경음악 3곡 (8분음표 64칸 = 4마디 × 16): 0 = 쉼표
     const TRACKS = {
       peace: { name: '평화로운 들판', bpm: 96, ch: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], lead: 'square',
