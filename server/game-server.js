@@ -122,7 +122,10 @@ function hurt(att, t, dmg, crit) {
   const drops = []; for (const [k, v] of Object.entries(t.acc.bag || {})) { const d = Math.ceil(v * NUM.pvp.dropPct); if (d > 0 && v > 0) { t.acc.bag[k] -= d; if (!t.acc.bag[k]) delete t.acc.bag[k]; drops.push({ k, n: d }); } }
   if (drops.length) send(t.ws, { t: 'bag', bag: t.acc.bag });
   drops.forEach((d, i) => { const id = ++lootSeq, a = (i / Math.max(1, drops.length)) * Math.PI * 2; const L = { id, k: d.k, n: d.n, x: t.x + Math.cos(a) * 26, y: t.y + Math.sin(a) * 16, exp: now() + NUM.pvp.lootMin * 60e3 }; LOOT.set(id, L); areaSend(t, { t: 'loot', l: L }); });
-  send(t.ws, { t: 'dead', by: att.acc.name, sec: NUM.pvp.respawnSec, drops });
+  const an = world.nationOfPlayer(att.token), wk = att.atkW || 'fist', W3 = MPRules.WEAPONS[wk];
+  const how = `${W3.name}${att.atkLv ? ' 차징 공격' : ' 공격'}${crit ? ' (치명타!)' : ''}`;
+  send(t.ws, { t: 'dead', by: att.acc.name, byNation: an ? an.name : '', byJob: jobOf(att) ? MPRules.JOBS[jobOf(att)].name : '', how, dmg, sec: NUM.pvp.respawnSec, drops });
+  areaSend(t, { t: 'ko', a: att.id, v: t.id, by: att.acc.name, who: t.acc.name, how, sec: NUM.pvp.respawnSec });
   return { id: t.id, dmg, hp: 0, crit, dead: true };
 }
 setInterval(() => { // 부활 · 체력 회복 · 떨어진 물건 사라짐
@@ -884,7 +887,7 @@ wss.on('connection', (ws) => {
       case 'atk': { // 공격: 바라보는 방향 앞 네모 (멀리 쏘는 무기는 직선) · 서버가 판정
         if (s.scene !== 'ground' || s.x == null || (s.deadUntil || 0) > now() || jailed(s.acc)) return;
         const W2 = MPRules.WEAPONS[weaponOf(s)], lv = m.lv ? 1 : 0, cd = W2.cd * (lv ? 1.5 : 1);
-        if (now() - (s.lastAtk || 0) < cd - 60) return; s.lastAtk = now(); s.invUntil = 0; // 때리면 무적 풀림
+        if (now() - (s.lastAtk || 0) < cd - 60) return; s.lastAtk = now(); s.invUntil = 0; s.atkW = weaponOf(s); s.atkLv = lv; // 때리면 무적 풀림
         const D = [[0, 1], [0, -1], [-1, 0], [1, 0]][m.dir | 0] || [0, 1], cx = s.x, cy = s.y - 20, k = lv ? 1.3 : 1, roll = () => { const c = Math.random() < NUM.pvp.crit; const v = (W2.dmg[0] + Math.random() * (W2.dmg[1] - W2.dmg[0])) * (lv ? 1.8 : 1) * (c ? 1.8 : 1); return [Math.round(v), c]; };
         const hits = [], targets = [...online.values()].filter((o) => canHurt(s, o));
         if (!W2.proj) {
@@ -1528,10 +1531,12 @@ async function adminOp(m) {
       state.chats = {}; state.wander = []; state.lastResolved = null; state.notice = null; state.lastClockKey = null;
       if (m.coupons) state.coupons = {};
       for (const a of Object.values(state.accounts)) { a.solved = []; a.carry = null; a.arrests = null; a.jailUntil = 0; a.stunUntil = 0; a.mined = null; a.stoleAt = null; if (m.positions) { a.x = null; a.y = null; a.scene = 'ground'; a.room = null; } }
+      for (const a of Object.values(state.accounts)) { a.hp = NUM.pvp.hp; a.frags = {}; a.side = null; a.notoriety = 0; a.arrestStack = 0; if (m.personal) { a.pcoin = 0; a.bag = {}; a.hats = {}; a.tools = {}; a.job = null; } }
+      state.story = { frags: {} }; LOOT.clear(); trades.clear(); contracts.clear(); state.weather = null;
       if (m.accounts) { for (const k of Object.keys(state.accounts)) delete state.accounts[k]; }
       dirty = true; await saveState();
       console.log(`[관리자] 초기화 (계정 ${m.accounts ? '삭제' : '유지'}, 쿠폰 ${m.coupons ? '삭제' : '유지'})`);
-      for (const o of online.values()) o.ws.close(4001, 'reset'); // 모두 다시 접속하게
+      for (const o of online.values()) { send(o.ws, { t: 'wiped', full: !!m.accounts }); setTimeout(() => o.ws.close(4001, 'reset'), 300); } // 모두 새로고침 (본 장면 기록도 지움)
       return { ok: true };
     }
   }

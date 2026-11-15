@@ -244,11 +244,18 @@ tr.editing td { background: #fff1b8; }
   </section>
 
   <section class="card danger-zone">
+    <h2>🧨 전체 초기화</h2>
+    <p class="muted">나라·영토·전투·채팅·계정·개인 코인·가방·직업·멸망 조각까지 <b>전부</b> 지우고 처음 상태로 돌려요. 맵 고치기, 퍼즐 문제, 쿠폰, 배경음악 설정은 남아요. 지우기 직전 상태는 저장소에 백업돼요. 접속 중인 학생 화면은 자동으로 새로고침돼요.</p>
+    <div class="row">
+      <input id="rAllConfirm" placeholder="'전체 초기화'라고 입력">
+      <button id="resetAll" class="danger">🧨 전체 초기화</button>
+    </div>
     <details>
-      <summary>⚠ 초기화 (행사 시작 전 테스트 기록 지우기)</summary>
+      <summary>⚙ 골라서 초기화</summary>
       <p class="muted">나라·영토·전투·채팅·유랑민 기록과 학생들이 푼 문제 기록이 지워져요. 지우기 직전 상태는 저장소에 따로 백업돼요.</p>
       <div class="row"><label><input type="checkbox" id="rPos" checked> 캐릭터 위치도 처음으로</label></div>
       <div class="row"><label><input type="checkbox" id="rCoupons"> 쿠폰도 모두 삭제</label></div>
+      <div class="row"><label><input type="checkbox" id="rPersonal"> 개인 물건도 (내 코인·가방·모자·도구·직업)</label></div>
       <div class="row"><label><input type="checkbox" id="rAccounts"> 계정(닉네임·꾸미기)까지 모두 삭제</label></div>
       <div class="row">
         <input id="rConfirm" placeholder="'초기화'라고 입력">
@@ -428,9 +435,15 @@ tr.editing td { background: #fff1b8; }
   async function saveSettings(patch) { S = await api('settings', patch); render(); say('설정을 바꿨어요'); }
   $('sTest').onchange = () => { const v = $('sTest').value; saveSettings({ testMode: v === 'auto' ? null : v === 'on' }); };
   $('sFound').onchange = () => saveSettings({ founding: $('sFound').value });
+  $('resetAll').onclick = async () => {
+    if ($('rAllConfirm').value.trim() !== '전체 초기화') return say("확인 칸에 '전체 초기화'라고 써 주세요");
+    if (!confirm('정말 전부 지울까요? 모든 계정과 나라가 사라지고, 되돌릴 수 없어요 (백업만 남아요).')) return;
+    const r = await api('reset', { confirm: '초기화', positions: true, personal: true, accounts: true, coupons: false }); $('rAllConfirm').value = '';
+    say(r && r.ok === false ? r.err : '전체 초기화했어요 · 학생들은 처음부터 시작해요'); load();
+  };
   $('reset').onclick = async () => {
     if ($('rConfirm').value.trim() !== '초기화') return say("확인 칸에 '초기화'라고 써 주세요");
-    const opts = { confirm: '초기화', positions: $('rPos').checked, coupons: $('rCoupons').checked, accounts: $('rAccounts').checked };
+    const opts = { confirm: '초기화', positions: $('rPos').checked, coupons: $('rCoupons').checked, personal: $('rPersonal').checked, accounts: $('rAccounts').checked };
     if (!confirm('정말 초기화할까요? 접속 중인 학생은 모두 다시 연결돼요.')) return;
     await api('reset', opts); $('rConfirm').value = ''; say('초기화했어요'); load();
   };

@@ -1292,9 +1292,13 @@
   }
   function onDead(m) {
     PV.deadUntil = performance.now() + m.sec * 1000; PV.hp = 0; player.downUntil = PV.deadUntil; step.on = false; hold.on = false; stopFishing(); ATK.down = false;
-    $('deadBy').textContent = m.by; $('deadDrops').innerHTML = m.drops && m.drops.length ? '떨어뜨린 물고기: ' + m.drops.map((d) => `${esc((BUILD_BY[d.k] || {}).name || d.k)} ${d.n}`).join(', ') + ' (누구나 주울 수 있어요)' : '가방에 물고기가 없어서 떨어뜨린 건 없어요';
+    $('deadBy').textContent = m.by; $('deadWho').textContent = [m.byNation, m.byJob].filter(Boolean).join(' · '); $('deadHow').textContent = `${m.how} · 마지막 한 방 ${m.dmg}`; $('deadDrops').innerHTML = m.drops && m.drops.length ? '떨어뜨린 물고기: ' + m.drops.map((d) => `${esc((BUILD_BY[d.k] || {}).name || d.k)} ${d.n}`).join(', ') + ' (누구나 주울 수 있어요)' : '가방에 물고기가 없어서 떨어뜨린 건 없어요';
     $('dead').hidden = false; SND.play('war');
-    const tick = () => { const left = Math.ceil((PV.deadUntil - performance.now()) / 1000); if (left <= 0 || $('dead').hidden) return; $('deadSec').textContent = left; setTimeout(tick, 250); }; tick();
+    const tot = m.sec * 1000, tick = () => { const ms = PV.deadUntil - performance.now(), left = Math.ceil(ms / 1000); if (left <= 0 || $('dead').hidden) return; $('deadSec').textContent = left; $('deadFill').style.width = `${Math.round((1 - ms / tot) * 100)}%`; requestAnimationFrame(tick); }; tick();
+  }
+  function onKo(m) { // 누가 누구를 기절시켰는지 (주변 사람에게)
+    const v = m.v === myId ? player : remotes.get(m.v); if (v) v.downUntil = performance.now() + m.sec * 1000;
+    if (m.a === myId) toast(`💫 ${m.who}을(를) 기절시켰어요! (${m.how})`); else if (m.v !== myId) toast(`💫 ${m.by} → ${m.who} 기절 (${m.how})`);
   }
   function onHp(m) {
     if (m.id === myId) { PV.hp = m.hp; player.hp = m.hp; if (m.respawn) { PV.deadUntil = 0; player.downUntil = 0; PV.invUntil = performance.now() + MPRules.NUM.pvp.invMs; player.invUntil = PV.invUntil; $('dead').hidden = true; loadPfxW().then(() => wfx('respawn-beam', player.x, player.y)); toast('수도에서 다시 일어났어요 · 3초 동안 무적'); } return; }
@@ -2740,6 +2744,12 @@
       case 'fishBite': if (FISHING.on) FISHING.biteAt = performance.now() + m.wait; break;
       case 'fished': stopFishing(); toast(m.text); if (m.fish) { FISHPOP = { kind: m.fish, t0: performance.now() }; SND.play('coin'); } break;
       case 'frag': onFrag(m); break;
+      case 'ko': onKo(m); break;
+      case 'wiped': { // 관리자 초기화: 본 장면·전투 기록 지우고 새로고침 (계정까지 지웠으면 처음부터)
+        const keep = m.full ? ['mp2026.bgm', 'mp2026.sfx', 'mp2026.chatTuck'] : ['mp2026.bgm', 'mp2026.sfx', 'mp2026.chatTuck', 'mp2026.token', 'mp2026.look', 'mp2026.team', 'mp2026.opened'];
+        try { for (const k of Object.keys(localStorage)) if (k.startsWith('mp2026.') && !keep.includes(k)) localStorage.removeItem(k); } catch (e) { /* 저장소 막힘 */ }
+        toast('관리자가 게임을 초기화했어요 · 새로 시작해요'); setTimeout(() => location.reload(), 900); break;
+      }
       case 'side': MY_SIDE = m.side; if (!$('fragBook').hidden) openFragBook(); break;
       case 'fx': onFx(m); break;
       case 'dead': onDead(m); break;
@@ -3604,7 +3614,9 @@
     }
     for (const o of list) {
       if (o.draw) continue;
-      { const hp = o === player ? PV.hp : o.hp; if (player.scene === 'ground' && hp != null && hp < HPMAX && !((o.downUntil || 0) > performance.now())) drawHpBar2(ctx, o.x, o.y - 76, hp); }
+      { const hp = o === player ? PV.hp : o.hp, dl = (o.downUntil || 0) - performance.now(); if (player.scene === 'ground' && hp != null && hp < HPMAX && dl <= 0) drawHpBar2(ctx, o.x, o.y - 76, hp);
+        if (dl > 0) { const txt = `💫 기절 · 부활 중 ${Math.ceil(dl / 1000)}`; ctx.font = `700 13px ${PFONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const w = ctx.measureText(txt).width + 14; ctx.fillStyle = 'rgba(43,35,64,0.85)'; ctx.fillRect(o.x - w / 2, o.y - 92, w, 20); ctx.fillStyle = '#ffd84d'; ctx.fillText(txt, o.x, o.y - 82);
+          const k = 1 - dl / (MPRules.NUM.pvp.respawnSec * 1000); ctx.fillStyle = '#5a1a2a'; ctx.fillRect(o.x - w / 2, o.y - 72, w, 4); ctx.fillStyle = '#9fd3ff'; ctx.fillRect(o.x - w / 2, o.y - 72, w * Math.max(0, Math.min(1, k)), 4); } }
       nameTag(ctx, o.x, o.y - 56, (SIDE_ICON[o === player ? MY_SIDE : o.side] || '') + jobIcon(o === player ? MY_JOB : o.job) + (o === player ? player.name : o.name) + (o.badge ? ' ' + o.badge : ''), o === player ? player.tag : o.tag); // 이름 옆 악명 (💀 / 체포왕 👮)
       if (o.carry) { // 훔친 가방: 머리 옆에 큰 자루
         const b = Math.sin(performance.now() / 150) * 2, bx = o.x + 24, by = o.y - 40 + b;
