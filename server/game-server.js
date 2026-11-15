@@ -236,7 +236,7 @@ const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim()
 const HEX = /^#[0-9a-f]{6}$/i;
 function cleanLook(l) {
   l = l || {};
-  return { char: Math.max(0, Math.min(127, l.char | 0)), hue: Math.max(0, Math.min(5, l.hue | 0)), hair: HEX.test(l.hair) ? l.hair : '#4a3428', outfit: HEX.test(l.outfit) ? l.outfit : '#5b7fd6', skin: HEX.test(l.skin) ? l.skin : '#ffe1cc', accent: HEX.test(l.accent) ? l.accent : '#ff5d7a', long: !!l.long };
+  return { char: Math.max(0, Math.min(127, l.char | 0)), hue: Math.max(0, Math.min(5, l.hue | 0)), hair: HEX.test(l.hair) ? l.hair : '#4a3428', outfit: HEX.test(l.outfit) ? l.outfit : '#5b7fd6', skin: HEX.test(l.skin) ? l.skin : '#ffe1cc', accent: HEX.test(l.accent) ? l.accent : '#ff5d7a', sk: Math.max(0, Math.min(8, l.sk | 0)), hat: /^[a-z]{1,12}$/.test(l.hat || '') ? l.hat : '', long: !!l.long };
 }
 // ---- 이름 (동명이인 금지, 바꾸기 3번)
 const NAME_CHANGES = 3;
@@ -1033,6 +1033,7 @@ function resolveNight(why, slot) {
     // 멸망: 팀원은 유랑민
     if (r.destroyed && r.members) for (const key of r.members) { const o = [...online.values()].find((x) => x.token === key); if (o) { send(o.ws, { t: 'ok', text: `💀 ${r.defName}이(가) 멸망했어요. 이제 유랑민이에요 — 하늘 유랑민 등록소에서 다른 나라로 귀화할 수 있어요` }); sendMeta(o); } }
   }
+  for (const r of reports) for (const nid of r.unlocked || []) notifyNation(nid, '🛡 첫 영역전 승리! 병영이 열렸어요 · 나라 창(B)에서 병력 종족을 고를 수 있어요');
   for (const tid of Object.keys(world.s.mines)) if (world.s.owner[tid] !== before[tid]) delete world.s.mines[tid]; // 주인이 바뀐 영토의 금광은 기본 자리로
   for (const n of world.alive()) if (n.storePos && world.ownerOf(terrAtTile(n.storePos[0], n.storePos[1])) !== n.id) delete n.storePos; // 저장소 자리를 빼앗기면 수도 옆으로
   for (const n of world.alive()) if (n.portalPos && (world.ownerOf(terrAtTile(n.portalPos[0], n.portalPos[1])) !== n.id || terrAtTile(n.portalPos[0], n.portalPos[1]) !== n.capital)) delete n.portalPos; // 포털은 수도 안에서만

@@ -578,6 +578,9 @@
         } else {
           const pr = Math.floor(lossA * NUM.prisonerPct); D.army += pr; rep.prisoners = pr; // 방어 보상: 포로
         }
+        // 병영 열기: 영역전에서 처음 이긴 나라 (공격·방어·동맹 참전 모두)
+        const winSide = attWins ? 'att' : 'def', wins = [attWins ? A : D, ...helpers.filter((h) => h.side === winSide).map((h) => this.nation(h.nid))];
+        rep.unlocked = wins.filter((x) => x && !x.dead && !x.raceOpen).map((x) => { x.raceOpen = true; return x.id; });
         reports.push(rep);
       }
       this.s.reports = this.s.reports.concat(reports).slice(-300);
@@ -590,7 +593,7 @@
       for (const b of this.s.battles.filter((x) => x.att === D.id || x.def === D.id)) this.refund(b);
       this.s.battles = this.s.battles.filter((x) => x.att !== D.id && x.def !== D.id);
     }
-    setRace(nid, race) { const n = this.nation(nid); if (!n || !RACES.includes(race)) return { ok: false, err: '그런 종족이 없어요' }; n.race = race; return { ok: true }; }
+    setRace(nid, race) { const n = this.nation(nid); if (!n || !RACES.includes(race)) return { ok: false, err: '그런 종족이 없어요' }; if (!n.raceOpen) return { ok: false, err: '병영은 영역전에서 처음 이기면 열려요' }; n.race = race; return { ok: true }; }
     // 천도 (왕만 — 서버에서 확인): 비용, 우리 영역, 전투 대기 중 불가, 하루에 한 번
     moveCapital(nid, tid, now) {
       const n = this.nation(nid);
@@ -608,7 +611,7 @@
     // ---------------------------------------------------------- 참가자에게 보낼 화면 정보
     publicNations() {
       const out = {};
-      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null, portal: n.portalPos || null, ally: n.ally || null, storeLv: storeLevel(n), race: n.race || RACES[(n.team | 0) % 3] };
+      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null, portal: n.portalPos || null, ally: n.ally || null, storeLv: storeLevel(n), race: n.raceOpen ? (n.race || RACES[(n.team | 0) % 3]) : 'human', raceOpen: !!n.raceOpen };
       return out;
     }
     view(nid, key) {
@@ -621,7 +624,7 @@
           erosion: this.nationErosion(n.id),
           defaultDef: n.defaultDef || null, intelAny: n.intelAny || 0, intel: n.intel || {},
           wood: n.wood || 0, vaccine: n.vaccine || 0, items: normItems(n.items), vaccinePrice: NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0),
-          isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length,
+          raceOpen: !!n.raceOpen, isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length,
           declaresLeft: this.declaresLeft(n.id, this.s.curSlot), provinces: n.provinces, code: n.code,
           // 접속 열쇠(토큰)는 절대 내보내지 않는다: 순번만
           memberList: n.members.map((k, i) => ({ idx: i, name: (n.memberNames || {})[k] || '?', king: k === n.king, me: k === key })),

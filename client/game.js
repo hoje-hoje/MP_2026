@@ -349,16 +349,20 @@
   }
   const HUES = [0, 50, 110, 170, 230, 300];
   const sheets = new Map();
-  function charSheet(c, hi) {
-    const key = c + ':' + hi; let cv = sheets.get(key); if (cv) return cv;
+  // 피부색 팔레트 (0 = 원래 색)
+  const SKINS_PAL = [null, '#ffe2c8', '#f7c9a2', '#e9a879', '#cf8c5c', '#a86a42', '#7a4a2c', '#9edb86', '#a9d6ff'];
+  const SKIN_NAME = ['원래', '밝은', '살구', '복숭아', '구릿빛', '갈색', '진갈색', '연두', '하늘'];
+  function charSheet(c, hi, sk = 0) {
+    const key = c + ':' + hi + ':' + sk; let cv = sheets.get(key); if (cv) return cv;
     c = Math.max(0, Math.min(CHARS.names.length - 1, c | 0));
     cv = document.createElement('canvas'); cv.width = 64; cv.height = 112;
     const g = cv.getContext('2d'); g.drawImage(ART.chars, (c % CHARS.cols) * 64, Math.floor(c / CHARS.cols) * 112, 64, 112, 0, 0, 64, 112);
-    hueShift(g, cv.width, cv.height, HUES[hi] || 0);
+    hueShift(g, cv.width, cv.height, HUES[hi] || 0, SKINS_PAL[sk] || null);
     sheets.set(key, cv); return cv;
   }
-  function hueShift(g, w, h, deg) {
-    if (deg) {
+  function hueShift(g, w, h, deg, skin) { // 옷 색 바꾸기 (피부 픽셀은 빼고) + 피부색 바꾸기
+    const sk = skin && [parseInt(skin.slice(1, 3), 16), parseInt(skin.slice(3, 5), 16), parseInt(skin.slice(5, 7), 16)];
+    if (deg || sk) {
       const d = g.getImageData(0, 0, w, h), px = d.data;
       for (let i = 0; i < px.length; i += 4) {
         if (!px[i + 3]) continue;
@@ -367,6 +371,9 @@
         if (dd < 0.12) continue; // 회색·검정·흰색(얼굴, 윤곽)은 그대로
         const sat = dd / (1 - Math.abs(2 * l - 1));
         let hh = mx === r ? ((gg - b) / dd) % 6 : mx === gg ? (b - r) / dd + 2 : (r - gg) / dd + 4;
+        const h0 = (hh * 60 + 360) % 360, isSkin = h0 >= 12 && h0 <= 42 && sat >= 0.25 && sat <= 0.9 && l >= 0.5 && l <= 0.9; // 살구·주황빛 = 피부
+        if (isSkin) { if (sk) { const k = l / 0.72; px[i] = Math.min(255, sk[0] * k); px[i + 1] = Math.min(255, sk[1] * k); px[i + 2] = Math.min(255, sk[2] * k); } continue; }
+        if (!deg) continue;
         hh = (hh * 60 + deg + 360) % 360;
         const C = (1 - Math.abs(2 * l - 1)) * sat, X = C * (1 - Math.abs((hh / 60) % 2 - 1)), m = l - C / 2;
         const [r1, g1, b1] = hh < 60 ? [C, X, 0] : hh < 120 ? [X, C, 0] : hh < 180 ? [0, C, X] : hh < 240 ? [0, X, C] : hh < 300 ? [X, 0, C] : [C, 0, X];
@@ -404,12 +411,33 @@
       g.drawImage(im, -Math.round(w / 2), -h, w, h);
       g.restore();
     } else {
-      const sheet = charSheet(c - USER.chars.length, look.hue | 0);
+      const sheet = charSheet(c - USER.chars.length, look.hue | 0, look.sk | 0);
       const row = moving ? (Math.floor(t * 8 + (look.seed || 0)) % 4) : 0;
       g.drawImage(sheet, (face | 0) * 16, row * 16, 16, 16, Math.round(x - 8 * CH_K), Math.round(y - 16 * CH_K + 2), 16 * CH_K, 16 * CH_K);
+      if (look.hat) drawHat(g, x, y - 16 * CH_K + 2 + CH_K * 3, look.hat, CH_K, face === 2); // 머리 장식
     }
     g.imageSmoothingEnabled = prev;
   }
+  // 머리 장식 (어몽어스처럼 모자를 씀) — 직접 그린 도트, 아래쪽이 머리 꼭대기에 닿게
+  const HAT_PAL = { Y: '#ffd84d', O: '#b8862b', R: '#e8423c', B: '#5b9cf0', W: '#ffffff', K: '#2b2340', k: '#4a3f5e', P: '#ff7fb1', p: '#c94a8a', G: '#5fbf6a', g: '#3f9a52', V: '#8a5fd6', v: '#5a3fa0', C: '#3d6fd6', c: '#2a4fa8', S: '#f4f8ff', s: '#cfd8ea', N: '#d6455b', n: '#a8303f', T: '#c98a4a' };
+  const HATS = {
+    crown: { name: '왕관', px: ['Y...YY...Y', 'YY.YYYY.YY', 'YYYYYYYYYY', 'YRYYBYYRYY', 'OOOOOOOOOO'] },
+    party: { name: '파티 모자', px: ['...W...', '...P...', '..PPY..', '..YPP..', '.PPPYP.', '.PYPPP.', 'PPPPYPP', 'OOOOOOO'] },
+    tophat: { name: '실크햇', px: ['..KKKKKK..', '..KkKKKK..', '..KkKKKK..', '..NNNNNN..', '..KKKKKK..', 'KKKKKKKKKK'] },
+    cap: { name: '야구 모자', flip: true, px: ['..CCCCCC..', '.CCCWWCCC.', '.CCCCCCCC.', 'ccccccccccccc'] },
+    beanie: { name: '털모자', px: ['....WW....', '..NNNNNN..', '.NNNNNNNN.', '.NnNnNnNn.', 'WWWWWWWWWW'] },
+    flower: { name: '꽃핀', flip: true, px: ['.......PP...', '......PYYP..', '.......PP...', '............'] },
+    bow: { name: '리본', px: ['PP.....PP', 'PPP.p.PPP', 'PPPpppPPP', 'PPP.p.PPP', 'PP.....PP'] },
+    horns: { name: '악마 뿔', px: ['N..........N', 'NN........NN', '.NN......NN.', '.nN......Nn.'] },
+    halo: { name: '천사 고리', lift: 4, px: ['..YYYYYY..', '.Y......Y.', '..YYYYYY..'] },
+    wizard: { name: '마법사 모자', px: ['......V...', '.....VV...', '....VVV...', '....VYV...', '...VVVVV..', '...VVVYV..', '..VVVVVVV.', 'vvvvvvvvvv'] },
+    sprout: { name: '새싹', px: ['GG.GG', 'GGgGG', '..g..', '..g..'] },
+    cat: { name: '고양이 귀', px: ['K..........K', 'KK........KK', 'KPK......KPK', 'KKK......KKK'] },
+    chef: { name: '요리사 모자', px: ['.SSSSSSS.', 'SSSsSSsSS', 'SSSSSSSSS', '.SSSSSSS.', '.sSSSSSs.', '.SSSSSSS.'] },
+    viking: { name: '바이킹 투구', px: ['S..........S', 'SS..TTTT..SS', '.STTTTTTTTS.', '..TTTTTTTT..', '..OOOOOOOO..'] },
+  };
+  for (const k in HATS) HATS[k].cv = pxRows(HATS[k].px, HAT_PAL);
+  function drawHat(g, x, top, id, k, flip) { const H = HATS[id]; if (!H || !H.cv) return; const w = H.cv.width * k, hh = H.cv.height * k, p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.save(); g.translate(Math.round(x), Math.round(top + 2 * k - (H.lift || 0) * k)); if (flip && H.flip) g.scale(-1, 1); g.drawImage(H.cv, Math.round(-w / 2), -hh, w, hh); g.restore(); g.imageSmoothingEnabled = p; }
   const faceOf = (dx, dy, prev) => (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) ? prev : (Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 1 : 0));
 
   // ------------------------------------------------------------ 바닥 청크
@@ -1646,7 +1674,7 @@
     x: 0, y: 0, dir: 1, moving: false, scene: 'ground', room: null, entry: null,
     name: saved.name || '나', tag: '#277a58', team: store('mp2026.team') || 3,
     face: 0,
-    look: { char: saved.char | 0, hue: saved.hue | 0, hair: saved.hair || '#8a5a3c', outfit: saved.outfit || '#3fa37a', skin: '#ffe1cc', accent: '#ff5d7a', long: saved.long !== false, me: true, seed: 0 },
+    look: { char: saved.char | 0, hue: saved.hue | 0, hair: saved.hair || '#8a5a3c', outfit: saved.outfit || '#3fa37a', skin: '#ffe1cc', accent: '#ff5d7a', long: saved.long !== false, me: true, seed: 0, sk: saved.sk | 0, hat: saved.hat || '' },
   };
   const bots = [];
   const BOT_NAMES = ['하늘', '노을', '바람', '별', '모래', '파도', '숲', '달', '해', '구름', '불꽃', '이슬', '여름', '초코', '봄비', '단비', '솔', '우주', '감자', '고래'];
@@ -2232,6 +2260,10 @@
       b.addEventListener('click', () => { player.look.char = i; closetUI(); saveLook(); });
       cw.appendChild(b);
     });
+    $('hatSw').innerHTML = [['', '없음'], ...Object.entries(HATS).map(([k, h]) => [k, h.name])].map(([k, nm]) => `<button type="button" class="hatbtn" data-hat="${k}" aria-pressed="${(player.look.hat || '') === k}" title="${nm}"><canvas width="40" height="34"></canvas><small>${nm}</small></button>`).join('');
+    for (const b of $('hatSw').querySelectorAll('[data-hat]')) { const H = HATS[b.dataset.hat], g = b.querySelector('canvas').getContext('2d'); g.imageSmoothingEnabled = false; if (H) { const k = Math.min(3, Math.floor(38 / H.cv.width), Math.floor(30 / H.cv.height)); g.drawImage(H.cv, (40 - H.cv.width * k) / 2, (34 - H.cv.height * k) / 2, H.cv.width * k, H.cv.height * k); } else { g.strokeStyle = '#c9b79a'; g.lineWidth = 3; g.beginPath(); g.arc(20, 17, 10, 0, 7); g.moveTo(13, 10); g.lineTo(27, 24); g.stroke(); } b.onclick = () => { player.look.hat = b.dataset.hat; closetUI(); saveLook(); }; }
+    $('skinSw').innerHTML = SKINS_PAL.map((c, i) => `<button type="button" class="sw" data-sk="${i}" title="${SKIN_NAME[i]}" aria-pressed="${(player.look.sk | 0) === i}" style="background:${c || 'conic-gradient(#ffe2c8, #e9a879, #7a4a2c, #ffe2c8)'}"></button>`).join('');
+    for (const b of $('skinSw').querySelectorAll('[data-sk]')) b.onclick = () => { player.look.sk = +b.dataset.sk; closetUI(); saveLook(); };
     const hw = $('outfitSw'); hw.textContent = '';
     HUES.forEach((deg, i) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'sw';
@@ -2247,11 +2279,12 @@
     const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, cv.width, cv.height);
     const c = (player.look.char | 0) - USER.chars.length, t = performance.now() / 1000;
     if (c < 0) drawSprite(g, 64, 104, Object.assign({}, player.look, { me: false }), t, true, 0);
-    else { const sheet = charSheet(c, player.look.hue | 0), ph = Math.floor(t / 1.2) % 5, dir = [0, 3, 1, 2, 3][ph], row = ph === 4 ? 4 : Math.floor(t * 8) % 4; g.drawImage(sheet, dir * 16, row * 16, 16, 16, 16, 8, 96, 96); }
+    else { const sheet = charSheet(c, player.look.hue | 0, player.look.sk | 0), ph = Math.floor(t / 1.2) % 5, dir = [0, 3, 1, 2, 3][ph], row = ph === 4 ? 4 : Math.floor(t * 8) % 4; g.drawImage(sheet, dir * 16, row * 16, 16, 16, 16, 8, 96, 96); }
+    if (c >= 0 && player.look.hat) { const ph = Math.floor(t / 1.2) % 5, dir = [0, 3, 1, 2, 3][ph]; drawHat(g, 64, 8 + 6 * 3, player.look.hat, 6, dir === 2); }
     requestAnimationFrame(closetPreview);
   }
   function saveLook() {
-    store('mp2026.look', { name: player.name, char: player.look.char | 0, hue: player.look.hue | 0, hair: player.look.hair, outfit: player.look.outfit, long: player.look.long });
+    store('mp2026.look', { name: player.name, char: player.look.char | 0, hue: player.look.hue | 0, hair: player.look.hair, outfit: player.look.outfit, long: player.look.long, sk: player.look.sk | 0, hat: player.look.hat || '' });
     if (window.MP_ONLINE && ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'look', name: player.name, look: lookPayload() }));
   }
   $('lenSeg').parentElement.hidden = true;
@@ -2300,7 +2333,7 @@
   let chatLog = [], wanderList = [];
   const EMOTE_LIST = ['안녕!', '거래 구함!', '동맹 할래?', 'ㅋㅋㅋ', '!', '?', '도와줘!', '고마워'];
 
-  function lookPayload() { const l = player.look; return { char: l.char | 0, hue: l.hue | 0, hair: l.hair, outfit: l.outfit, skin: l.skin, accent: l.accent, long: l.long }; }
+  function lookPayload() { const l = player.look; return { char: l.char | 0, hue: l.hue | 0, hair: l.hair, outfit: l.outfit, skin: l.skin, accent: l.accent, long: l.long, sk: l.sk | 0, hat: l.hat || '' }; }
   function setNet(text) { $('netText').textContent = text; }
   function connect() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
@@ -2847,7 +2880,7 @@
           mineE.map((tid) => `<div class="row"><span>${esc(terrLabel(tid))} · ${tid === me.capital ? '수도 (안전)' : `침식 ${EROSION[tid] | 0}%`}</span>${tid !== me.capital && (EROSION[tid] | 0) > 0 ? `<button data-vax="${tid}" ${me.vaccine > 0 ? '' : 'disabled'}>백신 쓰기</button>` : ''}</div>`).join('') + '</div>';
       }
       { const cur = (nationsPub[me.id] && nationsPub[me.id].race) || 'human';
-        h += `<div class="plan"><h3>🛡 병영 · 병력 종족</h3><div class="row"><span>지금 우리 병력: <b>${RACE_INFO[cur].icon} ${RACE_INFO[cur].name}</b> (${RACE_INFO[cur].weapon}) · ${me.army}명</span><button id="btnBarracks" type="button">🛡 병영 열기</button></div></div>`; }
+        h += me.raceOpen ? `<div class="plan"><h3>🛡 병영 · 병력 종족</h3><div class="row"><span>지금 우리 병력: <b>${RACE_INFO[cur].icon} ${RACE_INFO[cur].name}</b> (${RACE_INFO[cur].weapon}) · ${me.army}명</span><button id="btnBarracks" type="button">🛡 병영 열기</button></div></div>` : `<div class="plan locked"><h3>🔒 병영 (잠김)</h3><p class="msg">영역전에서 <b>처음 이기면</b> 병영이 열려요 (공격·방어·동맹 참전 승리 모두). 병영에서는 우리 병력의 종족을 고를 수 있어요.</p></div>`; }
       h += `<h3>나라 정보</h3><div class="msg">수도 ${esc(terrLabel(me.capital))} · 영토 ${me.territories}곳 · 병력 ${me.army} · 코인 ${me.coin} · 행동력 ${me.actions}</div>`;
       // 천도: 왕이 코인을 내고 우리 영역 중 아무 곳으로 (전투 대기 중 불가, 하루에 한 번)
       const mineT = Object.keys(owners).filter((k) => owners[k] === me.id && +k !== me.capital).map(Number);

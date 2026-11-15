@@ -482,6 +482,9 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .bkCards { display: flex; flex-direction: column; gap: 8px; } .bkCard { position: relative; display: grid; grid-template-columns: 96px 1fr; grid-template-rows: auto auto auto; column-gap: 10px; align-items: center; text-align: left; min-height: 0; padding: 6px 10px; background: #fff !important; color: #2b2340 !important; border: 3px solid #e8c260 !important; border-image: none !important; box-shadow: 3px 3px 0 #b8862b !important; text-shadow: none !important; }
 .bkCard canvas { grid-row: 1 / 4; width: 96px; height: 96px; image-rendering: pixelated; background: radial-gradient(circle, #fff6d6, #e3f2ff); } .bkCard b { font-family: var(--font-display); font-weight: 400; font-size: 20px; } .bkCard small { color: #6b6280; font-size: 12px; } .bkCard .bkW { font-size: 13px; color: #8a5a2b; }
 .bkCard i { position: absolute; right: 8px; top: 8px; font-style: normal; font-size: 11px; background: #3d5fb8; color: #fff; padding: 2px 6px; border: 2px solid #2b2340; } .bkCard.sel { outline: 4px solid #ffd84d; }
+.hatgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 4px; max-height: 190px; overflow-y: auto; background: #fff; border: 3px solid #e8c260; padding: 4px; }
+.hatbtn { display: flex; flex-direction: column; align-items: center; gap: 0; min-height: 0; padding: 2px; background: #fffaf0 !important; color: #2b2340 !important; border: 2px solid #efe0b8 !important; border-image: none !important; text-shadow: none !important; box-shadow: none !important; } .hatbtn canvas { width: 40px; height: 34px; image-rendering: pixelated; } .hatbtn small { font-size: 9px; line-height: 1.1; } .hatbtn[aria-pressed="true"] { border-color: #2b2340 !important; outline: 3px solid #ffd84d; }
+#skinSw .sw { width: 30px; height: 30px; min-height: 30px; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -572,7 +575,8 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
       <div class="clLeft"><div class="clPrev"><canvas id="closetPrev" width="128" height="112"></canvas></div>
         <label for="nick">닉네임 <small>(같은 이름 못 씀)</small></label><input id="nick" type="text" maxlength="10" value="나" readonly><button id="nickBtn" type="button" hidden>이름 바꾸기</button><p id="nickMsg" class="msg"></p>
         <label>옷 색</label><div class="swatches" id="outfitSw"></div>
-        <div class="clSoon"><b>🎩 머리 장식</b><span>곧 열려요</span></div><div class="clSoon"><b>🎨 피부색</b><span>곧 열려요</span></div>
+        <label>🎨 피부색</label><div class="swatches" id="skinSw"></div>
+        <label>🎩 머리 장식</label><div class="hatgrid" id="hatSw"></div>
       </div>
       <div class="clRight"><label>캐릭터 <small>(싸울 수 있는 88종 · 걷기 4방향 + 공격 동작)</small></label><div class="swatches" id="hairSw"></div></div>
     </div>
