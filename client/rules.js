@@ -41,6 +41,7 @@
     crucian: { name: '붕어', w: 40, sell: 3 }, carp: { name: '잉어', w: 26, sell: 6 }, trout: { name: '송어', w: 16, sell: 10 },
     salmon: { name: '연어', w: 10, sell: 15, rare: 1 }, goldcarp: { name: '황금 잉어', w: 3, sell: 60, rare: 1 }, legend: { name: '전설의 하늘고래', w: 0.6, sell: 150, rare: 1 },
   };
+  const TOOLS = { pick: { name: '곡괭이', price: 300, use: '금광 캐기' }, rod: { name: '낚싯대', price: 200, use: '낚시' }, shovel: { name: '삽', price: 150, use: '씨앗 심기·수확' } }; // 작업 도구: 사람마다 하나씩 (나라 저장소 코인으로 삼)
   for (const [k, f] of Object.entries(FISH)) BUILD.push({ id: 'fi_' + k, cat: 'crop', theme: 'stone', name: f.name, sell: f.sell, fish: k });
   BUILD.push({ id: 'b_wood', cat: 'bridge', theme: 'forest', name: '나무 다리', price: 25 }, { id: 'b_stone', cat: 'bridge', theme: 'stone', name: '돌 다리', price: 25 });
   BUILD.push({ id: 'farm', cat: 'farm', theme: 'forest', name: '밭', price: 10 }, { id: 'canal', cat: 'water', theme: 'stone', name: '수로', price: 15 }, { id: 'fert', cat: 'fert', theme: 'forest', name: '비료', price: 40 });
@@ -71,6 +72,7 @@
     // 영지 (나라 공용 저장소)
     woodPerTree: 2,                // 나무 1그루 목재
     price: { floor: 20, wall: 60, deco: 30, trap: 150 }, // 건축 상점 가격 (코인, 1개 · 종류별로 같음, 테마는 모양만 다름)
+    maxAlly: 3,
     fishPerDay: 40, fishBite: [2.5, 6.5], fishRainK: 0.6, mineHoldMs: 2400,
     canalBoost: 0.8, canalRange: 2, maxFarms: 120, maxCanals: 60,
     buildHp: 100, hitDmg: 10, hitCdMs: 380, maxDeco: 80, // 벽·기둥 내구도: 한 번 때리면 −10 (E 꾹 = 0.4초마다)
@@ -313,6 +315,59 @@
     // slot: 전투 시간 번호 (서버가 정함: 일차·점심/밤). 같은 전투 시간 안에서만 횟수를 셈
     declaresLeft(nid, slot) { return NUM.maxDeclare - this.s.battles.filter((b) => b.att === nid && (slot == null || b.slot === slot)).length; }
 
+    // ---- 동맹: 왕끼리 합의, 최대 3나라, 동맹끼리 선전포고 불가, 동맹 전투에 한 번 참전 (병력 정해 직접 배치, 못 뺌)
+    allyGroup(nid) { const n = this.nation(nid); const a = n && n.ally && (this.s.alliances || {})[n.ally]; return a ? a.members.filter((x) => { const m = this.nation(x); return m && !m.dead; }) : [nid]; }
+    allyOf(nid) { return this.allyGroup(nid).filter((x) => x !== nid); }
+    fighting(groupA, groupB) { return this.s.battles.some((b) => (groupA.includes(b.att) && groupB.includes(b.def)) || (groupB.includes(b.att) && groupA.includes(b.def))); }
+    allyPropose(from, to) {
+      const A = this.nation(from), B = this.nation(to);
+      if (!A || !B || A.dead || B.dead || from === to) return { ok: false, err: '잘못된 요청이에요' };
+      if (this.allyOf(from).includes(to)) return { ok: false, err: '이미 동맹이에요' };
+      const ga = this.allyGroup(from), gb = this.allyGroup(to);
+      if (ga.length + gb.length > NUM.maxAlly) return { ok: false, err: `동맹은 최대 ${NUM.maxAlly}나라까지예요` };
+      if (this.fighting(ga, gb)) return { ok: false, err: '서로 싸우는 중인 나라와는 동맹을 맺을 수 없어요' };
+      this.s.allyReq = (this.s.allyReq || []).filter((r) => !(r.from === from && r.to === to));
+      this.s.allyReq.push({ from, to, at: Date.now() });
+      return { ok: true };
+    }
+    allyAnswer(nid, from, yes) {
+      const req = (this.s.allyReq || []).find((r) => r.from === from && r.to === nid);
+      if (!req) return { ok: false, err: '그 동맹 제안이 없어요' };
+      this.s.allyReq = this.s.allyReq.filter((r) => r !== req);
+      if (!yes) return { ok: true, declined: true };
+      const ga = this.allyGroup(from), gb = this.allyGroup(nid);
+      if (ga.length + gb.length > NUM.maxAlly) return { ok: false, err: `동맹은 최대 ${NUM.maxAlly}나라까지예요` };
+      if (this.fighting(ga, gb)) return { ok: false, err: '서로 싸우는 중이라 동맹을 맺을 수 없어요' };
+      this.s.alliances = this.s.alliances || {};
+      const A = this.nation(from), B = this.nation(nid);
+      const id = A.ally && this.s.alliances[A.ally] ? A.ally : B.ally && this.s.alliances[B.ally] ? B.ally : 'al' + (this.s.nextAlly = (this.s.nextAlly || 0) + 1);
+      for (const old of [A.ally, B.ally]) if (old && old !== id) delete this.s.alliances[old];
+      const members = [...new Set([...ga, ...gb])];
+      this.s.alliances[id] = { id, members, since: Date.now() };
+      for (const m of members) this.nation(m).ally = id;
+      this.s.allyReq = this.s.allyReq.filter((r) => !(members.includes(r.from) && members.includes(r.to)));
+      return { ok: true, members };
+    }
+    allyLeave(nid) {
+      const n = this.nation(nid), a = n && n.ally && (this.s.alliances || {})[n.ally];
+      if (!a) return { ok: false, err: '동맹이 없어요' };
+      a.members = a.members.filter((x) => x !== nid); delete n.ally;
+      if (a.members.length <= 1) { for (const m of a.members) { const x = this.nation(m); if (x) delete x.ally; } delete this.s.alliances[a.id]; }
+      return { ok: true, left: a.members };
+    }
+    allyJoin(nid, battleId, troops) { // 동맹 전투 참전 (한 번만, 못 뺌) — 동맹국 편으로
+      const n = this.nation(nid), b = this.s.battles.find((x) => x.id === battleId);
+      if (!n || !b) return { ok: false, err: '그 전투가 없어요' };
+      if (b.att === nid || b.def === nid) return { ok: false, err: '우리 나라 전투예요' };
+      const allies = this.allyOf(nid), side = allies.includes(b.att) ? 'att' : allies.includes(b.def) ? 'def' : null;
+      if (!side) return { ok: false, err: '동맹국의 전투에만 참전할 수 있어요' };
+      if ((b.help || []).some((h) => h.nid === nid)) return { ok: false, err: '이 전투엔 이미 참전했어요 (한 번만)' };
+      troops = clampTroops(troops, b.F);
+      if (!troops || sum(troops) <= 0) return { ok: false, err: '보낼 병력을 정해 주세요' };
+      if (sum(troops) > n.army) return { ok: false, err: `병력이 모자라요 (보유 ${n.army})` };
+      n.army -= sum(troops); b.help = b.help || []; b.help.push({ nid, side, t: troops });
+      return { ok: true, side, battle: b };
+    }
     declare(nid, tid, troops, slot) {
       const n = this.nation(nid), t = this.t[tid];
       if (!n || n.dead || !t) return { ok: false, err: '잘못된 요청이에요' };
@@ -321,6 +376,7 @@
       if (def === nid) return { ok: false, err: '우리 땅이에요' };
       if (this.s.gone[tid]) return { ok: false, err: '균열에 삼켜진 땅이에요' };
       if (!this.touches(nid, tid)) return { ok: false, err: '우리 땅과 경계선이 붙은 적 영토만 공격할 수 있어요' };
+      if (this.allyOf(nid).includes(def)) return { ok: false, err: '동맹국은 공격할 수 없어요' };
       const F = this.frontCount(def);
       troops = clampTroops(troops, F);
       if (!troops) return { ok: false, err: `전선 ${F}곳에 모두 병력을 정해 주세요` };
@@ -397,7 +453,7 @@
       }
       return { fallen };
     }
-    refund(b) { const A = this.nation(b.att), D = this.nation(b.def); if (A && !A.dead) A.army += sum(b.a) + sum(b.ar); if (D && !D.dead && b.d) D.army += sum(b.d); }
+    refund(b) { const A = this.nation(b.att), D = this.nation(b.def); if (A && !A.dead) A.army += sum(b.a) + sum(b.ar); if (D && !D.dead && b.d) D.army += sum(b.d); for (const h of b.help || []) { const H = this.nation(h.nid); if (H && !H.dead) H.army += sum(h.t); } }
     // 균열 웨이브: 예고된 땅이 무너진다. 나라 수도와 백신 맞은 땅은 안전
     riftWave(wave, terrs) {
       const caps = new Set(this.alive().map((n) => n.capital)), fell = [], saved = [];
@@ -447,9 +503,12 @@
       for (const b of pending) {
         const A = this.nation(b.att), D = this.nation(b.def);
         if (!A || A.dead || !D || D.dead || this.s.owner[b.target] !== b.def) { this.refund(b); continue; }
-        const F = b.F, ar = b.ar || b.a.map(() => 0), aT = b.a.map((v, i) => v + ar[i]);
-        let d = b.d, auto = false;
-        if (!d) { d = this.autoDefense(D, b, pending); auto = true; }
+        const F = b.F, ar = b.ar || b.a.map(() => 0), aMain = b.a.map((v, i) => v + ar[i]);
+        let d0 = b.d, auto = false;
+        if (!d0) { d0 = this.autoDefense(D, b, pending); auto = true; }
+        const help = (b.help || []).filter((h) => { const H = this.nation(h.nid); return H && !H.dead; });
+        const hA = help.filter((h) => h.side === 'att'), hD = help.filter((h) => h.side === 'def');
+        const aT = aMain.map((v, i) => v + hA.reduce((x, h) => x + (h.t[i] || 0), 0)), d = d0.map((v, i) => v + hD.reduce((x, h) => x + (h.t[i] || 0), 0)); // 동맹 병력 합침
         b._done = true;
         const effD = d.map((v) => Math.round(v * NUM.defBonus * 10) / 10);
         const fronts = aT.map((v, i) => (v > effD[i] ? 'att' : 'def')); // 같으면 방어 승
@@ -462,11 +521,13 @@
           else { survD += Math.min(d[i], Math.floor(Math.sqrt(Math.max(0, effD[i] ** 2 - aT[i] ** 2)) / NUM.defBonus)); survA += Math.floor(aT[i] * NUM.loserSurvive); }
         }
         const lossA = sum(aT) - survA, lossD = sum(d) - survD;
+        // 살아남은 병력: 낸 병력 비율로 나눔. 동맹 참전 병력도 도운 나라(공격·방어 본국)의 병력이 됨
         A.army += survA; D.army += survD;
+        const helpers = help.map((h) => { const H = this.nation(h.nid), tot = sum(h.side === 'att' ? aT : d) || 1, sent = sum(h.t), surv = Math.floor((h.side === 'att' ? survA : survD) * sent / tot); return { nid: h.nid, name: H.name, side: h.side, sent, surv, share: sent / tot }; });
         const rep = {
           id: b.id, night: b.night, slot: b.slot, target: b.target, att: b.att, def: b.def, attName: A.name, defName: D.name, F,
           a: aT, d, autoDef: auto, effA: aT, effD, fronts, attWon, defWon, winner: attWins ? 'att' : 'def', lossA, lossD,
-          capital: b.target === D.capital, lost: [], loot: null, prisoners: 0, destroyed: false, newCapital: null, members: null,
+          capital: b.target === D.capital, lost: [], loot: null, prisoners: 0, destroyed: false, newCapital: null, members: null, helpers,
         };
         if (attWins) {
           // 잃는 영역 수 = ⌈방어팀 영역 수 × (공격이 이긴 전선 − 방어가 이긴 전선) ÷ 전선 수⌉
@@ -483,9 +544,12 @@
           // 재료: 잃은 영역 비율만큼 걸리고, 그중 10%가 공격팀으로, 나머지는 버려짐
           const share = lost.length / k, loot = {};
           const take = (obj, key) => { const v = Math.floor((obj[key] || 0) * share); obj[key] = (obj[key] || 0) - v; return v; };
-          for (const key of ['coin', 'wood', 'vaccine']) { const v = take(D, key); const g = Math.floor(v * NUM.lootPct); A[key] = (A[key] || 0) + g; loot[key] = g; }
+          // 동맹과 함께 이기면 낸 병력 비율로 나눔
+          const winners = [{ N: A, share: 1 - helpers.filter((h) => h.side === 'att').reduce((x, h) => x + h.share, 0) }, ...helpers.filter((h) => h.side === 'att').map((h) => ({ N: this.nation(h.nid), share: h.share }))];
+          const give = (key, g, items) => { let left = g; winners.forEach((w, wi) => { const part = wi === winners.length - 1 ? left : Math.floor(g * w.share); left -= part; if (items) { w.N.items = normItems(w.N.items); w.N.items[key] = (w.N.items[key] || 0) + part; } else w.N[key] = (w.N[key] || 0) + part; }); };
+          for (const key of ['coin', 'wood', 'vaccine']) { const v = take(D, key); const g = Math.floor(v * NUM.lootPct); give(key, g, false); loot[key] = g; }
           D.items = normItems(D.items); A.items = normItems(A.items);
-          for (const key of Object.keys(D.items)) { const v = take(D.items, key); const g = Math.floor(v * NUM.lootPct); A.items[key] = (A.items[key] || 0) + g; loot[key] = g; }
+          for (const key of Object.keys(D.items)) { const v = take(D.items, key); const g = Math.floor(v * NUM.lootPct); give(key, g, true); loot[key] = g; }
           rep.loot = loot;
           // 빼앗은 영역의 저장소 입구·설치물은 공격팀 것
           for (const [ti, e] of Object.entries(this.s.tiles || {})) if (e.n === D.id && lost.includes(this.tileTerr ? this.tileTerr(+ti) : -1)) e.n = A.id;
@@ -529,7 +593,7 @@
     // ---------------------------------------------------------- 참가자에게 보낼 화면 정보
     publicNations() {
       const out = {};
-      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null, portal: n.portalPos || null, storeLv: storeLevel(n), race: n.race || RACES[(n.team | 0) % 3] };
+      for (const n of Object.values(this.s.nations)) out[n.id] = { id: n.id, name: n.name, team: n.team, color: n.color, capital: n.capital, dead: n.dead, kingName: n.kingName, provinces: n.provinces, members: n.members.length, store: n.storePos || null, portal: n.portalPos || null, ally: n.ally || null, storeLv: storeLevel(n), race: n.race || RACES[(n.team | 0) % 3] };
       return out;
     }
     view(nid, key) {
@@ -551,7 +615,11 @@
         outgoing: this.s.battles.filter((b) => b.att === n.id).map((b) => ({ id: b.id, target: b.target, def: b.def, a: b.a, ar: b.ar || b.a.map(() => 0), F: b.F, cap: Math.floor(NUM.reinforcePct * sum(b.a)), f: b.f || null, slot: b.slot })),
         // 공격 병력은 숨김 (첩보로 알아낸 전선만 보임)
         incoming: this.s.battles.filter((b) => b.def === n.id).map((b) => ({ id: b.id, target: b.target, att: b.att, d: b.d, F: b.F, f: b.f || null, slot: b.slot, rev: (b.rev || []).map((f) => ({ f, n: b.a[f] + ((b.ar || [])[f] || 0) })), intel: ((n.intel || {})[b.att] || 0) + (n.intelAny || 0) })),
-        reports: this.s.reports.filter((r) => r.att === n.id || r.def === n.id).slice(-12),
+        reports: this.s.reports.filter((r) => r.att === n.id || r.def === n.id || (r.helpers || []).some((h) => h.nid === n.id)).slice(-12),
+        allies: this.allyOf(n.id).map((x) => ({ id: x, name: this.nation(x).name, color: this.nation(x).color })),
+        allyIn: (this.s.allyReq || []).filter((r) => r.to === n.id && this.nation(r.from) && !this.nation(r.from).dead).map((r) => ({ from: r.from, name: this.nation(r.from).name, color: this.nation(r.from).color })),
+        allyOut: (this.s.allyReq || []).filter((r) => r.from === n.id).map((r) => r.to),
+        allyBattles: this.s.battles.filter((b) => b.att !== n.id && b.def !== n.id && (this.allyOf(n.id).includes(b.att) || this.allyOf(n.id).includes(b.def))).map((b) => { const mine = (b.help || []).find((h) => h.nid === n.id); return { id: b.id, target: b.target, att: b.att, def: b.def, F: b.F, slot: b.slot, side: this.allyOf(n.id).includes(b.att) ? 'att' : 'def', joined: mine ? mine.t : null, helpers: (b.help || []).map((h) => ({ nid: h.nid, side: h.side })) }; }),
       };
     }
   }
@@ -647,5 +715,5 @@
   const notorietyBadge = (v) => (v < 0 ? '👮' : v <= 0 ? '' : v < 200 ? '💀' : v < 500 ? '💀💀' : '💀💀💀');
   // 날씨: 일차·시간대마다 정해짐 (약 30% 비). 비 오면 낚시 입질이 빠르고 귀한 물고기가 잘 잡힘
   function weatherOf(day, slot) { const h = hash(day * 7 + ({ morning: 1, lunch: 2, night: 3 }[slot] || 0), 991, 17); return h < 0.3 ? 'rain' : 'clear'; }
-  return { weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

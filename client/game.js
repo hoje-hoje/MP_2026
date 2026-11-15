@@ -827,7 +827,7 @@
   const NPCS = {
     priest: { name: '신의 사제 루미엘', ch: 'Monk', color: '#6b4fb3', lines: ['어서 오세요, 하늘 신전에.', '신탁 제단에 신들의 말씀이 내려와요. 멸망이 선포되면 균열이 어디를 삼킬지 알려 주지요.', '땅으로 내려가려면 남쪽 구름 문으로 가세요. 올라온 수도로 돌아가요.'] },
     build: { name: '건축 천사 아라엘', ch: 'Woman', color: '#3d5fb8', shop: 'build', lines: ['어서 와요! 천상·숲·겨울·돌 테마로 바닥·벽·기둥·장식이 있어요.', '테마는 모양만 달라요. 효과는 종류마다 똑같아요!', '산 물건은 나라 저장소로 바로 가요. 설치 모드(G)로 우리 땅에 놓아요.', '벽과 기둥은 내구도가 100이에요. 적이 때리면 조금씩 닳아요.'] },
-    vaccine: { name: '치유 천사 세라', ch: 'Princess', color: '#d64f86', shop: 'vaccine', lines: ['균열이 무서운가요? 백신 하나면 영토 하나를 지킬 수 있어요.', '많이 살수록 비싸져요. 꼭 필요한 만큼만!'] },
+    vaccine: { name: '치유 천사 세라', ch: 'Princess', color: '#d64f86', shop: 'vaccine', lines: ['균열이 무서운가요? 백신 하나면 영토 하나를 지킬 수 있어요.', '곡괭이·낚싯대·삽 같은 작업 도구도 여기서 팔아요. 한 번 사면 계속 써요!', '백신은 많이 살수록 비싸져요. 꼭 필요한 만큼만!'] },
     seed: { name: '정원 천사 플로라', ch: 'Villager2', color: '#3fa37a', shop: 'seed', lines: ['어서 와요! 밭·수로·씨앗·비료가 있어요.', '우리 땅에 밭을 갈고(설치 모드 농사 탭) 그 위에 서서 씨앗을 심어요.', '수로 2칸 안은 20% 빨리 자라고, 비료를 주면 남은 시간이 절반!', '다 자라면 E로 수확해서 저한테 팔아요.', '낚시로 잡은 물고기도 사요! 비 오는 날엔 귀한 물고기가 잘 잡힌대요.'] },
     war: { name: '전쟁의 천사 미카', ch: 'KnightGold', color: '#c22f53', rules: true, lines: ['나는 전쟁의 규칙을 지키는 천사.', '3일차부터 영역전이 열린다. 그때 규칙서를 보여 주지.'] },
     clerk: { name: '등록 천사 노엘', ch: 'Villager', color: '#277a58', desk: true, lines: ['나라가 없나요? 여기서 귀화·용병·건국을 등록해요.'] },
@@ -899,7 +899,8 @@
   function renderShop() {
     const me = myView && myView.me; if (!me) return;
     const P = MPRules.NUM.price;
-    const tabs = SHOP_KIND === 'build' ? [['heaven', '☁ 천상'], ['forest', '🌲 숲'], ['winter', '❄ 겨울'], ['stone', '🪨 돌'], ['trap', '🪤 덫']] : SHOP_KIND === 'seed' ? [['buy', '🌱 씨앗·밭'], ['sell', '🧺 작물·물고기 팔기']] : [];
+    const tabs = SHOP_KIND === 'build' ? [['heaven', '☁ 천상'], ['forest', '🌲 숲'], ['winter', '❄ 겨울'], ['stone', '🪨 돌'], ['trap', '🪤 덫']] : SHOP_KIND === 'seed' ? [['buy', '🌱 씨앗·밭'], ['sell', '🧺 작물·물고기 팔기']] : SHOP_KIND === 'vaccine' ? [['vaccine', '💉 백신'], ['tools', '🛠 작업 도구']] : [];
+    if (SHOP_KIND === 'vaccine' && SHOP_TAB !== 'tools') SHOP_TAB = 'vaccine';
     if (SHOP_KIND === 'seed' && SHOP_TAB !== 'sell') SHOP_TAB = 'buy';
     if (SHOP_KIND === 'build' && !tabs.some(([k]) => k === SHOP_TAB)) SHOP_TAB = 'heaven';
     $('shopTabs').hidden = !tabs.length;
@@ -913,11 +914,13 @@
     const CNT = { floor: [1, 5, 20], wall: [1, 5, 10], deco: [1, 5], trap: [1, 3], bridge: [1, 5, 10] };
     if (SHOP_KIND === 'build') html = MPRules.BUILD.filter((b) => !FARM_CATS.has(b.cat) && b.cat !== 'crop' && (SHOP_TAB === 'trap' ? b.cat === 'trap' : b.theme === SHOP_TAB && b.cat !== 'trap')).map((b) => card(b.id, b.name, CAT_DESC[b.cat], P[b.cat], CNT[b.cat], me.items[b.id] || 0)).join('');
     else if (false) html = (want('floor') ? card('floor', '황금 바닥', '우리 국민이 1.5배 빨라져요', P.floor, [1, 5, 20], me.items.floor) : '') + (want('wall') ? card('wall', '방벽', '다른 나라 사람을 막아요 (5초 맞으면 부서짐)', P.wall, [1, 5, 10], me.items.wall) : '') + (want('trap') ? card('trap', '덫', '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임', P.trap, [1, 3], me.items.trap) : '');
+    else if (SHOP_KIND === 'vaccine' && SHOP_TAB === 'tools') html = Object.entries(MPRules.TOOLS).map(([k, tl]) => `<div class="hvCard"><canvas data-tool="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${tl.name}</b><small>${tl.use}에 꼭 필요해요 · 나만 쓰는 도구 (한 번 사면 계속)</small>${MY_TOOLS[k] ? '<i>✔ 가지고 있어요</i>' : ''}</div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${tl.price}</span><div><button type="button" data-buy="tool_${k}" data-n="1" ${MY_TOOLS[k] || me.coin < tl.price ? 'disabled' : ''}>${MY_TOOLS[k] ? '있음' : '사기'}</button></div></div></div>`).join('');
     else if (SHOP_KIND === 'vaccine') html = card('vaccine', '백신', '균열에서 영토 하나를 지켜요 · 살수록 비싸져요', me.vaccinePrice, null, me.vaccine);
     else if (SHOP_TAB === 'buy') html = [['farm', '밭 1칸 · 설치 모드 농사 탭에서 발밑에 갈아요', [1, 5, 20]], ['canal', '수로 1칸 · 2칸 안의 작물이 20% 빨리 자라요 (사람은 못 지나감)', [1, 5]], ['fert', '심은 작물에 주면 남은 시간이 절반!', [1, 5]]].map(([id, d, c]) => card(id, BUILD_BY[id].name, d, BUILD_BY[id].price, c, me.items[id] || 0)).join('')
       + Object.entries(CROPS).map(([k, c]) => card('s_' + k, c.name + ' 씨앗', `${fmtLeft(c.min * 60e3)} · ${c.yield}개 수확 · 1개 ${c.sell}코인에 팔림`, c.seed, [1, 5, 9], me.items['s_' + k] || 0)).join('');
     else { const owned = MPRules.BUILD.filter((b) => b.cat === 'crop' && me.items[b.id] > 0); html = owned.length ? owned.map((b) => { const n2 = me.items[b.id]; return `<div class="hvCard"><canvas data-ico="${b.id}" width="64" height="64"></canvas><div class="hvInfo"><b>${b.name}</b><small>1개 ${b.sell}코인</small><i>가진 것 ${n2}개</i></div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${(b.sell * n2).toLocaleString()}<small> 전부</small></span><div><button type="button" data-sell="${b.id}" data-n="1">1개</button><button type="button" data-sell="${b.id}" data-n="${n2}">전부</button></div></div></div>`; }).join('') : '<div class="hvSoon"><p><b>팔 작물·물고기가 없어요</b><br>밭에서 키우거나 물가에서 낚시해 보세요!</p></div>'; }
     $('shopBody').innerHTML = html;
+    for (const c of $('shopBody').querySelectorAll('[data-tool]')) { const g = c.getContext('2d'), T2 = TOOL[{ pick: 'pick', rod: 'rod', shovel: 'shovel' }[c.dataset.tool]]; g.imageSmoothingEnabled = false; const k = Math.min(56 / T2.cv.width, 56 / T2.cv.height) | 0; g.save(); g.translate(32, 32); g.rotate(0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); }
     for (const c of $('shopBody').querySelectorAll('[data-ico]')) { if (BUILD_BY[c.dataset.ico]) { itemIcon(c, c.dataset.ico); continue; } const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(ICON[c.dataset.ico], 0, 0, 64, 64); }
     for (const b of $('shopBody').querySelectorAll('[data-sell]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'sell', item: b.dataset.sell, n: +b.dataset.n })); $('shopSay').textContent = '싱싱하네요! 코인은 나라 저장소로 보냈어요.'; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
     for (const b of $('shopBody').querySelectorAll('[data-buy]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'buy', item: b.dataset.buy, n: +b.dataset.n })); $('shopSay').textContent = ['고마워요! 저장소로 보냈어요.', '좋은 선택이에요!', '또 와요~'][(Math.random() * 3) | 0]; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
@@ -1140,7 +1143,8 @@
     for (let i = 0; i < 140; i++) { const sp = 700 + (i % 7) * 60, x = (hash(i, 3, 5) * (vw + 200) - t * 120) % (vw + 200), y = (hash(i, 4, 5) * (vh + 100) + t * sp) % (vh + 100) - 50; const X = x < -100 ? x + vw + 200 : x; ctx.moveTo(X, y); ctx.lineTo(X - 4, y + 14); }
     ctx.stroke(); ctx.restore();
   }
-  let WEATHER = 'clear', lastAct = null, FISHPOP = null;
+  let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {};
+  const TOOL_HINT = (k) => `${MPRules.TOOLS[k].name}이(가) 있어야 해요 · 하늘 천상 상점가 '치유의 샘'에서 사요`;
   const FARM_CATS = new Set(['farm', 'water', 'seed', 'fert']);
   const fmtLeft = (ms) => { const m = Math.ceil(ms / 60e3); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60 ? (m % 60) + '분' : ''}` : `${m}분`; };
   function itemIcon(cv, id) { // 상점·설치 카드 그림
@@ -1196,7 +1200,7 @@
       props: [
         banner(3, 'blue'), banner(11, 'white'), banner(18, 'white'), banner(26, 'blue'),
         { x: 3, y: 4, w: 4, h: 2, npc: 'build', draw: (g, x, y) => pavilion(g, x, y, '#7fb2ff', '건축 상점', NPCS.build.ch) },
-        { x: 13, y: 4, w: 4, h: 2, npc: 'vaccine', draw: (g, x, y) => pavilion(g, x, y, '#ff9fc4', '치유의 샘 · 백신', NPCS.vaccine.ch) },
+        { x: 13, y: 4, w: 4, h: 2, npc: 'vaccine', draw: (g, x, y) => pavilion(g, x, y, '#ff9fc4', '치유의 샘 · 백신·도구', NPCS.vaccine.ch) },
         { x: 23, y: 4, w: 4, h: 2, npc: 'seed', draw: (g, x, y) => pavilion(g, x, y, '#8fe0a8', '정원 상점 · 씨앗', NPCS.seed.ch) },
         { x: 13, y: 13, w: 4, h: 2, draw: lightFountain },
         P1(8, 13, cloudBench, { w: 2 }), P1(21, 13, cloudBench, { w: 2 }),
@@ -1733,6 +1737,7 @@
       $('whereSub').textContent = `영토 #${t.id} · ${t.type} 지방 · ${RING[t.ring]} · 넓이 ${t.area.toLocaleString()}칸`;
       chip(`${t.type} 문제`, TYPE_TAG[t.type]);
       const own = ownerOf(t.id);
+      if (own && myView && (myView.allies || []).some((a) => a.id === own)) chip('🤝 동맹', '#277a58');
       if (own) chip(myView && own === myView.me.id ? (home === t ? '우리 수도' : '우리 땅') : natName(own) + (nationsPub[own] && nationsPub[own].capital === t.id ? ' 수도' : ''), natColor(own));
       else chip('주인 없음 (중립)', null, true);
       if (RIFT_SET.has(t.id)) chip(`🌀 ${RIFT_NEXT.day}일차 균열`, '#8a3fd0');
@@ -1764,7 +1769,7 @@
         for (const [i] of STORE_AT) if (n && Math.hypot((i % W) * TILE + 16 - player.x, Math.floor(i / W) * TILE + 16 - player.y) < nd) n = null; // 저장소가 더 가까우면 저장소
         const tp = portalOf(t);
         if (tp && Math.hypot(tp[0] + 0.5 - tx, tp[1] + 0.5 - ty) < 1.8) best = { kind: 'portal', t, text: '하늘로 올라가기' };
-        else if (n && !build.on) best = mined.has(n.id) ? { kind: 'info', text: '오늘은 다 캤어요 (내일 다시)' } : ONLINE ? { kind: 'mine', n, terr: n.id, nx: n.x, ny: n.y, hold: MPRules.NUM.mineHoldMs, text: '금광 캐기 · E 꾹 (곡괭이질)' } : { kind: 'node', n, text: '금광 캐기 · 코인' };
+        else if (n && !build.on) best = mined.has(n.id) ? { kind: 'info', text: '오늘은 다 캤어요 (내일 다시)' } : ONLINE && !MY_TOOLS.pick ? { kind: 'info', text: '⛏ 금광 · ' + TOOL_HINT('pick') } : ONLINE ? { kind: 'mine', n, terr: n.id, nx: n.x, ny: n.y, hold: MPRules.NUM.mineHoldMs, text: '금광 캐기 · E 꾹 (곡괭이질)' } : { kind: 'node', n, text: '금광 캐기 · 코인' };
         else if (Math.hypot(t.altar[0] + 0.5 - tx, t.altar[1] + 0.5 - ty) < 2.4) {
           const own = ownerOf(t.id), mine = myView && own === myView.me.id;
           const canClaim = myView && !own && Object.keys(owners).some((k) => owners[k] === myView.me.id && terrs[k] && terrs[k].neighbors.includes(t.id));
@@ -1807,6 +1812,7 @@
       if (B.cat === 'seed' || B.cat === 'fert' || B.cat === 'farm') { // 농사: 내 발밑 기준
         const [mx, my] = shape === '1' ? [Math.floor(player.x / TILE), Math.floor(player.y / TILE)] : [fx, fy], f = TILES[my * W + mx], have = myView.me.items[B.id] || 0, where = shape === '1' ? '발밑에' : '앞에';
         if (ownerOf(terrAt(mx, my)) !== MY_NID) return { kind: 'info', text: '농사는 우리 땅에서만 해요' };
+        if (B.cat !== 'farm' && !MY_TOOLS.shovel) return { kind: 'info', text: TOOL_HINT('shovel') };
         if (f && f.k === 'farm' && f.n === MY_NID && f.crop && cropStage(f.crop) === 3) return { kind: 'harvest', tiles, text: `${CROPS[f.crop.c].name} 수확하기 (E)` };
         if (B.cat === 'farm') {
           if (f && f.k === 'farm' && f.n === MY_NID && !f.crop) return { kind: 'pickup', tiles, text: `${shape === '1' ? '발밑' : '앞'} 밭 거두기 (E)` };
@@ -1851,10 +1857,10 @@
     }
     if (MY_NID) for (const [hx, hy] of [[Math.floor(ptx), Math.floor(pty)], [fx, fy]]) { // 발밑·앞의 우리 밭: 수확 / 남은 시간
       const f = TILES[hy * W + hx]; if (!f || f.k !== 'farm' || f.n !== MY_NID || !f.crop) continue;
-      if (cropStage(f.crop) === 3) return { kind: 'harvest', tiles: [[hx, hy]], text: `${CROPS[f.crop.c].name} 수확하기 (E)` };
+      if (cropStage(f.crop) === 3) return MY_TOOLS.shovel ? { kind: 'harvest', tiles: [[hx, hy]], text: `${CROPS[f.crop.c].name} 수확하기 (E)` } : { kind: 'info', text: `${CROPS[f.crop.c].name} 다 자람 · ${TOOL_HINT('shovel')}` };
       if (hx === Math.floor(ptx) && hy === Math.floor(pty)) return { kind: 'info', text: `${CROPS[f.crop.c].name} 자라는 중 · ${fmtLeft(f.crop.d - (Date.now() - f.crop.at))} 남음${f.crop.w ? ' · 💧수로' : ''}${f.crop.f ? ' · 🌿비료' : ''}` };
     }
-    { const fe = TILES[fy * W + fx], wet = (tileAt(fx, fy) === T.WATER && !(fe && fe.k === 'bridge')) || (fe && fe.k === 'water') || (GFLOOR.size && isWater(GFLOOR.get(fy * W + fx))); if (wet && MY_NID && !build.on) return { kind: 'fish', x: fx, y: fy, text: `낚시하기 (E)${WEATHER === 'rain' ? ' · 🌧 비 보너스' : ''}` }; } // 물을 바라보면 낚시
+    { const fe = TILES[fy * W + fx], wet = (tileAt(fx, fy) === T.WATER && !(fe && fe.k === 'bridge')) || (fe && fe.k === 'water') || (GFLOOR.size && isWater(GFLOOR.get(fy * W + fx))); if (wet && MY_NID && !build.on) return !MY_TOOLS.rod ? { kind: 'info', text: '🎣 물 · ' + TOOL_HINT('rod') } : { kind: 'fish', x: fx, y: fy, text: `낚시하기 (E)${WEATHER === 'rain' ? ' · 🌧 비 보너스' : ''}` }; } // 물을 바라보면 낚시
     if (treeAt(fx, fy) && MY_NID && ownerOf(terrAt(fx, fy)) === MY_NID) return { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '나무 베기 · E 꾹 누르기' };
     if (e && e.k === 'wall' && e.n !== MY_NID) return { kind: 'hitB', x: fx, y: fy, text: `${natName(e.n)} ${(BUILD_BY[tileItem(e)] || {}).name || '벽'} 때리기 · E (꾹 = 계속) · 내구도 ${e.hp ?? MPRules.NUM.buildHp}/${MPRules.NUM.buildHp}` };
     return null;
@@ -2245,7 +2251,7 @@
         myId = m.id; netOn = true; store('mp2026.token', m.token);
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
-        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0;
+        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {};
         if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
         if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); GPROPS.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls, clear: m.groundEdits.clear, props: m.groundEdits.props }); invalidateChunks(); mapSig = ''; }
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; if (m.stun) stunUntil = performance.now() + m.stun;
@@ -2325,6 +2331,7 @@
         $('bailBox').hidden = false; break;
       }
       case 'mined': mined.add(m.terr); toast(m.text); SND.play('coin'); break;
+      case 'tools': MY_TOOLS = m.tools || {}; toast(m.text); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'fishBite': if (FISHING.on) FISHING.biteAt = performance.now() + m.wait; break;
       case 'fished': stopFishing(); toast(m.text); if (m.fish) { FISHPOP = { kind: m.fish, t0: performance.now() }; SND.play('coin'); } break;
       case 'act': { const r = remotes.get(m.id); if (r) { r.act = m.a; r.fx = m.fx; r.fy = m.fy; } break; }
@@ -2766,6 +2773,18 @@
       const mineT = Object.keys(owners).filter((k) => owners[k] === me.id && +k !== me.capital).map(Number);
       h += `<div class="plan"><h3>🏰 천도</h3><p class="msg">수도를 우리 영역 중 다른 곳으로 옮겨요 · 코인 ${MPRules.NUM.capitalMoveCost} · 선전포고를 받은 동안은 못 하고, 하루에 한 번만 · 영역을 잃을 땐 공격팀과 가까운 곳부터 넘어가니 수도는 멀리 두는 게 안전해요</p>` +
         (mineT.length ? `<div class="targets">${mineT.map((tid) => `<button class="tgt" data-cap="${tid}" ${king ? '' : 'disabled'}>${esc(terrLabel(tid))}</button>`).join('')}</div>` : '<p class="msg">옮길 수 있는 다른 영역이 없어요.</p>') + (king ? '' : '<p class="note">천도는 왕만 할 수 있어요.</p>') + '</div>';
+    } else if (warTab === 'ally') { // 🤝 동맹: 왕끼리 합의, 최대 3나라, 동맹끼리 공격 불가, 동맹 전투에 한 번 참전
+      const allies = v.allies || [], inReq = v.allyIn || [], out = new Set(v.allyOut || []);
+      h += `<div class="plan"><h3>🤝 우리 동맹 (${allies.length + 1}/${MPRules.NUM.maxAlly}나라)</h3>${allies.length ? allies.map((a) => `<div class="row"><span><b style="color:${a.color}">■</b> ${esc(a.name)}</span></div>`).join('') + (king ? '<div class="row"><span class="msg">동맹에서 나가면 다시 서로 공격할 수 있어요</span><button id="btnAllyLeave">동맹 나가기</button></div>' : '') : '<p class="msg">아직 동맹이 없어요. 아래에서 다른 나라에 동맹을 제안해 보세요.</p>'}
+        <p class="msg">동맹끼리는 선전포고할 수 없어요. 동맹이 싸우면 참전해서 병력을 보낼 수 있어요 (한 번만, 뺄 수 없음). 살아남은 참전 병력은 도와준 나라의 병력이 되고, 이기면 재료를 낸 병력 비율로 나눠요.</p></div>`;
+      if (inReq.length) h += `<div class="plan"><h3>📨 받은 동맹 제안</h3>${inReq.map((r) => `<div class="row"><span><b style="color:${r.color}">■</b> ${esc(r.name)}</span>${king ? `<span><button data-ally-yes="${r.from}">받기</button> <button data-ally-no="${r.from}">거절</button></span>` : '<span class="msg">왕이 정해요</span>'}</div>`).join('')}</div>`;
+      const ab = v.allyBattles || [];
+      h += `<h3>⚔ 동맹의 전투 (${ab.length})</h3>` + (ab.length ? '' : '<p class="msg">지금 동맹국이 싸우는 전투가 없어요.</p>');
+      h += ab.map((b) => `<div class="plan"><div class="row"><span>${esc(terrLabel(b.target))} · <b style="color:${natColor(b.att)}">${esc(natName(b.att))}</b> → <b style="color:${natColor(b.def)}">${esc(natName(b.def))}</b></span><span>${slotText(b.slot)} · 전선 ${b.F}곳</span></div>
+        <p class="msg">우리는 <b>${b.side === 'att' ? '공격' : '방어'}</b> 편 (${esc(natName(b.side === 'att' ? b.att : b.def))} 돕기)${b.helpers.length ? ` · 참전한 동맹 ${b.helpers.length}나라` : ''}</p>
+        ${b.joined ? `<div class="fgrid">${b.joined.map((x, i) => `<span class="${b.side}"><b>${FN(i)}</b>${x}</span>`).join('')}</div><p class="msg">참전 완료 · 병력은 뺄 수 없어요</p>` : king ? `<div class="row"><span>보낼 병력 <input id="ajTotal${b.id}" type="number" min="0" value="${Math.min(me.army, 5 * b.F)}" style="width:80px"> <button data-aj-even="${b.id}">고르게</button></span></div>${troopInputs('aj' + b.id + '_', Array(b.F).fill(0), false)}<div class="row"><span id="ajSum${b.id}"></span><button data-ally-join="${b.id}" data-f="${b.F}">참전하기</button></div>` : '<p class="note">참전은 왕만 정할 수 있어요.</p>'}</div>`).join('');
+      const others = Object.values(nationsPub).filter((n) => !n.dead && n.id !== me.id && !allies.some((a) => a.id === n.id));
+      h += `<h3>동맹 제안하기</h3>` + (others.length ? `<div class="targets">${others.map((n) => `<button class="tgt" data-ally-ask="${n.id}" ${!king || out.has(n.id) ? 'disabled' : ''}><b style="color:${n.color}">■</b> ${esc(n.name)}<small>${out.has(n.id) ? '제안 보냄 · 대답 기다리는 중' : n.ally ? '다른 동맹에 있음' : '동맹 없음'}</small></button>`).join('')}</div>` : '<p class="msg">다른 나라가 없어요.</p>') + (king ? '' : '<p class="note">동맹 제안·받기는 왕만 할 수 있어요.</p>');
     } else if (warTab === 'attack') {
       const mineSet = new Set(Object.keys(owners).filter((k) => owners[k] === me.id).map(Number));
       const targets = [];
@@ -2804,7 +2823,7 @@
         const weAtt = r.att === me.id, won = (r.winner === 'att') === weAtt, F = r.F || r.fronts.length;
         const lootTxt = r.loot ? Object.entries(r.loot).filter(([, x]) => x > 0).map(([k, x]) => `${({ coin: '코인', wood: '목재', vaccine: '백신' }[k] || (BUILD_BY[k] || {}).name || k)} ${x}`).join(', ') : '';
         return `<div class="report ${won ? 'won' : 'lost'}"><div class="row"><b>${won ? '승리' : '패배'}</b><span>${r.night}번째 전투 · ${esc(terrLabel(r.target))} · 전선 ${r.attWon != null ? r.attWon : r.fronts.filter((x) => x === 'att').length}:${r.defWon != null ? r.defWon : r.fronts.filter((x) => x === 'def').length}</span></div>
-          <div class="msg">${esc(r.attName)}(공격) → ${esc(r.defName)}(방어)${r.autoDef ? ' · 방어 자동 배치' : ''}</div>
+          <div class="msg">${esc(r.attName)}(공격) → ${esc(r.defName)}(방어)${r.autoDef ? ' · 방어 자동 배치' : ''}${(r.helpers || []).length ? ' · 🤝 참전: ' + r.helpers.map((x) => `${esc(x.name)}(${x.side === 'att' ? '공격' : '방어'} ${x.sent}명)`).join(', ') : ''}</div>
           <div class="fgrid">${r.fronts.map((w, i) => `<span class="${w}"><b>${FN(i)}</b>${r.effA[i]}<i>vs</i>${r.effD[i]}</span>`).join('')}</div>
           <div class="msg">손실: 공격 −${r.lossA} · 방어 −${r.lossD}${r.prisoners ? ` · 포로 ${r.prisoners}명 (방어팀)` : ''}${r.lost && r.lost.length ? ` · 넘어간 영역 ${r.lost.length}곳: ${r.lost.map((t) => esc(terrLabel(t))).join(', ')}` : ''}${lootTxt ? ` · 가져간 재료: ${lootTxt}` : ''}${r.newCapital ? ` · 수도가 ${esc(terrLabel(r.newCapital))}(으)로 강제 천도` : ''}${r.destroyed ? ' · <b>나라 멸망</b>' : ''}</div></div>`;
       }).join('');
@@ -2838,6 +2857,18 @@
       if ($('btnDeclare')) $('btnDeclare').onclick = () => { if (upd() && confirm('선전포고 뒤에는 배치를 바꿀 수 없고 병력도 뺄 수 없어요. 선전포고할까요?')) warAction('declare', { terr: warTarget, troops: troopsOf('atk', F) }); };
     }
     if ($('btnResolve')) $('btnResolve').onclick = () => warAction('resolveNow', {});
+    for (const b of box.querySelectorAll('[data-ally-ask]')) b.onclick = () => warAction('allyPropose', { nid: b.dataset.allyAsk });
+    for (const b of box.querySelectorAll('[data-ally-yes]')) b.onclick = () => warAction('allyAnswer', { nid: b.dataset.allyYes, yes: true });
+    for (const b of box.querySelectorAll('[data-ally-no]')) b.onclick = () => warAction('allyAnswer', { nid: b.dataset.allyNo, yes: false });
+    if ($('btnAllyLeave')) $('btnAllyLeave').onclick = () => { if (confirm('동맹에서 나갈까요? 나가면 서로 공격할 수 있어요.')) warAction('allyLeave', {}); };
+    for (const b of box.querySelectorAll('[data-ally-join]')) {
+      const bid = b.dataset.allyJoin, F = +b.dataset.f, sumEl = $('ajSum' + bid), pre = 'aj' + bid + '_';
+      const check = () => { const t = troopsOf(pre, F), sm = t.reduce((a, c) => a + c, 0), bad = sm <= 0 || sm > me.army; sumEl.textContent = sm > me.army ? `합계 ${sm} / ${me.army} · 병력이 모자라요!` : `합계 ${sm} / ${me.army}`; sumEl.style.color = bad ? '#c22f53' : ''; b.disabled = bad; return !bad; };
+      for (let i = 0; i < F; i++) $(pre + i).oninput = check;
+      box.querySelector(`[data-aj-even="${bid}"]`).onclick = () => { spreadEven(pre, F, Math.min(me.army, parseInt($('ajTotal' + bid).value, 10) || 0)); check(); };
+      check();
+      b.onclick = () => { if (check() && confirm('참전하면 병력을 뺄 수 없어요. 보낼까요?')) warAction('allyJoin', { battle: +bid, troops: troopsOf(pre, F) }); };
+    }
   }
   // 전투 시간 번호 → 글자 (일차×3 + 점심1/밤2)
   function slotText(idx) { const d = Math.floor(idx / 3), when = d === DAY ? '오늘' : d === DAY + 1 ? '내일' : `${d}일차`; return `${when} ${idx % 3 === 1 ? '점심 1시' : '밤 10시'}`; }
