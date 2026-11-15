@@ -101,6 +101,11 @@ const world = new World(MAP, state.world || null);
 const MPRules = require('../client/rules.js');
 const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT, BUILD_BY, normItems, tileItem, CROPS, FISH, weatherOf, TOOLS } = MPRules;
 const needTool = (s, k) => !!(s.acc.tools && s.acc.tools[k]);
+// 거래할 수 있는 개인 물건: 내 가방(물고기) · 모자 · 도구
+function tradables(acc) { const out = []; for (const [k, v] of Object.entries(acc.bag || {})) if (v > 0) out.push({ k, n: v }); for (const k of Object.keys(acc.hats || {})) out.push({ k: 'hat:' + k, n: 1 }); for (const k of Object.keys(acc.tools || {})) out.push({ k: 'tool:' + k, n: 1 }); return out; }
+function okOffer(acc, items) { const need = {}; for (const q of items) need[q.k] = (need[q.k] || 0) + q.n; return Object.entries(need).every(([k, n]) => k.startsWith('hat:') ? n === 1 && (acc.hats || {})[k.slice(4)] : k.startsWith('tool:') ? n === 1 && (acc.tools || {})[k.slice(5)] : (BUILD_BY[k] && BUILD_BY[k].fish && (acc.bag || {})[k] >= n)); }
+function moveItems(from, to, items) { for (const q of items) { if (q.k.startsWith('hat:')) { delete from.hats[q.k.slice(4)]; to.hats = to.hats || {}; to.hats[q.k.slice(4)] = 1; } else if (q.k.startsWith('tool:')) { delete from.tools[q.k.slice(5)]; to.tools = to.tools || {}; to.tools[q.k.slice(5)] = 1; } else { from.bag[q.k] -= q.n; if (!from.bag[q.k]) delete from.bag[q.k]; to.bag = to.bag || {}; to.bag[q.k] = (to.bag[q.k] || 0) + q.n; } } }
+let tradeSeq = 0; const trades = new Map();
 function addPcoin(s, n, why) { n = Math.round(n); if (!s || !n) return; s.acc.pcoin = (s.acc.pcoin || 0) + n; dirty = true; send(s.ws, { t: 'pcoin', v: s.acc.pcoin, add: n, why }); } // 개인 지갑
 const MPRulesPortal = (t) => MPRules.portalSpot(t, tileAt);
 { const NM = MPRules.nameAll(MAP.territories); for (const t of MAP.territories) world.t[t.id].name = NM[t.id]; } // 알림에 쓰는 영토 이름 (겹치지 않게)
@@ -307,9 +312,8 @@ wss.on('connection', (ws) => {
         t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
-      { const dk = gameDayKey(); if (acc.dailyDay !== dk && acc.nameSet) { acc.dailyDay = dk; setTimeout(() => addPcoin(s, NUM.pcoin.daily, '오늘 첫 접속'), 1500); } }
       if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
       return;
     }
@@ -433,7 +437,7 @@ wss.on('connection', (ws) => {
           n.actions += 1; sendViews([n.id]);
           return send(ws, { t: 'answer', id: P.id, correct: true, done: true, text: owner === n.id ? '정답! 그런데 팀원이 먼저 점령했어요 · 행동력 1을 돌려받았어요' : '정답! 그런데 다른 나라가 먼저 점령했어요 · 행동력 1을 돌려받았어요' });
         }
-        const r = world.puzzleReward(n.id, P.terr, actionDayKey(), gameClock().day); addPcoin(s, NUM.pcoin.puzzle, '제단 정답');
+        const r = world.puzzleReward(n.id, P.terr, actionDayKey(), gameClock().day);
         if (r.kind === 'claim') { broadcastOwners(); notifyNation(n.id, `🏳 ${s.acc.name}님이 ${world.t[P.terr].name}을(를) 점령했어요`); }
         if (r.kind === 'none') { n.actions += 1; }
         sendViews([n.id]);
@@ -636,7 +640,7 @@ wss.on('connection', (ws) => {
         if (s.acc.mined.ids.includes(tid)) return send(ws, { t: 'err', text: '이 금광은 오늘 이미 캤어요' });
         if (!s.mining || s.mining.tid !== tid || now() - s.mining.at < NUM.mineHoldMs - 300) return; s.mining = null;
         const got = 300 + Math.floor(Math.random() * 31) * 10;
-        s.acc.mined.ids.push(tid); n.coin += got; dirty = true; sendViews([n.id]); addPcoin(s, got * NUM.pcoin.minePct, '금광');
+        s.acc.mined.ids.push(tid); n.coin += got; dirty = true; sendViews([n.id]);
         send(ws, { t: 'mined', terr: tid, text: `금광에서 코인 ${got}을 캤어요 (우리 저장소)` });
         break;
       }
@@ -730,8 +734,8 @@ wss.on('connection', (ws) => {
         if (m.grade !== 'perfect' && m.grade !== 'good') return send(ws, { t: 'fished', fish: null, text: '아깝다! 놓쳤어요' });
         const list = Object.entries(FISH).map(([k, f]) => [k, f.w * (f.rare ? (F.rain ? 1.5 : 1) * (m.grade === 'perfect' ? 1.6 : 1) : 1)]);
         let r = Math.random() * list.reduce((a, [, w]) => a + w, 0), pick = list[0][0]; for (const [k, w] of list) { if ((r -= w) <= 0) { pick = k; break; } }
-        n.items = normItems(n.items); n.items['fi_' + pick] = (n.items['fi_' + pick] || 0) + 1; s.acc.fished.n++; dirty = true; sendViews([n.id]);
-        send(ws, { t: 'fished', fish: pick, rare: !!FISH[pick].rare, text: `${FISH[pick].rare ? '✨ ' : ''}${FISH[pick].name}을(를) 낚았어요! (오늘 ${s.acc.fished.n}/${NUM.fishPerDay}) → 우리 저장소` });
+        s.acc.bag = s.acc.bag || {}; s.acc.bag['fi_' + pick] = (s.acc.bag['fi_' + pick] || 0) + 1; s.acc.fished.n++; dirty = true; send(ws, { t: 'bag', bag: s.acc.bag }); // 물고기는 내 가방
+        send(ws, { t: 'fished', fish: pick, rare: !!FISH[pick].rare, text: `${FISH[pick].rare ? '✨ ' : ''}${FISH[pick].name}을(를) 낚았어요! (오늘 ${s.acc.fished.n}/${NUM.fishPerDay}) → 내 가방` });
         if (pick === 'legend' || pick === 'goldcarp') notifyNation(n.id, `🎣 ${s.acc.name}님이 ${FISH[pick].name}을(를) 낚았어요!`);
         break;
       }
@@ -775,6 +779,51 @@ wss.on('connection', (ws) => {
         else if (!done && why) send(ws, { t: 'err', text: why });
         break;
       }
+      case 'donate': { // 내 코인 → 나라 저장소 (기부만 됨, 반대는 안 됨)
+        const n = world.nationOfPlayer(s.token); if (!n) return; const amt = Math.max(1, Math.min(s.acc.pcoin || 0, m.n | 0));
+        if (!(s.acc.pcoin > 0) || !(m.n > 0)) return send(ws, { t: 'err', text: '기부할 내 코인이 없어요' });
+        s.acc.pcoin -= amt; n.coin += amt; dirty = true; sendViews([n.id]); send(ws, { t: 'pcoin', v: s.acc.pcoin, add: -amt, why: '나라에 기부' });
+        notifyNation(n.id, `💝 ${s.acc.name}님이 나라에 코인 ${amt}을(를) 기부했어요`); break;
+      }
+      case 'tradeAsk': { // 거래 신청: 바로 옆(2칸 안) 사람에게
+        const o = online.get(m.id | 0);
+        if (!o || o === s || o.scene !== s.scene || o.room !== s.room || s.x == null || o.x == null || Math.hypot(o.x - s.x, o.y - s.y) > NUM.tradeTiles * 32 + 8) return send(ws, { t: 'err', text: '바로 옆에 있는 사람과만 거래할 수 있어요' });
+        if ([...trades.values()].some((T) => [T.a, T.b].includes(s) || [T.a, T.b].includes(o))) return send(ws, { t: 'err', text: '이미 거래 중이에요' });
+        s.tradeAsk = { to: o.id, at: now() }; send(o.ws, { t: 'tradeReq', from: s.id, name: s.acc.name }); send(ws, { t: 'ok', text: `${o.acc.name}님에게 거래를 신청했어요` }); break;
+      }
+      case 'tradeAnswer': {
+        const o = online.get(m.from | 0); if (!o || !o.tradeAsk || o.tradeAsk.to !== s.id || now() - o.tradeAsk.at > 30000) return send(ws, { t: 'err', text: '거래 신청이 사라졌어요' });
+        o.tradeAsk = null; if (!m.yes) return send(o.ws, { t: 'err', text: `${s.acc.name}님이 거래를 거절했어요` });
+        const T = { id: 't' + (++tradeSeq), a: o, b: s, offer: { a: { coin: 0, items: [] }, b: { coin: 0, items: [] } }, ready: {}, go: {} }; trades.set(T.id, T);
+        for (const [side, x, y] of [['a', o, s], ['b', s, o]]) send(x.ws, { t: 'tradeOpen', tid: T.id, me: side, other: { id: y.id, name: y.acc.name, look: y.acc.look }, mine: tradables(x.acc) });
+        break;
+      }
+      case 'tradeSet': case 'tradeReady': case 'tradeGo': case 'tradeCancel': {
+        const T = trades.get(String(m.tid || '')); if (!T) return; const side = T.a === s ? 'a' : T.b === s ? 'b' : null; if (!side) return;
+        const both = (msg) => { for (const x of [T.a, T.b]) send(x.ws, msg); };
+        const state2 = () => both({ t: 'tradeState', tid: T.id, offer: T.offer, ready: T.ready, go: T.go });
+        if (m.t === 'tradeCancel') { trades.delete(T.id); both({ t: 'tradeEnd', tid: T.id, text: `${s.acc.name}님이 거래를 그만뒀어요` }); break; }
+        if (m.t === 'tradeSet') { // 올린 물건·코인 바꾸기 → 둘 다 준비 풀림
+          const items = (Array.isArray(m.items) ? m.items : []).slice(0, NUM.tradeSlots).map((q) => ({ k: String(q.k || ''), n: Math.max(1, q.n | 0) }));
+          const coin = Math.max(0, Math.min(s.acc.pcoin || 0, m.coin | 0));
+          if (!okOffer(s.acc, items)) return send(ws, { t: 'err', text: '가지고 있지 않은 물건이 있어요' });
+          T.offer[side] = { coin, items }; T.ready = {}; T.go = {}; state2(); break;
+        }
+        if (m.t === 'tradeReady') { T.ready[side] = !T.ready[side]; T.go = {}; state2(); break; }
+        if (!T.ready.a || !T.ready.b) return send(ws, { t: 'err', text: '둘 다 준비를 눌러야 교환할 수 있어요' });
+        T.go[side] = true; state2();
+        if (T.go.a && T.go.b) { // 교환: 다시 확인하고 한 번에 맞바꿈
+          trades.delete(T.id);
+          if (Math.hypot(T.a.x - T.b.x, T.a.y - T.b.y) > NUM.tradeTiles * 32 * 2) return both({ t: 'tradeEnd', tid: T.id, text: '둘이 멀어져서 거래가 취소됐어요' });
+          const A = T.a.acc, B2 = T.b.acc, oa = T.offer.a, ob = T.offer.b;
+          if (!okOffer(A, oa.items) || !okOffer(B2, ob.items) || (A.pcoin || 0) < oa.coin || (B2.pcoin || 0) < ob.coin) return both({ t: 'tradeEnd', tid: T.id, text: '물건이나 코인이 모자라서 거래가 취소됐어요' });
+          const dup = (to, items) => items.some((q) => (q.k.startsWith('hat:') && (to.hats || {})[q.k.slice(4)]) || (q.k.startsWith('tool:') && (to.tools || {})[q.k.slice(5)]));
+          if (dup(B2, oa.items) || dup(A, ob.items)) return both({ t: 'tradeEnd', tid: T.id, text: '이미 가진 모자·도구는 받을 수 없어서 거래가 취소됐어요' });
+          moveItems(A, B2, oa.items); moveItems(B2, A, ob.items); A.pcoin = (A.pcoin || 0) - oa.coin + ob.coin; B2.pcoin = (B2.pcoin || 0) - ob.coin + oa.coin; dirty = true;
+          for (const x of [T.a, T.b]) { send(x.ws, { t: 'tradeDone', tid: T.id, pcoin: x.acc.pcoin, bag: x.acc.bag || {}, hats: x.acc.hats || {}, tools: x.acc.tools || {} }); if (x.acc.look && x.acc.look.hat && !(x.acc.hats || {})[x.acc.look.hat]) { x.acc.look.hat = ''; } }
+        }
+        break;
+      }
       case 'buyHat': { // 꾸미기 상점: 개인 지갑으로 머리 장식
         if (s.scene !== 'sky' || s.room !== 'market') return;
         const id = String(m.id || ''), price = MPRules.HAT_PRICE[id]; if (!price) return;
@@ -787,10 +836,15 @@ wss.on('connection', (ws) => {
         const n = world.nationOfPlayer(s.token); if (!n) return;
         if (s.scene !== 'sky' || s.room !== 'market') return;
         const B = BUILD_BY[String(m.item || '')]; if (!B || B.cat !== 'crop') return;
+        if (B.fish) { // 물고기: 내 가방에서 → 100% 내 코인
+          s.acc.bag = s.acc.bag || {}; const cnt = Math.max(1, Math.min(s.acc.bag[B.id] || 0, m.n | 0));
+          if (!(s.acc.bag[B.id] > 0)) return send(ws, { t: 'err', text: '팔 물고기가 없어요' });
+          s.acc.bag[B.id] -= cnt; if (!s.acc.bag[B.id]) delete s.acc.bag[B.id]; send(ws, { t: 'bag', bag: s.acc.bag }); addPcoin(s, B.sell * cnt, `${B.name} ${cnt}마리 판매`); break;
+        }
         n.items = normItems(n.items); const cnt = Math.max(1, Math.min(n.items[B.id] || 0, m.n | 0));
         if (!(n.items[B.id] > 0)) return send(ws, { t: 'err', text: '팔 작물이 없어요' });
-        n.items[B.id] -= cnt; const coin = B.sell * cnt; n.coin += coin; dirty = true; sendViews([n.id]); addPcoin(s, Math.max(1, coin * NUM.pcoin.sellPct), '판매');
-        notifyNation(n.id, `🧺 ${s.acc.name}님이 ${B.name} ${cnt}개를 팔았어요 (코인 +${coin})`);
+        n.items[B.id] -= cnt; const coin = B.sell * cnt, mine = Math.max(1, Math.round(coin * NUM.cropSellMe)); n.coin += coin - mine; dirty = true; sendViews([n.id]); addPcoin(s, mine, `${B.name} 판매 몫 20%`);
+        notifyNation(n.id, `🧺 ${s.acc.name}님이 ${B.name} ${cnt}개를 팔았어요 (나라 코인 +${coin - mine})`);
         break;
       }
       case 'hitB': { // 남의 벽·기둥 때리기: 한 번에 내구도 −10, 0이 되면 부서짐 (내구도는 맞을 때만 보임)
@@ -881,7 +935,7 @@ wss.on('connection', (ws) => {
         // 보상금: 일정 악명 이상을 잡으면 (잡힌 사람 나라 저장소에서)
         const tier = MPRules.notorietyTier(o.acc.notoriety | 0), bounty = Math.min(NUM.notorietyTiers[tier].bounty, on.coin | 0);
         if (bounty > 0) { on.coin -= bounty; n.coin += bounty; back += ` · 보상금 ${bounty}`; }
-        addNotoriety(o.acc, (o.acc.notoriety | 0) * (NUM.notoriety.arrestedMul - 1)); addNotoriety(s.acc, NUM.notoriety.arrest); addPcoin(s, NUM.pcoin.arrest, '체포');
+        addNotoriety(o.acc, (o.acc.notoriety | 0) * (NUM.notoriety.arrestedMul - 1)); addNotoriety(s.acc, NUM.notoriety.arrest);
         stat(s.acc, 'arrests'); stat(o.acc, 'arrested');
         // 영지의 신의 가호: 잡힐 때마다 스택 1, 3스택이면 감옥 (날마다 초기화 안 됨, 감옥에 가면 0)
         o.acc.arrestStack = (o.acc.arrestStack | 0) + 1;
@@ -951,6 +1005,7 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     clearInterval(refill);
     if (!s) return;
+    for (const T of [...trades.values()]) if (T.a === s || T.b === s) { trades.delete(T.id); for (const x of [T.a, T.b]) if (x !== s) send(x.ws, { t: 'tradeEnd', tid: T.id, text: '상대의 접속이 끊겨서 거래가 취소됐어요' }); }
     for (const C of [...contracts.values()]) if (C.a.s === s || C.b.s === s) { contracts.delete(C.cid); for (const x of [C.a, C.b]) if (x.s !== s) send(x.s.ws, { t: 'contractEnd', cid: C.cid, text: '상대 왕의 접속이 끊겨서 계약이 취소됐어요' }); }
     if (s.acc.carry) { // 훔친 걸 들고 접속이 끊기면 원래 나라로 돌아감
       const c = s.acc.carry, V = world.nation(c.from); if (V && !V.dead) { V.coin += c.coin; V.wood = (V.wood || 0) + c.wood; notifyNation(V.id, `💰 도둑 ${s.acc.name}의 접속이 끊겨서 훔쳐 간 코인 ${c.coin}${c.wood ? `, 목재 ${c.wood}` : ''}을(를) 돌려받았어요`); }

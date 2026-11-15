@@ -486,6 +486,22 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .hatbtn { display: flex; flex-direction: column; align-items: center; gap: 0; min-height: 0; padding: 2px; background: #fffaf0 !important; color: #2b2340 !important; border: 2px solid #efe0b8 !important; border-image: none !important; text-shadow: none !important; box-shadow: none !important; } .hatbtn canvas { width: 40px; height: 34px; image-rendering: pixelated; } .hatbtn small { font-size: 9px; line-height: 1.1; } .hatbtn[aria-pressed="true"] { border-color: #2b2340 !important; outline: 3px solid #ffd84d; }
 #skinSw .sw { width: 30px; height: 30px; min-height: 30px; }
 .hatbtn.lock { opacity: 0.55; }
+
+/* 내 가방 */
+.bagHv { width: min(620px, 100%); } .bagCoin { margin-left: auto; margin-right: 44px; font-size: 14px; } .bagCoin b { font-family: var(--font-display); font-weight: 400; font-size: 22px; color: #5a3d10; }
+#bagBox .hv { height: min(600px, calc(100vh - 40px)); display: flex; flex-direction: column; overflow: hidden; } #bagDonate { align-items: center; gap: 6px; } #bagDonate[hidden] { display: none; } #bagDonate .msg { margin-right: auto; }
+/* 거래 신청 */
+#tradeReq { position: fixed; z-index: 31; left: 50%; top: 120px; transform: translateX(-50%); background: #fffaf0; border: 4px solid #b8862b; box-shadow: 0 0 0 3px #2b2340; padding: 10px 14px; display: flex; gap: 12px; align-items: center; color: #2b2340; } #tradeReq[hidden] { display: none; } #tradeReq div { display: flex; gap: 6px; } #tradeReq button { min-height: 34px; font-size: 14px; }
+/* 거래 창 (메이플식) */
+#trade { z-index: 30; } .trWin { width: min(560px, 100%); background: linear-gradient(180deg, #3d4f7a, #2b3656); border: 4px solid #1b1430; box-shadow: 0 0 0 3px #e8c260, 0 14px 40px rgba(0,0,0,0.5); padding: 10px; color: #2b2340; }
+.trTitle { text-align: center; color: #ffd84d; font-family: var(--font-display); font-size: 18px; letter-spacing: 6px; margin-bottom: 8px; }
+.trCols { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; background: #f4f1ea; padding: 10px; border: 3px solid #1b1430; }
+.trSide { display: flex; flex-direction: column; align-items: center; gap: 4px; } .trSide canvas { width: 96px; height: 96px; image-rendering: pixelated; background: radial-gradient(circle, #ffffff, #e3e8f2); border: 2px solid #c9cfdc; } .trSide b { background: #5a6380; color: #fff; padding: 1px 10px; font-size: 13px; } .trSide small { color: #277a58; font-size: 12px; min-height: 1.2em; }
+.trSlots { display: grid; grid-template-columns: repeat(3, 48px); gap: 3px; } .trSlot { position: relative; width: 48px; height: 48px; min-height: 0; padding: 0; background: #fff !important; border: 2px solid #c9cfdc !important; border-image: none !important; box-shadow: none !important; } .trSlot canvas { width: 44px; height: 44px; image-rendering: pixelated; } .trSlot i { position: absolute; right: 1px; bottom: 0; font-style: normal; font-size: 11px; color: #2b2340; background: rgba(255,255,255,0.8); padding: 0 2px; }
+.trCoin { display: flex; align-items: center; gap: 4px; width: 100%; background: #fff; border: 2px solid #e8a23c; padding: 2px 6px; font-size: 14px; } .trCoin input { width: 100%; border: 0; font: 700 15px var(--font-body); text-align: right; } .trCoin span { margin-left: auto; font-weight: 700; }
+.trMid { display: flex; flex-direction: column; justify-content: center; gap: 6px; } .trMid button { min-height: 34px; font-size: 13px; padding: 0 8px; } #trGo:not(:disabled) { outline: 3px solid #ffd84d; }
+.trInvT { color: #e9ddff; font-size: 12px; margin: 8px 0 4px; } .trInv { display: flex; gap: 4px; flex-wrap: wrap; max-height: 120px; overflow-y: auto; background: #f4f1ea; padding: 6px; border: 3px solid #1b1430; }
+.trPick { display: flex; flex-direction: column; align-items: center; width: 64px; min-height: 0; padding: 2px; background: #fff !important; color: #2b2340 !important; border: 2px solid #c9cfdc !important; border-image: none !important; box-shadow: none !important; text-shadow: none !important; } .trPick canvas { width: 36px; height: 36px; image-rendering: pixelated; } .trPick small { font-size: 10px; line-height: 1.1; text-align: center; } .trPick:disabled { opacity: 0.35; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -506,6 +522,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <button id="btnMap" type="button">지도 (M)</button>
   <button id="btnHome" type="button">수도 (T)</button>
   <button id="btnCoupon" type="button">쿠폰</button>
+  <button id="btnBag" type="button">가방 (I)</button>
   <button id="btnCloset" type="button">꾸미기</button>
 </div>
 
@@ -614,6 +631,22 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 <div id="barracks" class="modalbox" hidden><div class="hv bkHv"><div class="hvClouds"></div>
   <div class="hvTop"><h2>🛡 병영</h2><span id="bkArmy" class="bkArmy"></span><button id="bkClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
   <div class="bkWrap"><div class="bkLeft"><canvas id="bkPrev" width="340" height="260"></canvas><b id="bkName"></b><p id="bkDesc"></p><button id="bkPick" type="button">바꾸기</button></div><div class="bkCards" id="bkCards"></div></div>
+</div></div>
+<div id="bagBox" class="modalbox" hidden><div class="hv bagHv"><div class="hvClouds"></div>
+  <div class="hvTop"><h2>👜 내 가방</h2><span class="bagCoin" id="bagCoin"></span><button id="bagClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
+  <p class="msg">나만 쓰는 것들이에요. 내 코인은 물고기를 팔면 100%, 작물을 팔면 20%가 들어와요. 다른 사람 옆에서 E → 거래할 수 있어요.</p>
+  <div class="stGrid" id="bagBody"></div>
+  <div class="stFoot" id="bagDonate"><span class="msg">💝 내 코인을 나라 저장소에 기부 (나라 돈 → 내 돈은 안 돼요)</span><input id="bagGiveN" type="number" min="1" value="50" style="width:80px"><button id="bagGive" type="button">기부</button></div>
+</div></div>
+<div id="tradeReq" hidden><b id="trqText"></b><div><button id="trqYes" type="button">수락</button><button id="trqNo" type="button">거절</button></div></div>
+<div id="trade" class="modalbox" hidden><div class="trWin">
+  <div class="trTitle">🤝 거 래</div>
+  <div class="trCols">
+    <div class="trSide"><canvas id="trMeAv" width="96" height="96"></canvas><b id="trMeName">나</b><small id="trMeState"></small><div class="trSlots" id="trMeSlots"></div><div class="trCoin">👛 <input id="trCoinIn" type="number" min="0" value="0"></div></div>
+    <div class="trMid"><button id="trReady" type="button">준비</button><button id="trGo" type="button">교환하기</button><button id="trExit" type="button">나가기</button></div>
+    <div class="trSide"><canvas id="trOtherAv" width="96" height="96"></canvas><b id="trOtherName">상대</b><small id="trOtherState"></small><div class="trSlots" id="trOtherSlots"></div><div class="trCoin">👛 <span id="trOtherCoin">0</span></div></div>
+  </div>
+  <div class="trInvT">내 물건 (누르면 칸에 올라가요 · 칸을 누르면 내려와요)</div><div class="trInv" id="trInv"></div>
 </div></div>
 <div id="talk" hidden><div class="tkFace"><canvas id="talkFace" width="120" height="120"></canvas></div><div class="tkMain"><b id="talkName">천사</b><p id="talkText"></p><div class="tkFoot"><span id="talkMore"></span><div id="talkBtns"></div></div></div></div>
 <div id="rulebook" class="modalbox" hidden><div class="hv book"><div class="hvClouds"></div><div class="hvTop"><h2>📜 영역전 규칙서 <small>전쟁의 천사 미카</small></h2><button id="ruleClose" class="hvX" type="button" aria-label="닫기">✕</button></div><div id="ruleBody"></div></div></div>

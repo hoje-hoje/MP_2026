@@ -72,7 +72,8 @@
     // 영지 (나라 공용 저장소)
     woodPerTree: 2,                // 나무 1그루 목재
     price: { floor: 20, wall: 60, deco: 30, trap: 150 }, // 건축 상점 가격 (코인, 1개 · 종류별로 같음, 테마는 모양만 다름)
-    pcoin: { minePct: 0.1, sellPct: 0.1, puzzle: 20, arrest: 30, daily: 50 }, // 개인 지갑: 이 일을 하면 나라 몫과 따로 더 받음
+    cropSellMe: 0.2, // 작물 판 값: 나라 80% · 판 사람 20% (내 코인). 물고기는 내 가방 → 100% 내 코인
+    tradeSlots: 6, tradeTiles: 2,
     maxAlly: 3, rainChance: 0.18, allyMeetTiles: 3,
     fishPerDay: 40, fishBite: [2.5, 6.5], fishRainK: 0.6, mineHoldMs: 2400,
     canalBoost: 0.8, canalRange: 2, maxFarms: 120, maxCanals: 60,
