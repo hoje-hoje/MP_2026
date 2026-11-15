@@ -102,6 +102,37 @@ const MPRules = require('../client/rules.js');
 const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT, BUILD_BY, normItems, tileItem, CROPS, FISH, weatherOf, TOOLS } = MPRules;
 const needTool = (s, k) => !!(s.acc.tools && s.acc.tools[k]);
 const jobOf = (s) => (s && s.acc && s.acc.job) || null; // 직업
+// ---- 실시간 전투 (땅 어디서나 · 같은 나라·동맹은 못 때림 · 쓰러지면 10초 뒤 수도에서 부활 + 물고기 일부 떨어뜨림)
+const weaponOf = (s) => (jobOf(s) && MPRules.JOBS[jobOf(s)] ? MPRules.JOBS[jobOf(s)].w : 'fist');
+const LOOT = new Map(); let lootSeq = 0;
+function canHurt(a, b) {
+  if (!a || !b || a === b || a.scene !== 'ground' || b.scene !== 'ground' || b.x == null || jailed(b.acc)) return false;
+  if ((b.deadUntil || 0) > now() || (b.invUntil || 0) > now()) return false;
+  const na = world.nationOfPlayer(a.token), nb = world.nationOfPlayer(b.token);
+  if (!na) return false; if (nb && (nb.id === na.id || world.allyOf(na.id).includes(nb.id))) return false;
+  return true;
+}
+function areaSend(s, msg) { const str = JSON.stringify(msg); for (const o of online.values()) if ((o === s || o.known.has(s.id) || (o.scene === s.scene && o.x != null && Math.hypot(o.x - s.x, o.y - s.y) < 900)) && o.ws.readyState === 1) o.ws.send(str); }
+function hurt(att, t, dmg, crit) {
+  t.acc.hp = Math.max(0, (t.acc.hp ?? NUM.pvp.hp) - dmg); t.lastHurt = now(); dirty = true;
+  if (t.acc.hp > 0) return { id: t.id, dmg, hp: t.acc.hp, crit };
+  // 쓰러짐: 훔친 것은 원래 나라로, 내 가방 물고기 30%를 그 자리에 떨어뜨림
+  t.deadUntil = now() + NUM.pvp.respawnSec * 1000; t.acc.hp = 0;
+  if (t.acc.carry) { const c = t.acc.carry, V = world.nation(c.from); if (V && !V.dead) { V.coin += c.coin; V.wood = (V.wood || 0) + c.wood; sendViews([V.id]); } t.acc.carry = null; sendMeta(t); }
+  const drops = []; for (const [k, v] of Object.entries(t.acc.bag || {})) { const d = Math.ceil(v * NUM.pvp.dropPct); if (d > 0 && v > 0) { t.acc.bag[k] -= d; if (!t.acc.bag[k]) delete t.acc.bag[k]; drops.push({ k, n: d }); } }
+  if (drops.length) send(t.ws, { t: 'bag', bag: t.acc.bag });
+  drops.forEach((d, i) => { const id = ++lootSeq, a = (i / Math.max(1, drops.length)) * Math.PI * 2; const L = { id, k: d.k, n: d.n, x: t.x + Math.cos(a) * 26, y: t.y + Math.sin(a) * 16, exp: now() + NUM.pvp.lootMin * 60e3 }; LOOT.set(id, L); areaSend(t, { t: 'loot', l: L }); });
+  send(t.ws, { t: 'dead', by: att.acc.name, sec: NUM.pvp.respawnSec, drops });
+  return { id: t.id, dmg, hp: 0, crit, dead: true };
+}
+setInterval(() => { // 부활 · 체력 회복 · 떨어진 물건 사라짐
+  const t0 = now();
+  for (const o of online.values()) {
+    if (o.deadUntil && o.deadUntil <= t0) { o.deadUntil = 0; o.acc.hp = NUM.pvp.hp; o.invUntil = t0 + NUM.pvp.invMs; placeAt(o, capitalPos(o.acc, o.token) || { x: 20 * 32, y: 20 * 32, scene: 'ground', room: null }); send(o.ws, { t: 'hp', id: o.id, hp: o.acc.hp, respawn: true }); areaSend(o, { t: 'hp', id: o.id, hp: o.acc.hp }); }
+    else if (!o.deadUntil && (o.acc.hp ?? NUM.pvp.hp) < NUM.pvp.hp && t0 - (o.lastHurt || 0) > NUM.pvp.regenAfterMs) { o.acc.hp = Math.min(NUM.pvp.hp, (o.acc.hp ?? NUM.pvp.hp) + NUM.pvp.regen); send(o.ws, { t: 'hp', id: o.id, hp: o.acc.hp }); }
+  }
+  for (const [id, L] of LOOT) if (L.exp < t0) { LOOT.delete(id); for (const o of online.values()) if (o.scene === 'ground') send(o.ws, { t: 'lootGone', id }); }
+}, 1000);
 // 거래할 수 있는 개인 물건: 내 가방(물고기) · 모자 · 도구
 function tradables(acc) { const out = []; for (const [k, v] of Object.entries(acc.bag || {})) if (v > 0) out.push({ k, n: v }); for (const k of Object.keys(acc.hats || {})) out.push({ k: 'hat:' + k, n: 1 }); for (const k of Object.keys(acc.tools || {})) out.push({ k: 'tool:' + k, n: 1 }); return out; }
 function okOffer(acc, items) { const need = {}; for (const q of items) need[q.k] = (need[q.k] || 0) + q.n; return Object.entries(need).every(([k, n]) => k.startsWith('hat:') ? n === 1 && (acc.hats || {})[k.slice(4)] : k.startsWith('tool:') ? n === 1 && (acc.tools || {})[k.slice(5)] : (BUILD_BY[k] && BUILD_BY[k].fish && (acc.bag || {})[k] >= n)); }
@@ -313,7 +344,7 @@ wss.on('connection', (ws) => {
         t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander,
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        job: acc.job || null, tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], job: acc.job || null, tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
       return;
@@ -324,6 +355,7 @@ wss.on('connection', (ws) => {
         const x = +m.x, y = +m.y;
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
         if (jailed(s.acc) && (m.scene !== 'sky' || m.room !== 'jail' || !inCell(s.acc, s.token, x, y))) { send(ws, { t: 'warp', pos: jailPos(s.acc, s.token) }); return; }
+        if ((s.deadUntil || 0) > Date.now()) return; // 쓰러진 동안은 못 움직임
         const scene = m.scene === 'sky' ? 'sky' : 'ground';
         const room = scene === 'sky' ? clean(m.room, 16) : null;
         const sameArea = scene === s.scene && room === s.room;
@@ -849,6 +881,32 @@ wss.on('connection', (ws) => {
         notifyNation(n.id, `🧺 ${s.acc.name}님이 ${B.name} ${cnt}개를 팔았어요 (나라 코인 +${coin - mine})`);
         break;
       }
+      case 'atk': { // 공격: 바라보는 방향 앞 네모 (멀리 쏘는 무기는 직선) · 서버가 판정
+        if (s.scene !== 'ground' || s.x == null || (s.deadUntil || 0) > now() || jailed(s.acc)) return;
+        const W2 = MPRules.WEAPONS[weaponOf(s)], lv = m.lv ? 1 : 0, cd = W2.cd * (lv ? 1.5 : 1);
+        if (now() - (s.lastAtk || 0) < cd - 60) return; s.lastAtk = now(); s.invUntil = 0; // 때리면 무적 풀림
+        const D = [[0, 1], [0, -1], [-1, 0], [1, 0]][m.dir | 0] || [0, 1], cx = s.x, cy = s.y - 20, k = lv ? 1.3 : 1, roll = () => { const c = Math.random() < NUM.pvp.crit; const v = (W2.dmg[0] + Math.random() * (W2.dmg[1] - W2.dmg[0])) * (lv ? 1.8 : 1) * (c ? 1.8 : 1); return [Math.round(v), c]; };
+        const hits = [], targets = [...online.values()].filter((o) => canHurt(s, o));
+        if (!W2.proj) {
+          const reach = W2.reach * k, wide = W2.wide * k;
+          for (const o of targets) { const dx = o.x - cx, dy = (o.y - 20) - cy, along = dx * D[0] + dy * D[1], side = Math.abs(dx * D[1] - dy * D[0]); if (along > -10 && along < reach + 14 && side < wide / 2 + 14) { const [d, c] = roll(); hits.push(hurt(s, o, d, c)); } }
+        } else {
+          const rays = weaponOf(s) === 'bow' && lv ? [-0.22, 0, 0.22] : [0];
+          for (const a of rays) { const ca = Math.cos(a), sa = Math.sin(a), dx0 = D[0] * ca - D[1] * sa, dy0 = D[0] * sa + D[1] * ca; let best = null, bd = W2.range * k;
+            for (const o of targets) { const dx = o.x - cx, dy = (o.y - 20) - cy, along = dx * dx0 + dy * dy0, side = Math.abs(dx * dy0 - dy * dx0); if (along > 0 && along < bd && side < 18) { bd = along; best = o; } }
+            if (W2.boom) { const ex = cx + dx0 * bd, ey = cy + dy0 * bd, r = W2.boom * (lv ? 2 : 1); for (const o of targets) if (Math.hypot(o.x - ex, o.y - 20 - ey) < r + 14 && !hits.some((h) => h.id === o.id)) { const [d, c] = roll(); hits.push(hurt(s, o, d, c)); } }
+            else if (best && !hits.some((h) => h.id === best.id)) { const [d, c] = roll(); hits.push(hurt(s, best, d, c)); } }
+        }
+        areaSend(s, { t: 'fx', a: s.id, w: weaponOf(s), dir: m.dir | 0, lv, x: Math.round(s.x), y: Math.round(s.y), hits });
+        break;
+      }
+      case 'pickLoot': { // 떨어진 물고기 줍기 (내 가방)
+        const L = LOOT.get(m.id | 0); if (!L || s.scene !== 'ground' || s.x == null || Math.hypot(L.x - s.x, L.y - s.y) > 56 || (s.deadUntil || 0) > now()) return;
+        LOOT.delete(L.id); s.acc.bag = s.acc.bag || {}; s.acc.bag[L.k] = (s.acc.bag[L.k] || 0) + L.n; dirty = true; send(ws, { t: 'bag', bag: s.acc.bag });
+        send(ws, { t: 'ok', text: `${(BUILD_BY[L.k] || {}).name || '물건'} ${L.n}개를 주웠어요 → 내 가방` });
+        for (const o of online.values()) if (o.scene === 'ground') send(o.ws, { t: 'lootGone', id: L.id });
+        break;
+      }
       case 'repairB': { // 정비공: 우리 벽·기둥 고치기 (한 번에 +20)
         if (jobOf(s) !== 'mechanic') return send(ws, { t: 'err', text: '정비공만 고칠 수 있어요' });
         const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y), e = world.s.tiles[i], n = world.nationOfPlayer(s.token);
@@ -1016,6 +1074,7 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     clearInterval(refill);
     if (!s) return;
+    if ((s.deadUntil || 0) > 0) { s.acc.hp = NUM.pvp.hp; const cp = capitalPos(s.acc, s.token); if (cp) Object.assign(s.acc, cp); } // 쓰러진 채 나가면 다음엔 수도에서
     for (const T of [...trades.values()]) if (T.a === s || T.b === s) { trades.delete(T.id); for (const x of [T.a, T.b]) if (x !== s) send(x.ws, { t: 'tradeEnd', tid: T.id, text: '상대의 접속이 끊겨서 거래가 취소됐어요' }); }
     for (const C of [...contracts.values()]) if (C.a.s === s || C.b.s === s) { contracts.delete(C.cid); for (const x of [C.a, C.b]) if (x.s !== s) send(x.s.ws, { t: 'contractEnd', cid: C.cid, text: '상대 왕의 접속이 끊겨서 계약이 취소됐어요' }); }
     if (s.acc.carry) { // 훔친 걸 들고 접속이 끊기면 원래 나라로 돌아감

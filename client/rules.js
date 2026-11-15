@@ -74,6 +74,7 @@
     price: { floor: 20, wall: 60, deco: 30, trap: 150 }, // 건축 상점 가격 (코인, 1개 · 종류별로 같음, 테마는 모양만 다름)
     cropSellMe: 0.2, // 작물 판 값: 나라 80% · 판 사람 20% (내 코인). 물고기는 내 가방 → 100% 내 코인
     tradeSlots: 6, tradeTiles: 2,
+    pvp: { hp: 100, respawnSec: 10, invMs: 3000, regenAfterMs: 6000, regen: 3, dropPct: 0.3, lootMin: 3, crit: 0.1 },
     maxAlly: 3, rainChance: 0.18, allyMeetTiles: 3,
     fishPerDay: 40, fishBite: [2.5, 6.5], fishRainK: 0.6, mineHoldMs: 2400,
     canalBoost: 0.8, canalRange: 2, maxFarms: 120, maxCanals: 60,
@@ -746,6 +747,16 @@
     fisher: { name: '어부', icon: '🎣', w: 'bow', perk: '입질 2배 빠름 · 하루 2배 낚음' },
     builder: { name: '건축업자', icon: '🧱', w: 'axe', perk: '놓는 벽·기둥 내구도 2배' },
   };
+  // 실시간 전투 무기 (월드 픽셀, 캐릭터 키 48px). 꾹 눌렀다 떼면 차징(×1.8, 범위 ×1.3, 재사용 ×1.5)
+  const WEAPONS = {
+    fist: { name: '맨주먹', reach: 30, wide: 30, dmg: [4, 6], cd: 500 },
+    sword: { name: '검', reach: 46, wide: 44, dmg: [9, 12], cd: 450 },
+    dagger: { name: '단검', reach: 34, wide: 36, dmg: [6, 8], cd: 300 },
+    axe: { name: '망치', reach: 52, wide: 58, dmg: [15, 19], cd: 1000 },
+    spear: { name: '쇠스랑', reach: 82, wide: 20, dmg: [10, 13], cd: 600 },
+    bow: { name: '작살', proj: 1, range: 300, dmg: [7, 9], cd: 700 },
+    magic: { name: '불마법', proj: 1, range: 260, dmg: [12, 15], cd: 1200, boom: 40 },
+  };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
