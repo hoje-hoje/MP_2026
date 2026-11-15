@@ -1495,7 +1495,7 @@
     const [x, y, dir, moving] = animalPos(name, hx, hy, seed, okAt), im = ART['u_' + name]; if (!im) return;
     const bob = moving ? (Math.floor(performance.now() / 140 + seed) % 2) : 0, w = im.width * 2, h = im.height * 2;
     g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, w * 0.32, 3);
-    const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.save(); g.translate(Math.round(x), Math.round(y - bob)); if (dir < 0) g.scale(-1, 1); g.drawImage(im, -Math.round(w / 2), -h, w, h); g.restore(); g.imageSmoothingEnabled = pv;
+    const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.save(); g.translate(Math.round(x), Math.round(y - bob)); if (dir > 0) g.scale(-1, 1); // 동물 그림은 왼쪽을 보고 있어서 오른쪽으로 갈 때 뒤집음 g.drawImage(im, -Math.round(w / 2), -h, w, h); g.restore(); g.imageSmoothingEnabled = pv;
   }
   let WEATHER = 'clear', lastAct = null, FISHPOP = null, MY_TOOLS = {}, MY_PCOIN = 0, MY_HATS = {}, MY_JOB = null;
   const jobIcon = (j) => (j && MPRules.JOBS[j] ? MPRules.JOBS[j].icon + ' ' : '');
@@ -1659,7 +1659,6 @@
         npcProp('priest', 9, 12),
         P1(11, 15, (g, x, y) => { g.fillStyle = '#d9d0c0'; g.fillRect(x - 18, y - 14, 36, 14); g.fillStyle = '#fffdf8'; g.fillRect(x - 16, y - 18, 32, 6); drawAngel(g, 'Princess', x, y - 16, true); }),
         P1(19, 15, (g, x, y) => { g.fillStyle = '#d9d0c0'; g.fillRect(x - 18, y - 14, 36, 14); g.fillStyle = '#fffdf8'; g.fillRect(x - 16, y - 18, 32, 6); drawAngel(g, 'Knight', x, y - 16, true); }),
-        { x: 13, y: 6, w: 4, h: 1, walk: true, draw: (g, x, y) => { if (!DOOM) return; g.fillStyle = '#5a4630'; g.fillRect(x - 140, y - 150, 8, 150); g.fillRect(x + 132, y - 150, 8, 150); drawDoomBanner(g, x, y - 176, 1.5); } },
       ],
     },
     market: {
@@ -1949,7 +1948,7 @@
   }
   function descend() {
     const t = player.entry || home;
-    player.scene = 'ground'; player.room = null; fadeT = 0.35; lastTerr = null; netTp = true; step.on = false;
+    player.scene = 'ground'; player.room = null; fadeT = 0.35; lastTerr = null; netTp = true; step.on = false; setTimeout(maybeDoomPopup, 600); // 하늘에 있는 동안 못 본 오늘의 멸망 알림
     const tp = portalOf(t) || MPRules.portalSpot(t, tileAt);
     player.x = tp[0] * TILE + 16; player.y = (tp[1] + 1) * TILE + 16;
     if (!free(player.x, player.y, null)) teleportTo(tp[0], tp[1] + 1);
@@ -4020,7 +4019,7 @@
   }
   // 하루에 한 번 크게 띄우기 (선포일 점심부터). 그 뒤엔 하늘 신전 게시판에 걸려 있음
   function maybeDoomPopup() {
-    if (!DOOM || TITLE.on || OP.on || !titleDone) return; // 타이틀·오프닝이 끝난 뒤에
+    if (!DOOM || TITLE.on || OP.on || !titleDone || player.scene === 'sky') return; // 타이틀·오프닝이 끝난 뒤에 · 하늘에선 안 띄움
     if (!store('mp2026.confess')) { store('mp2026.confess', 1); startOpening('confess'); return; } // 선포일: 여신의 고백 먼저
     if (ONLINE && netOn && DAY >= SIDE_DAY && !MY_SIDE && !sideAsked) { sideAsked = true; startOpening('side'); return; } // 13일차: 편 고르기
     if (store('mp2026.doomSeen') === DAY) return;
@@ -4535,11 +4534,11 @@
       $('doomR').textContent = `12/${date} · ${ONLINE ? SLOT_NAME[SLOT] : PHASE}`;
       $('doomBar').hidden = true;
     } else {
-      $('doomL').textContent = '세계 멸망까지';
-      $('doomD').textContent = DAY >= LAST_DAY ? 'D-Day' : `D-${LAST_DAY - DAY}`;
-      $('doomR').textContent = `${DAY}일차 · ${SLOT_NAME[SLOT]}`;
+      $('doomL').textContent = '';
+      $('doomD').innerHTML = `${DAY}일차 <small class="doomTag">☄ 멸망 ${DAY >= LAST_DAY ? 'D-Day' : `D-${LAST_DAY - DAY}`}</small>`; // 선포 뒤엔 일차 옆에 작게만
+      $('doomR').textContent = `12/${date} · ${SLOT_NAME[SLOT]}`;
       $('doomFill').style.width = `${Math.round((DAY - DOOM_DAY + 1) / (LAST_DAY - DOOM_DAY + 1) * 100)}%`;
-      $('doomBar').hidden = false;
+      $('doomBar').hidden = true;
     }
   }
 
