@@ -41,7 +41,7 @@
     crucian: { name: '붕어', w: 40, sell: 3 }, carp: { name: '잉어', w: 26, sell: 6 }, trout: { name: '송어', w: 16, sell: 10 },
     salmon: { name: '연어', w: 10, sell: 15, rare: 1 }, goldcarp: { name: '황금 잉어', w: 3, sell: 60, rare: 1 }, legend: { name: '전설의 하늘고래', w: 0.6, sell: 150, rare: 1 },
   };
-  const TOOLS = { pick: { name: '곡괭이', price: 300, use: '금광 캐기' }, rod: { name: '낚싯대', price: 200, use: '낚시' }, shovel: { name: '삽', price: 150, use: '씨앗 심기·수확' } }; // 작업 도구: 사람마다 하나씩 (내 코인 = 개인 지갑으로 삼)
+  const TOOLS = { pick: { name: '곡괭이', price: 300, use: '금광·산 캐기' }, axe: { name: '나무도끼', price: 150, use: '나무 베기' }, rod: { name: '낚싯대', price: 200, use: '낚시' }, shovel: { name: '삽', price: 150, use: '씨앗 심기·수확' } }; // 작업 도구: 사람마다 하나씩 (내 코인 = 개인 지갑으로 삼)
   for (const [k, f] of Object.entries(FISH)) BUILD.push({ id: 'fi_' + k, cat: 'crop', theme: 'stone', name: f.name, sell: f.sell, fish: k });
   BUILD.push({ id: 'b_wood', cat: 'bridge', theme: 'forest', name: '나무 다리', price: 25 }, { id: 'b_stone', cat: 'bridge', theme: 'stone', name: '돌 다리', price: 25 });
   BUILD.push({ id: 'farm', cat: 'farm', theme: 'forest', name: '밭', price: 10 }, { id: 'canal', cat: 'water', theme: 'stone', name: '수로', price: 15 }, { id: 'fert', cat: 'fert', theme: 'forest', name: '비료', price: 40 });
@@ -75,6 +75,7 @@
     cropSellMe: 0.2, // 작물 판 값: 나라 80% · 판 사람 20% (내 코인). 물고기는 내 가방 → 100% 내 코인
     tradeSlots: 6, tradeTiles: 2,
     pvp: { hp: 100, respawnSec: 10, invMs: 3000, regenAfterMs: 6000, regen: 3, dropPct: 0.3, lootMin: 3, crit: 0.1 },
+    weaponDay: 3, digCoin: 15, digPerDay: 40,
     maxAlly: 3, rainChance: 0.18, allyMeetTiles: 3,
     fishPerDay: 40, fishBite: [2.5, 6.5], fishRainK: 0.6, mineHoldMs: 2400,
     canalBoost: 0.8, canalRange: 2, maxFarms: 120, maxCanals: 60,
@@ -125,7 +126,7 @@
   const FRONTS = ['A', 'B', 'C']; // 예전 3전선 (지금은 전선 수가 2k+1로 바뀜)
   const frontName = (i) => (i < 26 ? String.fromCharCode(65 + i) : 'Z' + (i - 25));
 
-  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1, tiles: {}, traps: {}, chopped: {}, mines: {}, gone: {}, vax: {}, erosion: {}, riftNext: null }; }
+  function emptyState() { return { nations: {}, owner: {}, battles: [], reports: [], night: 1, nextBattle: 1, nextTeam: 1, tiles: {}, traps: {}, chopped: {}, dug: {}, mines: {}, gone: {}, vax: {}, erosion: {}, riftNext: null }; }
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const randCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
   const clampTroops = (arr, n = 3) => (Array.isArray(arr) && arr.length === n && n > 0 && n <= 99) ? arr.map((v) => Math.max(0, Math.min(1e7, Math.floor(+v || 0)))) : null;
@@ -140,7 +141,7 @@
       for (const t of map.territories) this.t[t.id] = t;
       this.caps = map.territories.filter((t) => t.capitalCandidate).sort((a, b) => a.id - b.id);
       this.s = state || emptyState();
-      for (const k of ['tiles', 'traps', 'chopped', 'mines', 'gone', 'vax', 'erosion']) this.s[k] = this.s[k] || {}; // 예전 저장 상태 호환 (mines: 옮긴 금광 위치)
+      for (const k of ['tiles', 'traps', 'chopped', 'dug', 'mines', 'gone', 'vax', 'erosion']) this.s[k] = this.s[k] || {}; // 예전 저장 상태 호환 (mines: 옮긴 금광 위치)
       this._dist = {};
       for (const b of this.s.battles || []) { if (!b.F) b.F = b.a.length; if (!b.ar) b.ar = b.a.map(() => 0); if (b.rd) { const D = this.s.nations[b.def]; if (D) D.army += sum(b.rd); delete b.rd; } } // 예전 3전선 전투 호환
     }
@@ -749,13 +750,13 @@
   };
   // 실시간 전투 무기 (월드 픽셀, 캐릭터 키 48px). 꾹 눌렀다 떼면 차징(×1.8, 범위 ×1.3, 재사용 ×1.5)
   const WEAPONS = {
-    fist: { name: '맨주먹', reach: 30, wide: 30, dmg: [4, 6], cd: 500 },
-    sword: { name: '검', reach: 46, wide: 44, dmg: [9, 12], cd: 450 },
-    dagger: { name: '단검', reach: 34, wide: 36, dmg: [6, 8], cd: 300 },
-    axe: { name: '망치', reach: 52, wide: 58, dmg: [15, 19], cd: 1000 },
-    spear: { name: '쇠스랑', reach: 82, wide: 20, dmg: [10, 13], cd: 600 },
-    bow: { name: '작살', proj: 1, range: 300, dmg: [7, 9], cd: 700 },
-    magic: { name: '불마법', proj: 1, range: 260, dmg: [12, 15], cd: 1200, boom: 40 },
+    fist: { name: '맨주먹', reach: 30, wide: 30, dmg: [4, 6], cd: 500 }, // price: 3일차부터 대장장이에게 내 코인으로 직접 사야 함 (안 사면 맨주먹)
+    sword: { name: '검', price: 400, reach: 46, wide: 44, dmg: [9, 12], cd: 450 },
+    dagger: { name: '단검', price: 300, reach: 34, wide: 36, dmg: [6, 8], cd: 300 },
+    axe: { name: '망치', price: 450, reach: 52, wide: 58, dmg: [15, 19], cd: 1000 },
+    spear: { name: '쇠스랑', price: 350, reach: 82, wide: 20, dmg: [10, 13], cd: 600 },
+    bow: { name: '작살', price: 400, proj: 1, range: 300, dmg: [7, 9], cd: 700 },
+    magic: { name: '불마법', price: 500, proj: 1, range: 260, dmg: [12, 15], cd: 1200, boom: 40 },
   };
   // 스토리: 멸망 조각 8개 (선포일부터 하루 하나씩 땅 어딘가에 떨어짐). 다 모으면 진실 → 13일차 천사/악마 선택
   const STORY = {

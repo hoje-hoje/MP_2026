@@ -157,6 +157,7 @@ tr.editing td { background: #fff1b8; }
     <h2>👛 학생에게 내 코인 주기 <span class="hint">이벤트·발표 보상 · 학생 개인 지갑으로 들어가요 (머리 장식·작업 도구를 살 수 있어요)</span></h2>
     <div class="row"><label>닉네임 <input id="gpName" placeholder="게임 닉네임" style="width:140px"></label><label>코인 <input id="gpN" type="number" value="100" style="width:90px"></label><label>이유 <input id="gpWhy" placeholder="예: 퀴즈 1등" style="width:160px"></label><button id="gpGo" class="primary" type="button">주기</button><span class="muted" id="gpRes"></span></div>
     <p class="muted">빼려면 마이너스로 적어요 (예: -50). 접속 중이면 학생 화면에 바로 알림이 떠요.</p>
+    <div class="row"><label>처음 시작할 때 내 코인 <input id="spN" type="number" min="0" value="0" style="width:100px"></label><button id="spGo" type="button">저장</button><span class="muted">새로 들어오는 학생 계정에만 줘요 (이미 있는 계정은 그대로)</span></div>
   </section>
 
   <section class="card">
@@ -317,6 +318,7 @@ tr.editing td { background: #fff1b8; }
     const ask = { reset: '이 학생을 모든 기기에서 로그아웃시킬까요? (다시 코드를 받아야 해요)', wipe: '이 학생의 진행 상황(코인·가방·모자·도구·직업·조각·위치)을 처음으로 돌릴까요? 되돌릴 수 없어요.', ban: e.target.dataset.ban === '1' ? '이 학생을 밴할까요? (바로 쫓겨나고 못 들어와요)' : '밴을 풀까요?', del: '명단에서 지울까요?' }[act];
     if (!confirm(ask)) return; const r = await api({ reset: 'rosterReset', wipe: 'rosterWipe', ban: 'rosterBan', del: 'rosterDel' }[act], { sid, ban: e.target.dataset.ban === '1' }); say(r && r.ok === false ? r.err : '했어요'); loadRoster();
   });
+  document.addEventListener('click', async (e) => { if (e.target.id === 'spGo') { const r = await api('startPcoin', { n: +$('spN').value }); say(`처음 시작할 때 내 코인: ${r.n}`); } });
   document.addEventListener('change', async (e) => { if (e.target.id === 'rsOn') { const r = await api('rosterMode', { on: e.target.checked }); say(r.on ? '명단 로그인을 켰어요 · 이제 명단에 있는 학생만 들어와요' : '명단 로그인을 껐어요'); } });
   document.addEventListener('input', (e) => { if (e.target.id === 'rsFind') drawRoster(); });
   const escA = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -346,6 +348,7 @@ tr.editing td { background: #fff1b8; }
 
   function ago(ms) { const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? `${s}초 전` : s < 3600 ? `${Math.round(s / 60)}분 전` : `${Math.round(s / 3600)}시간 전`; }
   function render() {
+    if ($('spN') && document.activeElement !== $('spN')) $('spN').value = (S.settings && S.settings.startPcoin) | 0;
     if ($('rsOn')) { $('rsOn').checked = !!S.rosterLogin; $('rsMail').textContent = S.mailOn ? `메일: ${S.mailFrom} 에서 보내요 ✓ · 명단 ${S.rosterCount}명` : `⚠ 메일 설정 없음 (Render 환경 변수 BREVO_API_KEY, MAIL_FROM) · 명단 ${S.rosterCount}명 · 지금은 '코드' 버튼으로 직접 알려 줘야 해요`; }
     $('updated').textContent = `한국 날짜 ${S.kstDay} · ${new Date(S.now).toLocaleTimeString('ko-KR')} 갱신`;
     const alive = S.nations.filter((n) => !n.dead);

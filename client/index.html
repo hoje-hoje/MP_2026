@@ -506,6 +506,20 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .mqOpts button kbd { font: 700 12px var(--font-body); background: #2b2340; color: #fff; padding: 0 5px; margin-right: 8px; vertical-align: middle; }
 .mqOpts button.right { background: #c8f5c8; } .mqOpts button.wrong { background: #ffc8cc; } .mqOpts button:disabled { cursor: default; }
 .mqTrack { height: 8px; background: #e2dcf0; border: 2px solid #2b2340; } .mqTrack i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #e8423c, #f0c23a, #5fd36a); }
+#war3 { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; pointer-events: none; overflow: hidden; }
+#war3[hidden] { display: none; } #war3.out { opacity: 0; transition: opacity 0.7s; }
+#war3 .w3flash { position: absolute; inset: 0; background: radial-gradient(circle, rgba(140,24,44,0.72), rgba(24,4,14,0.9) 70%); opacity: 0; }
+#war3.go .w3flash { animation: w3flash 4.2s ease-out forwards; } @keyframes w3flash { 0% { opacity: 0; filter: brightness(1); } 6% { opacity: 1; filter: brightness(5); } 22% { filter: brightness(1); } 100% { opacity: 1; } }
+#war3 .w3crack { position: absolute; left: 50%; top: 50%; width: 140vmax; height: 140vmax; transform: translate(-50%, -50%) scale(0.2); background: repeating-conic-gradient(from 7deg, rgba(255,220,120,0) 0deg 13deg, rgba(255,220,120,0.55) 13deg 14deg); opacity: 0; }
+#war3.go .w3crack { animation: w3crack 1.2s 0.35s ease-out forwards; } @keyframes w3crack { 0% { opacity: 1; transform: translate(-50%, -50%) scale(0.2); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.4); } }
+#war3 .w3in { position: relative; text-align: center; color: #fff; display: grid; gap: 10px; justify-items: center; padding: 0 16px; }
+#war3 .w3in small { font: 700 18px var(--font-body); color: #ffd84d; letter-spacing: 6px; text-shadow: 0 2px 0 #2b0a14; }
+#war3 .w3in > b { font-family: var(--font-display); font-weight: 400; font-size: clamp(44px, 9vw, 104px); color: #ffe08a; -webkit-text-stroke: 3px #3a0a18; text-shadow: 0 6px 0 #7a1430, 0 0 36px rgba(255,140,60,0.95); }
+#war3.go .w3in > b { animation: w3slam 0.55s cubic-bezier(.2,1.6,.4,1) both; } @keyframes w3slam { 0% { transform: scale(4) rotate(-6deg); opacity: 0; } 60% { transform: scale(0.92) rotate(1deg); opacity: 1; } 100% { transform: scale(1) rotate(0); } }
+#war3 .w3in p { margin: 0; font: 700 18px var(--font-body); text-shadow: 0 2px 0 #2b0a14; opacity: 0; } #war3.go .w3in p { animation: w3up 0.5s 0.7s ease-out forwards; }
+#war3 .w3shop { font: 700 17px var(--font-body); color: #2b2340; background: #ffd84d; border: 3px solid #2b2340; box-shadow: 0 4px 0 #2b2340; padding: 8px 16px; opacity: 0; } #war3.go .w3shop { animation: w3pop 0.5s 1.3s cubic-bezier(.2,1.6,.4,1) forwards; }
+@keyframes w3up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } } @keyframes w3pop { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
+#war3.go { animation: w3shake 0.5s 0.2s; } @keyframes w3shake { 0%, 100% { transform: none; } 20% { transform: translate(-12px, 6px); } 40% { transform: translate(10px, -8px); } 60% { transform: translate(-8px, 4px); } 80% { transform: translate(6px, -2px); } }
 #welcome { position: fixed; inset: 0; z-index: 26; display: grid; place-items: center; pointer-events: none; }
 #welcome[hidden] { display: none; } #welcome.out { opacity: 0; transition: opacity 0.6s; }
 #wcText { font-family: var(--font-display); font-size: clamp(28px, 5vw, 54px); color: #fff; text-align: center; padding: 18px 34px; margin: 0 16px; background: rgba(27,37,82,0.82); border: 4px solid #0b1026; box-shadow: 0 0 0 3px #e8c260, 0 8px 0 rgba(11,16,38,0.6); text-shadow: 0 3px 0 #0b1026; }
@@ -710,6 +724,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 </div>
 <div id="mathQuiz" hidden><b id="mqTitle"></b><div class="mqQ" id="mqQ"></div><div class="mqOpts" id="mqOpts"></div><div class="mqTrack"><i id="mqTime"></i></div><small>숫자키 1~4 또는 클릭 · 빨리 맞히면 ✨완벽</small></div>
 <div id="welcome" hidden><div id="wcText"></div></div>
+<div id="war3" hidden><div class="w3flash"></div><div class="w3crack"></div><div class="w3in"><small>3일차</small><b>⚔ 영역전 개막 ⚔</b><p>오늘 점심 1시와 밤 10시, 전선에서 맞붙어요!</p><div class="w3shop">🗡 하늘 상점가에 <b>무기 상점</b>이 열렸어요</div></div></div>
 <div id="dead" hidden><div class="deadIn"><b>💫 기절했어요</b><p><span id="deadBy"></span><em id="deadWho"></em>에게 당했어요</p><p class="deadHow" id="deadHow"></p><div class="deadSec">부활 중… <span id="deadSec">10</span>초 뒤 우리 수도에서 일어나요</div><div class="deadBar"><i id="deadFill"></i></div><small id="deadDrops"></small><small>훔친 물건은 원래 나라로 돌아갔어요</small></div></div>
 <div id="fishBar" hidden><b>🎣 지금! 노란 칸에서 E (스페이스)</b><div class="fbTrack"><div id="fishZone"></div><div id="fishPerfect"></div><div id="fishMark"></div></div></div>
 <div id="contract" class="modalbox" hidden><div class="ctPaper">

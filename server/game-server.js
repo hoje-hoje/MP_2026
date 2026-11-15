@@ -178,7 +178,7 @@ const { sameAnswer, NUM, treeKind, storageSpot, mineSpot, T: TT, BUILD_BY, normI
 const needTool = (s, k) => !!(s.acc.tools && s.acc.tools[k]);
 const jobOf = (s) => (s && s.acc && s.acc.job) || null; // 직업
 // ---- 실시간 전투 (땅 어디서나 · 같은 나라·동맹은 못 때림 · 쓰러지면 10초 뒤 수도에서 부활 + 물고기 일부 떨어뜨림)
-const weaponOf = (s) => (jobOf(s) && MPRules.JOBS[jobOf(s)] ? MPRules.JOBS[jobOf(s)].w : 'fist');
+const weaponOf = (s) => { const a = s.acc; return a.weapon && a.weapons && a.weapons[a.weapon] ? a.weapon : 'fist'; }; // 무기는 직접 사야 함 (직업은 관리자가 주고 효과만) · 안 샀으면 맨주먹
 const LOOT = new Map(); let lootSeq = 0;
 function canHurt(a, b) {
   if (!a || !b || a === b || a.scene !== 'ground' || b.scene !== 'ground' || b.x == null || jailed(b.acc)) return false;
@@ -224,7 +224,7 @@ world.tileTerr = (i) => terrAtTile(i % MAP.width, Math.floor(i / MAP.width)); //
 const TERRAIN = Buffer.from(MAP.terrain_b64, 'base64');
 // 관리자가 '나무·산 없애기'로 비운 칸 (산 → 풀밭, 나무 없음)
 let CLEAR_SET = new Set();
-function rebuildClear() { CLEAR_SET = new Set(Object.keys((state.groundEdits || {}).clear || {}).map((k) => { const [x, y] = k.split(',').map(Number); return y * MAP.width + x; })); }
+function rebuildClear() { CLEAR_SET = new Set(Object.keys((state.groundEdits || {}).clear || {}).map((k) => { const [x, y] = k.split(',').map(Number); return y * MAP.width + x; })); for (const i of Object.keys((world && world.s && world.s.dug) || {})) CLEAR_SET.add(+i); } // 관리자가 치운 산 + 곡괭이로 캔 산
 const tileAt = (x, y) => { if (x < 0 || y < 0 || x >= MAP.width || y >= MAP.height) return TT.VOID; const i = y * MAP.width + x, t = TERRAIN[i]; return t === TT.MOUNTAIN && CLEAR_SET.has(i) ? TT.GRASS : t; };
 const treeHere = (x, y) => !CLEAR_SET.has(y * MAP.width + x) && treeKind(tileAt(x, y), x, y);
 const terrAtTile = (x, y) => terrAtPx(x * 32 + 16, y * 32 + 16);
@@ -367,7 +367,7 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 65536 }); // 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function meta(s) {
   const n = world.nationOfPlayer(s.token);
-  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), job: s.acc.job || null, teacher: !!s.acc.teacher, side: s.acc.side || null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
+  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), job: s.acc.job || null, weapon: weaponOf(s), teacher: !!s.acc.teacher, side: s.acc.side || null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
 }
 // 체포 횟수 (하루 단위), 감옥
 function arrestsToday(acc) { return acc.arrests && acc.arrests.day === gameDayKey() ? acc.arrests.n : 0; }
@@ -416,6 +416,7 @@ wss.on('connection', (ws) => {
       }
       acc.team = team;
       acc.look = cleanLook(m.look);
+      if (acc.pcoin == null) acc.pcoin = Math.max(0, state.settings.startPcoin | 0); // 처음 시작할 때 내 코인 (관리자가 정함)
       dirty = true;
       // 같은 계정으로 이미 접속 중이면 이전 접속을 끊는다
       for (const o of online.values()) if (o.token === token) o.ws.close(4000, 'replaced');
@@ -427,7 +428,7 @@ wss.on('connection', (ws) => {
         t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander.map(({ token, ...r }) => r), board: boardPub(),
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], job: acc.job || null, tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], job: acc.job || null, tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), dug: Object.keys(world.s.dug || {}).map(Number), weapons: acc.weapons || {}, weapon: acc.weapon || null, startDay: gameClock().day, traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
       return;
@@ -738,6 +739,7 @@ wss.on('connection', (ws) => {
       case 'chop': { // 나무 베기 (화면에서 2초 게이지가 찬 뒤 보냄)
         const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y);
         if (now() - (s.lastChop || 0) < NUM.chopSec * 900) return;
+        if (!needTool(s, 'axe')) return send(ws, { t: 'err', text: '나무도끼가 있어야 나무를 벨 수 있어요 · 하늘 치유의 샘(백신·도구 상점)에서 사요' });
         if (!nextTo(s, x, y) || !treeHere(x, y) || world.s.chopped[i]) return send(ws, { t: 'err', text: '벨 수 있는 나무가 없어요' });
         const n = world.nationOfPlayer(s.token);
         if (!n || world.ownerOf(terrAtTile(x, y)) !== n.id) return send(ws, { t: 'err', text: '우리 나라 땅의 나무만 벨 수 있어요' });
@@ -747,6 +749,29 @@ wss.on('connection', (ws) => {
         send(ws, { t: 'ok', text: `🪵 목재 +${NUM.woodPerTree} (우리 저장소)` });
         break;
       }
+      case 'dig': { // 산 캐기: 곡괭이로, 우리 땅에 붙은 산 칸 → 풀밭이 되고 코인 조금 (산줄기에 길을 뚫음)
+        const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y);
+        if (now() - (s.lastChop || 0) < NUM.chopSec * 900) return;
+        if (!needTool(s, 'pick')) return send(ws, { t: 'err', text: '곡괭이가 있어야 산을 캘 수 있어요' });
+        if (!nextTo(s, x, y) || tileAt(x, y) !== TT.MOUNTAIN) return send(ws, { t: 'err', text: '캘 수 있는 산이 없어요' });
+        const n = world.nationOfPlayer(s.token); if (!n || ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => world.ownerOf(terrAtTile(x + dx, y + dy)) === n.id)) return send(ws, { t: 'err', text: '우리 나라 땅에 붙은 산만 캘 수 있어요' }); // 산은 영토 사이 산줄기라 '우리 땅에 붙은' 칸
+        const day = gameDayKey(); s.acc.dugDay = s.acc.dugDay && s.acc.dugDay.day === day ? s.acc.dugDay : { day, n: 0 };
+        if (s.acc.dugDay.n >= NUM.digPerDay) return send(ws, { t: 'err', text: `산은 하루 ${NUM.digPerDay}칸까지 캘 수 있어요` });
+        s.lastChop = now(); s.acc.dugDay.n++; world.s.dug = world.s.dug || {}; world.s.dug[i] = 1; CLEAR_SET.add(i); n.coin += NUM.digCoin; dirty = true; sendViews([n.id]);
+        const msg = JSON.stringify({ t: 'dug', i }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+        send(ws, { t: 'ok', text: `⛰ 산을 캤어요! 길이 열렸어요 · 코인 +${NUM.digCoin} (우리 저장소) · 오늘 ${s.acc.dugDay.n}/${NUM.digPerDay}` });
+        break;
+      }
+      case 'buyWeapon': { // 3일차부터: 대장장이 천사에게 내 코인으로 무기 사기 (사면 바로 듦)
+        if (s.scene !== 'sky' || s.room !== 'market') return;
+        if (gameClock().day < NUM.weaponDay) return send(ws, { t: 'err', text: `무기 상점은 ${NUM.weaponDay}일차에 열려요` });
+        const w = String(m.w || ''), W4 = MPRules.WEAPONS[w]; if (!W4 || !W4.price) return;
+        s.acc.weapons = s.acc.weapons || {}; if (s.acc.weapons[w]) return send(ws, { t: 'err', text: '이미 가지고 있어요' });
+        if ((s.acc.pcoin || 0) < W4.price) return send(ws, { t: 'err', text: `내 코인이 ${W4.price - (s.acc.pcoin || 0)} 모자라요` });
+        s.acc.pcoin -= W4.price; s.acc.weapons[w] = 1; s.acc.weapon = w; dirty = true;
+        send(ws, { t: 'weapons', weapons: s.acc.weapons, weapon: s.acc.weapon, pcoin: s.acc.pcoin, text: `⚔ ${W4.name}을(를) 샀어요! 바로 들었어요 (J로 공격)` }); sendMeta(s); break;
+      }
+      case 'equipWeapon': { const w = String(m.w || ''); if (w && !(s.acc.weapons || {})[w]) return; s.acc.weapon = w || null; dirty = true; send(ws, { t: 'weapons', weapons: s.acc.weapons || {}, weapon: s.acc.weapon, text: w ? `${MPRules.WEAPONS[w].name}을(를) 들었어요` : '무기를 내려놓았어요 (맨주먹)' }); sendMeta(s); break; }
       case 'mineStart': { if (!needTool(s, 'pick')) return send(ws, { t: 'err', text: '곡괭이가 있어야 캐요 · 하늘 치유의 샘(백신·도구 상점)에서 사요' }); s.mining = { tid: m.terr | 0, at: now() }; return; } // 곡괭이질 시작 (꾹 누르기)
       case 'mine': { // 금광: 영토마다 하루 1번, 사람마다 · 곡괭이로 꾹 눌러야 함
         const n = world.nationOfPlayer(s.token); const tid = m.terr | 0;
@@ -1512,6 +1537,7 @@ async function adminOp(m) {
     }
     case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
     case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
+    case 'startPcoin': state.settings.startPcoin = Math.max(0, Math.min(100000, m.n | 0)); dirty = true; return { ok: true, n: state.settings.startPcoin };
     case 'rosterMode': state.settings.rosterLogin = !!m.on; dirty = true; return { ok: true, on: rosterOn() };
     case 'rosterImport': { // 명단 붙여 넣기: 한 줄에 학번 이름 메일 (탭·쉼표·띄어쓰기)
       state.roster = state.roster || {}; const seen = new Set(); let add = 0, upd = 0, bad = [];
