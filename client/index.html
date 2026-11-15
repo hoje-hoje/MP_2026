@@ -502,6 +502,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .trMid { display: flex; flex-direction: column; justify-content: center; gap: 6px; } .trMid button { min-height: 34px; font-size: 13px; padding: 0 8px; } #trGo:not(:disabled) { outline: 3px solid #ffd84d; }
 .trInvT { color: #e9ddff; font-size: 12px; margin: 8px 0 4px; } .trInv { display: flex; gap: 4px; flex-wrap: wrap; max-height: 120px; overflow-y: auto; background: #f4f1ea; padding: 6px; border: 3px solid #1b1430; }
 .trPick { display: flex; flex-direction: column; align-items: center; width: 64px; min-height: 0; padding: 2px; background: #fff !important; color: #2b2340 !important; border: 2px solid #c9cfdc !important; border-image: none !important; box-shadow: none !important; text-shadow: none !important; } .trPick canvas { width: 36px; height: 36px; image-rendering: pixelated; } .trPick small { font-size: 10px; line-height: 1.1; text-align: center; } .trPick:disabled { opacity: 0.35; }
+#pmenu { position: fixed; z-index: 29; min-width: 170px; background: #fffaf0; border: 3px solid #b8862b; box-shadow: 0 0 0 2px #2b2340, 0 6px 16px rgba(0,0,0,0.3); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; color: #2b2340; } #pmenu[hidden] { display: none; } #pmenu b { font-size: 13px; } #pmenu small { font-size: 11px; } #pmenu button { min-height: 32px; font-size: 13px; } #pmenu button:disabled { opacity: 0.55; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -634,10 +635,11 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 </div></div>
 <div id="bagBox" class="modalbox" hidden><div class="hv bagHv"><div class="hvClouds"></div>
   <div class="hvTop"><h2>👜 내 가방</h2><span class="bagCoin" id="bagCoin"></span><button id="bagClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
-  <p class="msg">나만 쓰는 것들이에요. 내 코인은 물고기를 팔면 100%, 작물을 팔면 20%가 들어와요. 다른 사람 옆에서 E → 거래할 수 있어요.</p>
+  <p class="msg">나만 쓰는 것들이에요. 내 코인은 물고기를 팔면 100%, 작물을 팔면 20%가 들어와요. 다른 사람을 클릭하면 거래를 신청할 수 있어요.</p>
   <div class="stGrid" id="bagBody"></div>
   <div class="stFoot" id="bagDonate"><span class="msg">💝 내 코인을 나라 저장소에 기부 (나라 돈 → 내 돈은 안 돼요)</span><input id="bagGiveN" type="number" min="1" value="50" style="width:80px"><button id="bagGive" type="button">기부</button></div>
 </div></div>
+<div id="pmenu" hidden><b id="pmName"></b><button id="pmTrade" type="button">🤝 거래 신청</button></div>
 <div id="tradeReq" hidden><b id="trqText"></b><div><button id="trqYes" type="button">수락</button><button id="trqNo" type="button">거절</button></div></div>
 <div id="trade" class="modalbox" hidden><div class="trWin">
   <div class="trTitle">🤝 거 래</div>

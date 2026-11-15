@@ -1816,7 +1816,7 @@
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
     if ((k === '[' || k === ']') && !ONLINE) { location.hash = 'day' + Math.max(1, Math.min(15, DAY + (k === ']' ? 1 : -1))); }
-    if (k === 'escape') { $('barracks').hidden = true; $('bagBox').hidden = true; closeTalk(); $('rulebook').hidden = true; $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
+    if (k === 'escape') { $('pmenu').hidden = true; $('barracks').hidden = true; $('bagBox').hidden = true; closeTalk(); $('rulebook').hidden = true; $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
   });
   addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); });
   // 패드·폰: 화면 아래 안내를 누르면 E (꾹 누르기도 됨)
@@ -1937,7 +1937,7 @@
     }
     if (player.scene === 'ground' && ONLINE && build.on && !(best && best.kind === 'portal')) { const b = groundAction(); if (b) best = b; } // 설치 모드에선 설치가 먼저 (포털만 예외)
     if (!best && player.scene === 'ground' && ONLINE) best = groundAction();
-    if (!best || best.kind === 'info') { const kn = kingNearby() || tradeNearby(); if (kn) best = kn; } // 다른 나라 왕 옆: 동맹 계약 · 다른 사람 옆: 거래
+    if (!best || best.kind === 'info') { const kn = kingNearby(); if (kn) best = kn; } // 다른 나라 왕 옆: 동맹 계약 (거래는 사람을 클릭해서)
     const key = best ? best.kind + best.text : '';
     if (key !== lastPKey) { lastPKey = key; // (설치 모드를 꺼도 안내가 남던 버그: 마지막으로 보여 준 글자와 비교)
       $('prompt').hidden = !best;
@@ -3808,6 +3808,18 @@
     if (key && key.startsWith('na:')) { const [cx, cy] = key.slice(3).split(',').map(Number); return 'ninja:' + (cy * 22 + cx); }
     return null;
   }
+  // 사람을 클릭하면 작은 메뉴: 거래 신청 (바로 옆 2칸 안이어야 함)
+  canvas.addEventListener('click', (e) => {
+    if (EDIT.on || !ONLINE || !netOn || TITLE.on) return;
+    const r = canvas.getBoundingClientRect(), cam = player.scene === 'sky' ? skyCam : groundCam, wx = (e.clientX - r.left) / zoom + cam.x, wy = (e.clientY - r.top) / zoom + cam.y;
+    let hit = null, hd = 30; for (const [id, o] of remotes) { if (o.x == null) continue; const d = Math.hypot(o.x - wx, o.y - 24 - wy); if (d < hd) { hd = d; hit = [id, o]; } }
+    const pm = $('pmenu'); if (!hit) { pm.hidden = true; return; }
+    const [id, o] = hit, far = Math.hypot(o.x - player.x, o.y - player.y) > MPRules.NUM.tradeTiles * TILE;
+    $('pmName').innerHTML = `${esc(o.name || '?')}${o.nid ? ` <small style="color:${natColor(o.nid)}">■ ${esc(natName(o.nid))}</small>` : ''}`;
+    $('pmTrade').disabled = far; $('pmTrade').textContent = far ? '🤝 거래 (더 가까이 가요)' : '🤝 거래 신청';
+    $('pmTrade').onclick = () => { ws.send(JSON.stringify({ t: 'tradeAsk', id })); pm.hidden = true; };
+    pm.style.left = Math.min(innerWidth - 190, e.clientX + 8) + 'px'; pm.style.top = Math.min(innerHeight - 90, e.clientY + 8) + 'px'; pm.hidden = false;
+  });
   canvas.addEventListener('mousedown', (e) => { if (!EDIT.on) return; const [x, y] = editTileAt(e); if (EDIT.tool === 'pick' || e.altKey) { e.preventDefault(); pickAt(x, y); return; } stroke = []; if (EDIT.tool === 'fill') { floodFill(x, y); endStroke(); return; } EDIT.painting = true; brushApply(x, y); });
   canvas.addEventListener('mousemove', (e) => { if (!EDIT.on) return; EDIT.hover = editTileAt(e); if (EDIT.painting) brushApply(...EDIT.hover); });
   addEventListener('mouseup', () => { if (EDIT.painting) endStroke(); EDIT.painting = false; });
