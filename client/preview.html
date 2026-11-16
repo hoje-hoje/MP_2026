@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MP 비주얼 미리보기 · 땅</title>
+<style>
+  @font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11.woff2) format('woff2'); }
+  @font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11-Bold.woff2) format('woff2'); font-weight: 700; }
+  html, body { margin: 0; height: 100%; background: #0b0820; color: #fff; font-family: 'Galmuri11', sans-serif; overflow: hidden; }
+  canvas#cv { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
+  #bar { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; background: rgba(11,8,32,0.85); border: 3px solid #2b2340; box-shadow: 0 0 0 2px #6b4fb3; padding: 8px 12px; font-size: 14px; }
+  #bar button { font: inherit; padding: 6px 12px; background: #2b2340; color: #fff; border: 2px solid #6b4fb3; cursor: pointer; }
+  #bar button[aria-pressed="true"] { background: #6b4fb3; }
+  #bar label { display: flex; gap: 4px; align-items: center; }
+  #hint { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(11,8,32,0.85); border: 3px solid #2b2340; padding: 6px 14px; font-size: 13px; color: #ffd84d; white-space: nowrap; }
+  #tag { position: fixed; left: 16px; top: 14px; font-size: 24px; color: #fff; text-shadow: 2px 2px 0 #2b2340; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="tag">NEW</div>
+<div id="bar">
+  <button id="bOld" type="button" aria-pressed="false">지금 (OLD)</button>
+  <button id="bNew" type="button" aria-pressed="true">개편 (NEW)</button>
+  <label><input type="checkbox" id="cDither" checked> 디더</label>
+  <label><input type="checkbox" id="cOutline" checked> 외곽선</label>
+  <label><input type="checkbox" id="cShadow" checked> 그림자</label>
+  <label>시간 <select id="sTime"><option value="day">낮</option><option value="dusk">저녁</option><option value="night">밤</option></select></label>
+</div>
+<div id="hint">방향키 이동 · Space 전환 · 동물 옆에서 E = 잡기</div>
+<script>
+(async () => {
+  window.__stage = 'start';
+  const $ = (id) => document.getElementById(id);
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  const TILE = 32; let W2 = 0, H2 = 0, dpr = 1;
+  const loadImg = (src) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
+  const ART = {};
+  const animalsList = ['chick', 'hen', 'pig', 'rabbit', 'cow', 'dog'];
+  await Promise.all(Object.entries({ floor: 'assets/ninja/floor.png', village: 'assets/ninja/village.png', water: 'assets/na/water.png', chars: 'assets/na/chars.png' }).map(async ([k, f]) => { ART[k] = await loadImg(f); }));
+  await Promise.all(animalsList.map(async (k) => { ART['u_' + k] = await loadImg('assets/user/' + k + '.png'); }));
+  window.__stage = 'imgs-done';
+  try { await document.fonts.load('11px Galmuri11'); } catch (e) {}
+  window.__stage = 'fonts-done';
+
+  // ============================================================ 규칙 엔진
+  // 32색 팔레트: 풀·흙·나무·물·하늘·피부·강조. 모든 색은 여기서 고름 (OKLab 가까운 색)
+  const PAL_HEX = [
+    '#1b1430', '#2b2340', '#3f3659', '#6b6480', '#a39fb3', '#dcd9e6', '#fffaf0', // 어둠 → 밝음 (외곽선·잿빛)
+    '#1e3a2a', '#2f6a3a', '#4a9a48', '#6fbf5f', '#a4de6c', '#d9f27a',             // 풀 (어둠 → 밝음)
+    '#3a2616', '#6b4428', '#9a6a3e', '#c89a66', '#e8c99a',                         // 나무·흙·모래
+    '#163a5a', '#1f5f8a', '#2f8fc0', '#5fbfe6', '#aee8ff',                         // 물·하늘
+    '#7a2a2a', '#c23c3c', '#ff6b6b',                                               // 빨강
+    '#b8862b', '#f0c23a', '#ffe9a8',                                               // 금·노랑
+    '#5a3a7a', '#9a6aff', '#e9d8ff',                                               // 보라
+  ];
+  const hex2rgb = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const srgb2lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  function oklab(r, g, b) { // sRGB → OKLab (색 거리 재기용)
+    const lr = srgb2lin(r), lg = srgb2lin(g), lb = srgb2lin(b);
+    const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb), m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb), s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+    return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+  }
+  const PAL = PAL_HEX.map(hex2rgb), PAL_LAB = PAL.map((c) => oklab(...c));
+  // 가장 가까운 팔레트 색: 5비트씩 32×32×32 표를 처음에 한 번 만들어 둠 (픽셀마다 계산 안 함)
+  window.__stage = 'lut'; const LUT = new Uint8Array(32 * 32 * 32);
+  for (let r = 0; r < 32; r++) for (let g = 0; g < 32; g++) for (let b = 0; b < 32; b++) { const L = oklab(r * 8 + 4, g * 8 + 4, b * 8 + 4); let best = 0, bd = 1e9;
+    for (let i = 0; i < PAL_LAB.length; i++) { const p = PAL_LAB[i], d = (L[0] - p[0]) ** 2 + (L[1] - p[1]) ** 2 * 0.6 + (L[2] - p[2]) ** 2 * 0.6; if (d < bd) { bd = d; best = i; } } LUT[(r << 10) | (g << 5) | b] = best; }
+  const nearest = (r, g, b) => PAL[LUT[((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)]];
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]; // 4×4 베이어 (1973)
+  // 그림 한 장을 규칙에 통과시킴: (1) 팔레트로 색 줄이기 + 디더 (2) 1픽셀 외곽선 (3) 그림자용 실루엣
+  function passRules(src, { dither = true, outline = true, strength = 10 } = {}) {
+    const c = document.createElement('canvas'); c.width = src.width + 2; c.height = src.height + 2; const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(src, 1, 1);
+    const im = g.getImageData(0, 0, c.width, c.height), d = im.data, w = c.width, h = c.height;
+    const on = (x, y) => x >= 0 && y >= 0 && x < w && y < h && d[(y * w + x) * 4 + 3] > 128;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; if (d[i + 3] <= 128) { d[i + 3] = 0; continue; }
+      const t = dither ? (BAYER[(y & 3) * 4 + (x & 3)] / 16 - 0.5) * strength : 0;
+      const [r, gg, b] = nearest(Math.max(0, Math.min(255, d[i] + t)), Math.max(0, Math.min(255, d[i + 1] + t)), Math.max(0, Math.min(255, d[i + 2] + t))); d[i] = r; d[i + 1] = gg; d[i + 2] = b; d[i + 3] = 255; }
+    if (outline) { const o = new Uint8Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (!on(x, y) && (on(x + 1, y) || on(x - 1, y) || on(x, y + 1) || on(x, y - 1))) o[y * w + x] = 1;
+      for (let k = 0; k < o.length; k++) if (o[k]) { const i = k * 4; d[i] = 27; d[i + 1] = 20; d[i + 2] = 48; d[i + 3] = 255; } }
+    g.putImageData(im, 0, 0); return c;
+  }
+  function silhouette(src, color = 'rgba(27,20,48,0.32)') { const c = document.createElement('canvas'); c.width = src.width; c.height = src.height; const g = c.getContext('2d'); g.drawImage(src, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = color; g.fillRect(0, 0, c.width, c.height); return c; }
+  const crop = (img, x, y, w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, x, y, w, h, 0, 0, w, h); return c; };
+  // 빛 방향: 왼쪽 위 → 그림자는 오른쪽 아래로 눕힘
+  function drawShadow(g, sil, cx, bottom, k, squash = 0.5, skew = 0.6) { g.save(); g.translate(Math.round(cx), Math.round(bottom)); g.transform(1, 0, skew, squash, 0, 0); g.scale(1, -1); g.drawImage(sil, -sil.width * k / 2, -sil.height * k, sil.width * k, sil.height * k); g.restore(); } // 빛 왼쪽 위 → 실루엣을 발밑에서 아래로 뒤집어 눕힘 (오른쪽 아래로 기울임)
+
+  // ============================================================ 재료 준비 (OLD/NEW 둘 다)
+  const SP = { treeA: [0, 96, 64, 48], treeB: [0, 144, 64, 48], midA: [64, 96, 32, 32], midB: [64, 144, 32, 32], bush: [64, 78, 32, 18], stone: [112, 80, 32, 32] };
+  window.__stage = 'trees'; const TREES = {}; for (const [k, [x, y, w, h]] of Object.entries(SP)) { const raw = crop(ART.village, x, y, w, h); TREES[k] = { raw, nw: passRules(raw, { strength: 6 }), sil: silhouette(raw) }; }
+  window.__stage = 'animals'; const ANIM = {}; for (const k of animalsList) { const raw = ART['u_' + k]; ANIM[k] = { raw, nw: passRules(raw, { strength: 4, outline: false }), sil: silhouette(raw) }; // 동물 그림은 이미 외곽선이 있어서 색만 맞춤 }
+  // 바닥 타일: 풀(12행), 모래(5행), 숲(12행 11~14)
+  const tileRaw = (cx, cy) => crop(ART.floor, cx * 16, cy * 16, 16, 16);
+  const GRASS = [[0, 12], [0, 12], [0, 12], [0, 12], [0, 12], [1, 12], [2, 12], [3, 12]].map(([x, y]) => tileRaw(x, y));
+  const SAND = [[0, 5], [0, 5], [1, 5], [2, 5], [3, 5]].map(([x, y]) => tileRaw(x, y));
+  // NEW 풀 바닥: 팔레트로 통일 + 풀결 + 흙 자국 (사진 1의 '물결이 모양 따라감' 같은 규칙으로 흙길도 가장자리 따라감)
+  const NEW_GRASS = GRASS.map((t) => passRules(t, { outline: false, dither: false }));
+  const NEW_SAND = SAND.map((t) => passRules(t, { outline: false, dither: false }));
+  // 캐릭터: 닌자(chars.png 0번) 16px 칸, 열 = 방향, 행 = 프레임
+  const CHAR = crop(ART.chars, 0, 0, 64, 112), CHAR_NEW = passRules(CHAR, { strength: 4 }), CHAR_SIL = silhouette(CHAR);
+
+  // ============================================================ 장면 (작은 섬: 풀 + 모래 해변 + 물 + 숲)
+  window.__stage = 'scene'; const MW = 44, MH = 30; const T = { G: 1, S: 3, W: 4 };
+  const hash = (x, y, s = 1) => { let h = (x * 374761393 + y * 668265263 + s * 982451653) | 0; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967296; };
+  const map = new Uint8Array(MW * MH);
+  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) { // 비스듬한 해안선 + 호수
+    const coast = (x - 30) + (y - 6) * 0.5 + Math.sin(y * 0.7) * 1.6 + Math.sin(x * 0.4) * 1.2;
+    const lake = Math.hypot(x - 10, (y - 20) * 1.3);
+    map[y * MW + x] = coast > 6 || lake < 4.2 ? T.W : coast > 4.2 || (lake < 5.6) ? T.S : T.G;
+  }
+  const at = (x, y) => (x < 0 || y < 0 || x >= MW || y >= MH ? T.W : map[y * MW + x]);
+  // 나무·바위·풀·꽃 심기
+  const objs = [];
+  for (let y = 1; y < MH - 1; y++) for (let x = 1; x < MW - 1; x++) { if (at(x, y) !== T.G) continue; const h = hash(x, y, 7);
+    if (h < 0.018 && x > 2 && y > 3 && (x + y) % 2 === 0) objs.push({ k: h < 0.006 ? 'treeA' : h < 0.012 ? 'treeB' : 'midA', x: x * TILE + 16, y: y * TILE + 30, seed: h * 99 });
+    else if (h < 0.028) objs.push({ k: 'midB', x: x * TILE + 16, y: y * TILE + 30, seed: h * 99 });
+    else if (h < 0.045) objs.push({ k: 'bush', x: x * TILE + 16, y: y * TILE + 30, seed: h * 99 });
+    else if (h < 0.052) objs.push({ k: 'stone', x: x * TILE + 16, y: y * TILE + 30, seed: h * 99 }); }
+  const blocked = new Set(objs.filter((o) => o.k !== 'bush').map((o) => Math.floor(o.y / TILE) * MW + Math.floor(o.x / TILE)));
+  const tufts = []; for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) if (at(x, y) === T.G) { for (let k = 0; k < 2; k++) { const h = hash(x, y, 20 + k); if (h < 0.3) tufts.push({ x: x * TILE + 3 + hash(x, y, 30 + k) * 26, y: y * TILE + 4 + hash(x, y, 40 + k) * 26, kind: h < 0.06 ? 'flower' : h < 0.1 ? 'flower2' : 'grass', ph: hash(x, y, 50 + k) * 6.28 }); } }
+  const animals = []; for (let i = 0; i < 9; i++) { const k = animalsList[i % animalsList.length]; let x = 2, y = 2; for (let tr = 0; tr < 200; tr++) { x = 2 + Math.floor(hash(i, 1 + tr, 90) * (MW - 4)); y = 2 + Math.floor(hash(i, 2 + tr, 90) * (MH - 4)); if (at(x, y) === T.G && !blocked.has(y * MW + x)) break; } animals.push({ k, hx: x * TILE + 16, hy: y * TILE + 28, x: x * TILE + 16, y: y * TILE + 28, seed: i * 13, dir: -1, t: 0, caught: 0 }); }
+  const SPD = { chick: 26, hen: 22, pig: 18, rabbit: 40, cow: 14, dog: 36 };
+  const player = { x: 12 * TILE + 16, y: 8 * TILE + 16, face: 0, moving: false, frame: 0, ft: 0, catchFx: 0 };
+  const keys = new Set(); let MODE = 'new', TIME = 'day', bag = {}, toast = '', toastT = 0;
+  const OPT = { dither: true, outline: true, shadow: true };
+  addEventListener('keydown', (e) => { keys.add(e.key); if (e.key === ' ') { e.preventDefault(); setMode(MODE === 'new' ? 'old' : 'new'); } if (e.key === 'e' || e.key === 'E') tryCatch(); });
+  addEventListener('keyup', (e) => keys.delete(e.key));
+  function setMode(m) { MODE = m; $('bOld').setAttribute('aria-pressed', String(m === 'old')); $('bNew').setAttribute('aria-pressed', String(m === 'new')); $('tag').textContent = m === 'new' ? 'NEW' : 'OLD'; $('tag').style.color = m === 'new' ? '#ffd84d' : '#aaa'; }
+  $('bOld').onclick = () => setMode('old'); $('bNew').onclick = () => setMode('new');
+  for (const k of ['dither', 'outline', 'shadow']) $('c' + k[0].toUpperCase() + k.slice(1)).onchange = (e) => { OPT[k] = e.target.checked; };
+  $('sTime').onchange = (e) => { TIME = e.target.value; };
+  function tryCatch() { for (const a of animals) if (!a.caught && Math.hypot(a.x - player.x, a.y - player.y) < 44) { a.caught = performance.now(); bag[a.k] = (bag[a.k] || 0) + 1; toast = `${a.k} 을(를) 잡았어요! → 가방 (${Object.values(bag).reduce((s, v) => s + v, 0)}마리)`; toastT = performance.now(); return; } }
+
+  window.__stage = 'draw';
+  // ============================================================ 그리기
+  function resize() { dpr = Math.min(2, devicePixelRatio || 1); W2 = innerWidth; H2 = innerHeight; cv.width = W2 * dpr; cv.height = H2 * dpr; }
+  addEventListener('resize', resize); resize();
+  // 물결: 해안선 모양을 따라 흐르는 흰 거품선 (사진 1) + 물 반짝임
+  // 물 타일 캐시: 해안 모양(상하좌우 4비트) × 깊음 × 8단계 위상 → 미리 그려 둠 (매 프레임 픽셀 계산 안 함)
+  const WPH = 8, WCACHE = new Map();
+  function waterFrame(mask, deep, ph) { const key = mask * 16 + (deep ? 8 : 0) + ph; let c = WCACHE.get(key); if (c) return c; c = document.createElement('canvas'); c.width = c.height = TILE; const g = c.getContext('2d'); const t = ph / WPH * 6.283 / 2.2;
+    g.fillStyle = deep ? '#1f5f8a' : '#2f8fc0'; g.fillRect(0, 0, TILE, TILE);
+    // 잔잔한 물: 가로로 긴 밝은 줄 2~3개가 천천히 흐름 (디더로 가장자리 부드럽게)
+    for (let i = 0; i < 3; i++) { const yy = ((i * 11 + Math.round(Math.sin(t * 0.8 + i * 2.1) * 3) + 40) % TILE) & ~1, x0 = (Math.round((t * 9 + i * 13) % TILE)) & ~1, len = 10 + i * 4;
+      for (let k = 0; k < len; k += 2) { const xx = (x0 + k) % TILE, b = BAYER[((yy >> 1) & 3) * 4 + ((xx >> 1) & 3)] / 16, edge = k < 4 || k > len - 5; if (edge && b > 0.5) continue; g.fillStyle = deep ? '#2f8fc0' : '#5fbfe6'; g.fillRect(xx, yy, 2, 2); } }
+    const k = (Math.sin(t * 2.2) + 1) / 2, off = Math.round(k * 4), N = mask & 1, S = mask & 2, Wd = mask & 4, E = mask & 8;
+    const foam = (x0, y0, w, h) => { g.fillStyle = '#aee8ff'; g.fillRect(x0, y0, w, h); if (k > 0.55) { g.fillStyle = '#fffaf0'; g.fillRect(x0, y0, w === TILE ? TILE : 2, h === TILE ? TILE : 2); } };
+    if (N) foam(0, off, TILE, 3); if (S) foam(0, TILE - 3 - off, TILE, 3); if (Wd) foam(off, 0, 3, TILE); if (E) foam(TILE - 3 - off, 0, 3, TILE);
+    g.fillStyle = '#c89a66'; if (N) g.fillRect(0, 0, TILE, 1); if (Wd) g.fillRect(0, 0, 1, TILE);
+    WCACHE.set(key, c); return c; }
+  function waterTile(g, x, y, px, py, t, isNew) {
+    const land = (a, b) => at(a, b) !== T.W; const N = land(x, y - 1), S = land(x, y + 1), Wd = land(x - 1, y), E = land(x + 1, y);
+    if (!isNew) { g.fillStyle = '#4fb4e8'; g.fillRect(px, py, TILE, TILE); if (N || S || Wd || E) { g.fillStyle = '#9fe0ff'; g.fillRect(px, py, TILE, N ? 3 : 0); g.fillRect(px, py + TILE - 3, TILE, S ? 3 : 0); g.fillRect(px, py, Wd ? 3 : 0, TILE); g.fillRect(px + TILE - 3, py, E ? 3 : 0, TILE); } return; }
+    const deep = !(N || S || Wd || E) && !land(x - 1, y - 1) && !land(x + 1, y + 1) && !land(x + 1, y - 1) && !land(x - 1, y + 1);
+    const ph = Math.floor((t * 0.7 + (x + y) * 0.35) * WPH) % WPH; // 해안을 따라 위상이 이어져 파도가 흐르는 것처럼
+    g.drawImage(waterFrame((N ? 1 : 0) | (S ? 2 : 0) | (Wd ? 4 : 0) | (E ? 8 : 0), deep, ((ph % WPH) + WPH) % WPH), px, py);
+    if (hash(x, y, 77) < 0.12 && Math.sin(t * 3 + x * 2 + y) > 0.6) { g.fillStyle = '#fffaf0'; g.fillRect(px + 8 + ((hash(x, y, 78) * 16) | 0), py + 6 + ((hash(x, y, 79) * 16) | 0), 2, 1); } // 반짝
+    return;
+  }
+  function groundTile(g, x, y, px, py, isNew) {
+    const k = at(x, y), h = hash(x, y);
+    if (k === T.G) { const arr = isNew ? NEW_GRASS : GRASS; const im = arr[(h * arr.length) | 0]; g.drawImage(im, isNew ? 1 : 0, isNew ? 1 : 0, 16, 16, px, py, TILE, TILE);
+      if (isNew) { // 풀 가장자리가 모래와 닿으면 흙 자국이 모양을 따라감 (사진 1 규칙)
+        const sandN = at(x, y - 1) === T.S, sandS = at(x, y + 1) === T.S, sandW = at(x - 1, y) === T.S, sandE = at(x + 1, y) === T.S;
+        g.fillStyle = '#4a9a48'; if (sandN) g.fillRect(px, py, TILE, 2); if (sandS) g.fillRect(px, py + TILE - 2, TILE, 2); if (sandW) g.fillRect(px, py, 2, TILE); if (sandE) g.fillRect(px + TILE - 2, py, 2, TILE);
+        g.fillStyle = '#2f6a3a'; if (sandS) for (let i = 0; i < TILE; i += 4) g.fillRect(px + i + ((h * 7) | 0) % 4, py + TILE - 4, 2, 2); } }
+    else if (k === T.S) { const arr = isNew ? NEW_SAND : SAND; const im = arr[(h * arr.length) | 0]; g.drawImage(im, isNew ? 1 : 0, isNew ? 1 : 0, 16, 16, px, py, TILE, TILE); if (isNew && h < 0.1) { g.fillStyle = '#e8c99a'; g.fillRect(px + 6, py + 10, 4, 2); g.fillRect(px + 18, py + 22, 2, 2); } }
+  }
+  function drawTuft(g, u, t, isNew) { // 풀·꽃: 바람에 흔들림 (NEW) / 가만히 (OLD)
+    const sway = isNew ? Math.round(Math.sin(t * 2.4 + u.ph + u.x * 0.01) * 2) : 0, x = Math.round(u.x), y = Math.round(u.y);
+    if (u.kind === 'grass') { g.fillStyle = isNew ? '#2f6a3a' : '#4a8a3a'; g.fillRect(x, y, 2, 6); g.fillRect(x + 4, y + 2, 2, 4); g.fillStyle = isNew ? '#a4de6c' : '#8fd06a'; g.fillRect(x + sway, y - 4, 2, 4); g.fillRect(x + 4 + sway, y - 2, 2, 4); if (isNew) { g.fillStyle = '#d9f27a'; g.fillRect(x + sway, y - 4, 1, 2); } }
+    else { g.fillStyle = '#2f6a3a'; g.fillRect(x + 1, y - 2, 2, 8); g.fillStyle = u.kind === 'flower' ? '#ff6b6b' : '#ffe9a8'; g.fillRect(x - 1 + sway, y - 6, 2, 2); g.fillRect(x + 3 + sway, y - 6, 2, 2); g.fillRect(x + 1 + sway, y - 8, 2, 2); g.fillRect(x + 1 + sway, y - 4, 2, 2); g.fillStyle = '#f0c23a'; g.fillRect(x + 1 + sway, y - 6, 2, 2); if (isNew) { g.fillStyle = '#1b1430'; g.fillRect(x + 1 + sway, y - 9, 2, 1); } }
+  }
+  function drawTree(g, o, t, isNew) {
+    const T2 = TREES[o.k], im = isNew ? T2.nw : T2.raw, k = 2, w = im.width * k, h = im.height * k;
+    if (isNew && OPT.shadow && o.k !== 'stone') drawShadow(g, T2.sil, o.x, o.y - 2, k, o.k.startsWith('tree') ? 0.42 : 0.5);
+    if (isNew && o.k !== 'stone') { // 잎 흔들림: 위쪽 절반만 좌우로 1~2px, 아래(줄기)는 고정
+      const sw = Math.round(Math.sin(t * 1.6 + o.seed) * (o.k.startsWith('tree') ? 2 : 1)); const half = Math.round(im.height * 0.55);
+      g.drawImage(im, 0, half, im.width, im.height - half, Math.round(o.x - w / 2), Math.round(o.y - (im.height - half) * k), w, (im.height - half) * k);
+      g.drawImage(im, 0, 0, im.width, half, Math.round(o.x - w / 2) + sw, Math.round(o.y - h), w, half * k);
+    } else g.drawImage(im, Math.round(o.x - w / 2), Math.round(o.y - h), w, h);
+  }
+  function stepAnimal(a, dt) { if (a.caught) return; const sp = SPD[a.k] || 20; a.t += dt; const P = 3.4 + hash(a.seed, 1, 5) * 2, L = 48;
+    const leg = Math.floor(a.t / P), u = (a.t - leg * P) / (L / sp), k = Math.min(1, u), ang = hash(a.seed, Math.floor(leg / 2), 11) * 6.28, ex = a.hx + Math.cos(ang) * L, ey = a.hy + Math.sin(ang) * L * 0.7;
+    const out = leg % 2 === 0, fx = out ? a.hx : ex, fy = out ? a.hy : ey, tx = out ? ex : a.hx, ty = out ? ey : a.hy; const nx = fx + (tx - fx) * k, ny = fy + (ty - fy) * k;
+    if (at(Math.floor(nx / TILE), Math.floor(ny / TILE)) === T.G) { a.dir = tx < fx ? -1 : 1; a.x = nx; a.y = ny; a.moving = u < 1; } else a.moving = false;
+    // 가까이 가면 도망 (토끼·닭)
+    const d = Math.hypot(player.x - a.x, player.y - a.y); if (d < 70 && (a.k === 'rabbit' || a.k === 'chick')) { const vx = (a.x - player.x) / d, vy = (a.y - player.y) / d, nx2 = a.x + vx * 60 * dt, ny2 = a.y + vy * 60 * dt; if (at(Math.floor(nx2 / TILE), Math.floor(ny2 / TILE)) === T.G) { a.x = nx2; a.y = ny2; a.dir = vx < 0 ? -1 : 1; a.moving = true; } } }
+  function drawAnimal(g, a, t, isNew) {
+    const A = ANIM[a.k], im = isNew ? A.nw : A.raw, k = 2, w = im.width * k, h = im.height * k;
+    if (a.caught) { const u = (performance.now() - a.caught) / 600; if (u > 1) return; g.globalAlpha = 1 - u; g.drawImage(im, Math.round(a.x - w / 2), Math.round(a.y - h - u * 40), w, h); g.globalAlpha = 1; return; }
+    const fps12 = Math.floor(t * 12), bob = a.moving ? (fps12 % 2) * 2 : 0;
+    if (isNew && OPT.shadow) { g.fillStyle = 'rgba(27,20,48,0.3)'; g.beginPath(); g.ellipse(a.x, a.y, w * 0.32, 3, 0, 0, 6.3); g.fill(); }
+    g.save(); g.translate(Math.round(a.x), Math.round(a.y - bob)); if (a.dir > 0) g.scale(-1, 1); g.drawImage(im, -Math.round(w / 2), -h, w, h); g.restore();
+    const d = Math.hypot(player.x - a.x, player.y - a.y); if (d < 44 && isNew) { g.font = '700 11px Galmuri11'; g.textAlign = 'center'; g.fillStyle = '#1b1430'; g.fillRect(a.x - 24, a.y - h - 18, 48, 13); g.fillStyle = '#ffe9a8'; g.fillText('E 잡기', a.x, a.y - h - 8); }
+  }
+  function drawPlayer(g, t, isNew) {
+    const sheet = isNew ? CHAR_NEW : CHAR, off = isNew ? 1 : 0, k = 3;
+    const frame = isNew ? Math.floor(t * 12) % 4 : Math.floor(t * 8) % 4, row = player.moving ? frame : 0; // NEW: 12프레임으로 끊음
+    if (isNew && OPT.shadow) { g.fillStyle = 'rgba(27,20,48,0.3)'; g.beginPath(); g.ellipse(player.x, player.y, 14, 5, 0, 0, 6.3); g.fill(); }
+    else if (!isNew) { g.fillStyle = 'rgba(0,0,0,0.22)'; g.beginPath(); g.ellipse(player.x, player.y, 15, 5, 0, 0, 6.3); g.fill(); }
+    g.drawImage(sheet, off + player.face * 16, off + row * 16, 16, 16, Math.round(player.x - 8 * k), Math.round(player.y - 16 * k + 2), 16 * k, 16 * k);
+  }
+  const DIRS = { ArrowLeft: [-1, 0, 2], ArrowRight: [1, 0, 3], ArrowUp: [0, -1, 1], ArrowDown: [0, 1, 0], a: [-1, 0, 2], d: [1, 0, 3], w: [0, -1, 1], s: [0, 1, 0] };
+  function stepPlayer(dt) { let mv = null; for (const k in DIRS) if (keys.has(k)) { mv = DIRS[k]; break; } player.moving = !!mv; if (!mv) return; player.face = mv[2]; const sp = 110, nx = player.x + mv[0] * sp * dt, ny = player.y + mv[1] * sp * dt; const tx = Math.floor(nx / TILE), ty = Math.floor(ny / TILE); if (at(tx, ty) !== T.W && !blocked.has(ty * MW + tx)) { player.x = nx; player.y = ny; } }
+  let LEAVES = []; for (let i = 0; i < 14; i++) LEAVES.push({ x: Math.random() * MW * TILE, y: Math.random() * MH * TILE, vx: 18 + Math.random() * 14, vy: 10 + Math.random() * 10, ph: Math.random() * 6.28 });
+  let BIRDS = [{ x: -60, y: 80, v: 70 }, { x: -200, y: 140, v: 62 }, { x: -330, y: 60, v: 75 }];
+  function lighting(g, t) { // NEW: 시간대별 빛 (저녁은 따뜻하게, 밤은 파랗게 + 플레이어 둘레 등불)
+    if (TIME === 'day') return;
+    g.save(); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = TIME === 'dusk' ? '#e8a060' : '#3a4a8a'; g.fillRect(0, 0, W2, H2); g.globalCompositeOperation = 'source-over';
+    if (TIME === 'night') { g.globalCompositeOperation = 'lighter'; const cam = camNow(); const gr = g.createRadialGradient(player.x - cam[0], player.y - 20 - cam[1], 10, player.x - cam[0], player.y - 20 - cam[1], 150); gr.addColorStop(0, 'rgba(255,200,120,0.35)'); gr.addColorStop(1, 'rgba(255,200,120,0)'); g.fillStyle = gr; g.fillRect(0, 0, W2, H2);
+      for (let i = 0; i < 18; i++) { const x = (hash(i, 1, 3) * MW * TILE), y = (hash(i, 2, 3) * MH * TILE), a = (Math.sin(t * 2 + i) + 1) / 2; g.fillStyle = `rgba(217,242,122,${0.5 * a})`; g.fillRect(x - cam[0] + Math.sin(t + i) * 8, y - cam[1] + Math.cos(t * 0.7 + i) * 6 - 20, 3, 3); } } // 반딧불
+    g.restore();
+  }
+  let camX = 0, camY = 0; const camNow = () => [camX, camY];
+  let prev = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - prev) / 1000); prev = now; const t = now / 1000, isNew = MODE === 'new';
+    stepPlayer(dt); for (const a of animals) stepAnimal(a, dt);
+    camX = Math.max(0, Math.min(MW * TILE - W2, player.x - W2 / 2)); camY = Math.max(0, Math.min(MH * TILE - H2, player.y - H2 / 2));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.imageSmoothingEnabled = false; ctx.fillStyle = '#1f5f8a'; ctx.fillRect(0, 0, W2, H2);
+    ctx.setTransform(dpr, 0, 0, dpr, -camX * dpr, -camY * dpr);
+    const tx0 = Math.max(0, Math.floor(camX / TILE)), tx1 = Math.min(MW - 1, Math.ceil((camX + W2) / TILE)), ty0 = Math.max(0, Math.floor(camY / TILE)), ty1 = Math.min(MH - 1, Math.ceil((camY + H2) / TILE));
+    for (let y = ty0; y <= ty1; y++) for (let x = tx0; x <= tx1; x++) { const px = x * TILE, py = y * TILE; if (at(x, y) === T.W) waterTile(ctx, x, y, px, py, t, isNew); else groundTile(ctx, x, y, px, py, isNew); }
+    for (const u of tufts) if (u.x > camX - 40 && u.x < camX + W2 + 40 && u.y > camY - 40 && u.y < camY + H2 + 40) drawTuft(ctx, u, t, isNew);
+    const list = [...objs.map((o) => ({ y: o.y, d: () => drawTree(ctx, o, t, isNew) })), ...animals.map((a) => ({ y: a.y, d: () => drawAnimal(ctx, a, t, isNew) })), { y: player.y, d: () => drawPlayer(ctx, t, isNew) }];
+    list.sort((a, b) => a.y - b.y); for (const o of list) o.d();
+    if (isNew) { // 떨어지는 잎 · 새
+      for (const L of LEAVES) { L.x += (L.vx + Math.sin(t * 2 + L.ph) * 12) * dt; L.y += L.vy * dt; if (L.y > MH * TILE || L.x > MW * TILE) { L.x = Math.random() * MW * TILE * 0.5; L.y = -10; } ctx.fillStyle = Math.sin(t * 6 + L.ph) > 0 ? '#c89a66' : '#9a6a3e'; ctx.fillRect(Math.round(L.x), Math.round(L.y), 3, 2); }
+      for (const b of BIRDS) { b.x += b.v * dt; if (b.x > MW * TILE + 60) { b.x = -80; b.y = 40 + Math.random() * 140; } const fl = Math.floor(t * 8 + b.x) % 2; ctx.fillStyle = '#1b1430'; ctx.fillRect(Math.round(b.x), Math.round(b.y + fl * 2), 3, 1); ctx.fillRect(Math.round(b.x) + 3, Math.round(b.y - 1), 2, 1); ctx.fillRect(Math.round(b.x) + 5, Math.round(b.y + fl * 2), 3, 1); }
+      lighting(ctx, t);
+    }
+    // 이름표·토스트 (화면 좌표)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.font = '700 12px Galmuri11'; ctx.textAlign = 'center';
+    { const x = player.x - camX, y = player.y - 56 - camY; ctx.fillStyle = '#2b2340'; ctx.fillRect(x - 18, y - 9, 36, 14); ctx.fillStyle = '#fff'; ctx.fillText('나', x, y + 2); }
+    if (now - toastT < 2200) { ctx.font = '700 15px Galmuri11'; const w = ctx.measureText(toast).width + 24; ctx.fillStyle = '#fffaf0'; ctx.fillRect(W2 / 2 - w / 2, 70, w, 30); ctx.strokeStyle = '#2b2340'; ctx.lineWidth = 3; ctx.strokeRect(W2 / 2 - w / 2, 70, w, 30); ctx.fillStyle = '#2b2340'; ctx.fillText(toast, W2 / 2, 91); }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  window.PV = { setMode, player, animals, setTime: (v) => { TIME = v; $('sTime').value = v; }, catchAny: () => { const a = animals.find((q) => !q.caught); if (a) { player.x = a.x - 30; player.y = a.y; tryCatch(); } } };
+})();
+</script>
+</body>
+</html>

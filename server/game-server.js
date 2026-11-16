@@ -37,6 +37,7 @@ const STATIC = {
   '/game.js': path.join(ROOT, 'client', 'game.js'),
   '/rules.js': path.join(ROOT, 'client', 'rules.js'),
   '/admin': path.join(ROOT, 'client', 'admin.html'),
+  '/preview': path.join(ROOT, 'client', 'preview.html'),
   '/favicon.ico': path.join(ROOT, 'client', 'favicon.ico'),
   '/world.json': path.join(ROOT, 'maps', 'world.json'),
 };
@@ -152,7 +153,7 @@ const server = http.createServer((req, res) => {
     const cache = isAsset ? 'public, max-age=600, stale-while-revalidate=604800' : 'no-cache';
     if (String(req.headers['if-none-match'] || '').replace(/^W\//, '') === etag) { res.writeHead(304, { ETag: etag, 'Cache-Control': cache }); return res.end(); }
     let body = isWorld ? publicWorld() : fs.readFileSync(file);
-    const type = url.pathname === '/admin' ? MIME['.html'] : MIME[path.extname(file)] || 'application/octet-stream';
+    const type = url.pathname === '/admin' || url.pathname === '/preview' ? MIME['.html'] : MIME[path.extname(file)] || 'application/octet-stream';
     const head = { 'Content-Type': type, 'Cache-Control': cache, ETag: etag, Vary: 'Accept-Encoding' };
     // 글자 파일(지도·코드·화면)은 gzip으로 줄여 보냄 (그림·글꼴은 이미 압축돼 있음)
     if (/json|javascript|html|css|svg/.test(type) && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
