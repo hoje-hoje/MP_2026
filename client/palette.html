@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MP 색감 맞추기 도구</title>
+<style>
+  @font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11.woff2) format('woff2'); }
+  @font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11-Bold.woff2) format('woff2'); font-weight: 700; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #14102a; color: #eee; font-family: 'Galmuri11', sans-serif; font-size: 14px; }
+  header { padding: 12px 16px; background: #1e1838; border-bottom: 3px solid #6b4fb3; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  header b { font-size: 18px; color: #ffd84d; }
+  header small { color: #b9b0d0; }
+  main { display: grid; grid-template-columns: 340px 1fr; height: calc(100vh - 54px); }
+  aside { border-right: 3px solid #2b2340; overflow-y: auto; padding: 12px; display: grid; gap: 12px; align-content: start; }
+  section { background: #1e1838; border: 2px solid #2b2340; padding: 10px; }
+  section h3 { margin: 0 0 8px; font-size: 14px; color: #ffd84d; }
+  .drop { border: 2px dashed #6b4fb3; padding: 18px 10px; text-align: center; color: #b9b0d0; cursor: pointer; }
+  .drop.on { background: #2b2340; color: #fff; }
+  .items { display: grid; gap: 6px; }
+  .item { display: grid; grid-template-columns: 56px 1fr auto; gap: 8px; align-items: center; background: #14102a; padding: 6px; border: 2px solid #2b2340; }
+  .item.ref { border-color: #ffd84d; }
+  .item canvas { width: 56px; height: 56px; image-rendering: pixelated; background: repeating-conic-gradient(#222 0 25%, #2a2a2a 0 50%) 0 0/8px 8px; }
+  .item .nm { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .sz { font-size: 11px; color: #b9b0d0; }
+  .item button { font: inherit; font-size: 11px; padding: 3px 6px; background: #2b2340; color: #fff; border: 2px solid #6b4fb3; cursor: pointer; }
+  .item button[aria-pressed="true"] { background: #ffd84d; color: #14102a; border-color: #ffd84d; }
+  .pal { display: flex; flex-wrap: wrap; gap: 3px; }
+  .pal i { width: 18px; height: 18px; display: block; border: 1px solid #000; }
+  label { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+  input[type=range] { flex: 1; }
+  select, button.big { font: inherit; padding: 6px 10px; background: #2b2340; color: #fff; border: 2px solid #6b4fb3; cursor: pointer; width: 100%; }
+  button.big.go { background: #6b4fb3; }
+  .stage { position: relative; overflow: hidden; background: #0b0820; }
+  #scene { display: block; image-rendering: pixelated; }
+  .hint { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: rgba(11,8,32,0.85); border: 2px solid #2b2340; padding: 5px 12px; font-size: 12px; color: #ffd84d; white-space: nowrap; }
+  .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .cmp div { text-align: center; font-size: 11px; color: #b9b0d0; }
+  .cmp canvas { width: 100%; image-rendering: pixelated; background: repeating-conic-gradient(#222 0 25%, #2a2a2a 0 50%) 0 0/8px 8px; }
+</style>
+</head>
+<body>
+<header><b>🎨 색감 맞추기</b><small>그림을 끌어다 놓고 → 기준 그림을 하나 고르면 → 나머지가 그 색으로 바뀌어요. 오른쪽에 50×50 장면으로 같이 놓아 봐요.</small></header>
+<main>
+<aside>
+  <section>
+    <h3>1. 그림 넣기</h3>
+    <div class="drop" id="drop">여기에 PNG 끌어다 놓기<br><small>또는 클릭해서 고르기 · 여러 장 가능</small></div>
+    <input type="file" id="file" accept="image/*" multiple hidden>
+    <div class="items" id="items"></div>
+  </section>
+  <section>
+    <h3>2. 기준 팔레트 <small id="palN"></small></h3>
+    <div class="pal" id="pal"></div>
+    <label>색 개수 <input type="range" id="palK" min="8" max="48" value="24"><span id="palKv">24</span></label>
+    <label><input type="checkbox" id="keepL" checked> 밝기는 원래대로 (외곽선·그림자 유지)</label>
+    <label>맞추는 세기 <input type="range" id="mix" min="0" max="100" value="100"><span id="mixv">100%</span></label>
+    <label><input type="checkbox" id="dither"> 디더 (색 경계 섞기)</label>
+  </section>
+  <section>
+    <h3>3. 장면</h3>
+    <label>시간 <input type="range" id="time" min="0" max="24" step="0.25" value="12"><span id="timev">12시</span></label>
+    <label><input type="checkbox" id="auto" checked> 시간 흐르게</label>
+    <label><input type="checkbox" id="shadow" checked> 그림자</label>
+    <label><input type="checkbox" id="sway" checked> 바람 흔들림</label>
+    <label>역할 지정은 그림 옆 버튼: 바닥 · 나무 · 사람 · 동물 · 물건</label>
+    <button class="big go" id="rebuild">장면 다시 깔기</button>
+    <button class="big" id="dl">보정한 그림 전부 내려받기 (zip 없이 하나씩)</button>
+  </section>
+  <section>
+    <h3>4. 전·후 비교 <small id="cmpName"></small></h3>
+    <div class="cmp"><div>전<canvas id="cBefore"></canvas></div><div>후<canvas id="cAfter"></canvas></div></div>
+  </section>
+</aside>
+<div class="stage"><canvas id="scene"></canvas><div class="hint" id="hint">그림을 넣고 기준을 고르면 여기에 장면이 생겨요 · 방향키로 사람 이동</div></div>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  // ------------------------------------------------------------ 색 공간 (OKLab: 사람 눈에 가까운 색 거리)
+  const s2l = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const l2s = (c) => { c = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055; return Math.max(0, Math.min(255, Math.round(c * 255))); };
+  function oklab(r, g, b) { const lr = s2l(r), lg = s2l(g), lb = s2l(b);
+    const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb), m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb), s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+    return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s]; }
+  function oklab2rgb(L, a, b) { const l_ = L + 0.3963377774 * a + 0.2158037573 * b, m_ = L - 0.1055613458 * a - 0.0638541728 * b, s_ = L - 0.0894841775 * a - 1.291485548 * b; const l = l_ ** 3, m = m_ ** 3, s = s_ ** 3;
+    return [l2s(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s), l2s(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s), l2s(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)]; }
+  // ------------------------------------------------------------ 팔레트 뽑기 (median cut, OKLab 공간)
+  function extractPalette(img, k) {
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0); const d = g.getImageData(0, 0, c.width, c.height).data;
+    const pts = []; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) pts.push([...oklab(d[i], d[i + 1], d[i + 2])]);
+    if (!pts.length) return [];
+    let boxes = [pts];
+    while (boxes.length < k) { let bi = -1, br = -1, bax = 0;
+      boxes.forEach((B, i) => { if (B.length < 2) return; for (let ax = 0; ax < 3; ax++) { let lo = 1e9, hi = -1e9; for (const p of B) { if (p[ax] < lo) lo = p[ax]; if (p[ax] > hi) hi = p[ax]; } const r = (hi - lo) * (ax === 0 ? 1 : 1.4) * Math.sqrt(B.length); if (r > br) { br = r; bi = i; bax = ax; } } });
+      if (bi < 0) break; const B = boxes[bi]; B.sort((p, q) => p[bax] - q[bax]); const m = B.length >> 1; boxes.splice(bi, 1, B.slice(0, m), B.slice(m)); }
+    return boxes.map((B) => { const s = [0, 0, 0]; for (const p of B) { s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; } return s.map((v) => v / B.length); }).sort((a, b) => a[0] - b[0]);
+  }
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  // ------------------------------------------------------------ 색 맞추기: 각 픽셀을 기준 팔레트의 가장 가까운 색으로. keepL이면 색조·채도만 가져오고 밝기는 원래 것
+  function remap(img, pal, { keepL, mix, dither }) {
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0); const im = g.getImageData(0, 0, c.width, c.height), d = im.data, w = c.width;
+    const cache = new Map();
+    for (let i = 0; i < d.length; i += 4) { if (d[i + 3] <= 128) { d[i + 3] = 0; continue; }
+      const x = (i / 4) % w, y = Math.floor(i / 4 / w), key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2] | ((dither ? (x & 3) | ((y & 3) << 2) : 0) << 24);
+      let out = cache.get(key); if (!out) { const L = oklab(d[i], d[i + 1], d[i + 2]); const t = dither ? (BAYER[(y & 3) * 4 + (x & 3)] / 16 - 0.5) * 0.06 : 0; const Lq = [L[0] + t, L[1], L[2]];
+        let best = pal[0], bd = 1e9; for (const p of pal) { const dd = (Lq[0] - p[0]) ** 2 * (keepL ? 0.35 : 1) + (Lq[1] - p[1]) ** 2 + (Lq[2] - p[2]) ** 2; if (dd < bd) { bd = dd; best = p; } }
+        const tgt = keepL ? [L[0], best[1], best[2]] : best; const fin = [L[0] + (tgt[0] - L[0]) * mix, L[1] + (tgt[1] - L[1]) * mix, L[2] + (tgt[2] - L[2]) * mix]; out = oklab2rgb(...fin); cache.set(key, out); }
+      d[i] = out[0]; d[i + 1] = out[1]; d[i + 2] = out[2]; d[i + 3] = 255; }
+    g.putImageData(im, 0, 0); return c;
+  }
+  const silhouette = (src, col = 'rgba(20,12,40,0.35)') => { const c = document.createElement('canvas'); c.width = src.width; c.height = src.height; const g = c.getContext('2d'); g.drawImage(src, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = col; g.fillRect(0, 0, c.width, c.height); return c; };
+  // ------------------------------------------------------------ 상태
+  const ITEMS = []; let REF = -1, PAL = [];
+  const ROLES = ['바닥', '나무', '사람', '동물', '물건'];
+  function addFiles(files) { for (const f of files) { const im = new Image(); im.onload = () => { ITEMS.push({ name: f.name, img: im, role: guessRole(f.name, im), out: null }); if (REF < 0) setRef(ITEMS.length - 1); else recolorAll(); renderItems(); }; im.src = URL.createObjectURL(f); } }
+  function guessRole(n, im) { n = n.toLowerCase(); if (/grass|ground|floor|tile|dirt|sand/.test(n)) return 0; if (/tree|bush|plant|rock|stone/.test(n)) return 1; if (/char|player|hero|npc|walk/.test(n)) return 2; if (/cow|pig|chick|sheep|rabbit|dog|cat|animal/.test(n)) return 3; return im.width >= 64 && im.height >= 64 && im.width === im.height ? 0 : 4; }
+  $('drop').onclick = () => $('file').click(); $('file').onchange = (e) => addFiles(e.target.files);
+  for (const ev of ['dragenter', 'dragover']) $('drop').addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.add('on'); });
+  for (const ev of ['dragleave', 'drop']) $('drop').addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.remove('on'); if (e.type === 'drop') addFiles(e.dataTransfer.files); });
+  document.addEventListener('paste', (e) => { const fs = [...(e.clipboardData.items || [])].filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile()); if (fs.length) addFiles(fs); });
+  function setRef(i) { REF = i; PAL = extractPalette(ITEMS[i].img, +$('palK').value); renderPal(); recolorAll(); renderItems(); }
+  function opts() { return { keepL: $('keepL').checked, mix: +$('mix').value / 100, dither: $('dither').checked }; }
+  function recolorAll() { if (REF < 0) return; const o = opts(); ITEMS.forEach((it, i) => { it.out = i === REF ? it.img : remap(it.img, PAL, o); it.sil = silhouette(it.out); }); showCmp(SEL >= 0 ? SEL : 0); buildScene(); }
+  function renderPal() { $('pal').innerHTML = PAL.map((p) => { const [r, g, b] = oklab2rgb(...p); return `<i style="background:rgb(${r},${g},${b})" title="rgb(${r},${g},${b})"></i>`; }).join(''); $('palN').textContent = `(${PAL.length}색 · 기준: ${REF >= 0 ? ITEMS[REF].name : '없음'})`; }
+  let SEL = -1;
+  function renderItems() { $('items').innerHTML = ITEMS.map((it, i) => `<div class="item ${i === REF ? 'ref' : ''}" data-i="${i}"><canvas width="${it.img.width}" height="${it.img.height}"></canvas><div><div class="nm">${it.name}</div><div class="sz">${it.img.width}×${it.img.height}</div><div><select data-role="${i}">${ROLES.map((r, k) => `<option value="${k}" ${k === it.role ? 'selected' : ''}>${r}</option>`).join('')}</select></div></div><div><button type="button" data-ref="${i}" aria-pressed="${i === REF}">기준</button><br><button type="button" data-del="${i}">✕</button></div></div>`).join('');
+    ITEMS.forEach((it, i) => { const cv = $('items').querySelector(`[data-i="${i}"] canvas`); const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(it.out || it.img, 0, 0); cv.onclick = () => showCmp(i); });
+    for (const b of $('items').querySelectorAll('[data-ref]')) b.onclick = () => setRef(+b.dataset.ref);
+    for (const b of $('items').querySelectorAll('[data-del]')) b.onclick = () => { const i = +b.dataset.del; ITEMS.splice(i, 1); if (REF === i) REF = ITEMS.length ? 0 : -1; else if (REF > i) REF--; if (REF >= 0) setRef(REF); else { PAL = []; renderPal(); } renderItems(); buildScene(); };
+    for (const s of $('items').querySelectorAll('[data-role]')) s.onchange = () => { ITEMS[+s.dataset.role].role = +s.value; buildScene(); }; }
+  function showCmp(i) { if (!ITEMS[i]) return; SEL = i; const it = ITEMS[i]; for (const [id, im] of [['cBefore', it.img], ['cAfter', it.out || it.img]]) { const cv = $(id); cv.width = im.width; cv.height = im.height; const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(im, 0, 0); } $('cmpName').textContent = it.name; }
+  for (const id of ['keepL', 'mix', 'dither']) $(id).oninput = () => { $('mixv').textContent = $('mix').value + '%'; recolorAll(); };
+  $('palK').oninput = () => { $('palKv').textContent = $('palK').value; if (REF >= 0) setRef(REF); };
+  $('rebuild').onclick = () => buildScene(true);
+  $('dl').onclick = () => { ITEMS.forEach((it) => { if (!it.out || it === ITEMS[REF]) return; const a = document.createElement('a'); a.download = it.name.replace(/\.png$/i, '') + '_fixed.png'; a.href = it.out.toDataURL(); a.click(); }); };
+  // ------------------------------------------------------------ 장면 (50×50 타일): 바닥 타일 깔기 · 나무·동물·물건 흩기 · 사람 이동 · 그림자 · 시간
+  const TILE = 32, MW = 50, MH = 50; const cv = $('scene'), ctx = cv.getContext('2d'); let W2 = 0, H2 = 0, dpr = 1;
+  const hash = (x, y, s = 1) => { let h = (x * 374761393 + y * 668265263 + s * 982451653) | 0; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967296; };
+  let SCENE = { floors: [], objs: [], chars: [], animals: [], seed: 1 }; const player = { x: 25 * TILE, y: 25 * TILE, face: 0, moving: false, img: null };
+  function slice(it) { // 캐릭터 시트면 16px 칸으로 자르고(열=방향 행=프레임 가정), 아니면 그대로 1장
+    const im = it.out || it.img; if (it.role === 2 && im.width % 16 === 0 && im.height % 16 === 0 && (im.width > 16 || im.height > 16)) { const cols = Math.min(4, im.width / 16), rows = Math.min(4, im.height / 16); return { sheet: im, cols, rows, cw: 16, ch: 16 }; } return { sheet: im, cols: 1, rows: 1, cw: im.width, ch: im.height }; }
+  function buildScene(reseed) { if (reseed) SCENE.seed = (SCENE.seed * 7 + 3) % 1000; const byRole = (r) => ITEMS.filter((it) => it.role === r && (it.out || it.img));
+    const floors = byRole(0), trees = byRole(1), chars = byRole(2), animals = byRole(3), things = byRole(4); const S = SCENE.seed;
+    SCENE.floors = floors.map((it) => { const im = it.out || it.img; const n = Math.max(1, Math.floor(im.width / 16)) * Math.max(1, Math.floor(im.height / 16)); return { im, cols: Math.max(1, Math.floor(im.width / 16)), n }; });
+    SCENE.objs = []; const taken = new Set();
+    const place = (list, density, kind) => { if (!list.length) return; for (let y = 1; y < MH - 1; y++) for (let x = 1; x < MW - 1; x++) { const h = hash(x, y, S + kind * 17); if (h < density) { const it = list[Math.floor(hash(x, y, S + 99 + kind) * list.length)], im = it.out || it.img; if (taken.has(y * MW + x)) continue; taken.add(y * MW + x); SCENE.objs.push({ kind, im, sil: it.sil, x: x * TILE + 16, y: y * TILE + 30, k: im.height > 48 ? 1 : 2, seed: h * 99, hx: x * TILE + 16, hy: y * TILE + 30, dir: 1, t: hash(x, y, S + 5) * 10 }); } } };
+    place(trees, 0.045, 1); place(things, 0.02, 4); place(animals, 0.012, 3);
+    player.img = chars.length ? slice(chars[0]) : null; $('hint').textContent = ITEMS.length ? (chars.length ? '방향키로 사람 이동 · 시간 슬라이더로 낮밤' : '사람 역할 그림을 넣으면 걸어 다닐 수 있어요') : '그림을 넣고 기준을 고르면 여기에 장면이 생겨요'; }
+  function resize() { dpr = Math.min(2, devicePixelRatio || 1); const r = cv.parentElement.getBoundingClientRect(); W2 = r.width; H2 = r.height; cv.width = W2 * dpr; cv.height = H2 * dpr; cv.style.width = W2 + 'px'; cv.style.height = H2 + 'px'; } addEventListener('resize', resize); resize();
+  const keys = new Set(); addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; keys.add(e.key); if (e.key.startsWith('Arrow')) e.preventDefault(); }); addEventListener('keyup', (e) => keys.delete(e.key));
+  const DIRS = { ArrowLeft: [-1, 0, 2], ArrowRight: [1, 0, 3], ArrowUp: [0, -1, 1], ArrowDown: [0, 1, 0] };
+  // 시간 → 빛: 색(곱하기) + 밝기. 새벽 푸른빛 → 낮 흰빛 → 저녁 주황 → 밤 남색
+  function lightOf(h) { const k = (a, b, t) => a + (b - a) * t; const stops = [[0, [58, 70, 140]], [5, [80, 90, 160]], [7, [255, 200, 150]], [9, [255, 250, 240]], [16, [255, 250, 240]], [18, [255, 180, 110]], [20, [120, 100, 160]], [22, [58, 70, 140]], [24, [58, 70, 140]]];
+    for (let i = 0; i < stops.length - 1; i++) { const [h0, c0] = stops[i], [h1, c1] = stops[i + 1]; if (h >= h0 && h <= h1) { const t = (h - h0) / (h1 - h0); return [k(c0[0], c1[0], t), k(c0[1], c1[1], t), k(c0[2], c1[2], t)]; } } return [255, 250, 240]; }
+  // 그림자 방향·길이: 해가 동(아침)→서(저녁)로. 밤엔 달빛으로 짧고 옅게
+  function shadowOf(h) { const day = h >= 6 && h <= 19; const a = day ? ((h - 6) / 13) : 0.5; const skew = (a - 0.5) * 1.6; const len = day ? 0.25 + Math.abs(a - 0.5) * 0.9 : 0.3; const alpha = day ? 0.35 : 0.2; return { skew: -skew, len, alpha }; }
+  function drawShadow(sil, cx, bottom, k, sh) { if (!$('shadow').checked) return; ctx.save(); ctx.globalAlpha = sh.alpha / 0.35; ctx.translate(Math.round(cx), Math.round(bottom)); ctx.transform(1, 0, sh.skew, sh.len, 0, 0); ctx.scale(1, -1); ctx.drawImage(sil, -sil.width * k / 2, -sil.height * k, sil.width * k, sil.height * k); ctx.restore(); }
+  let prev = performance.now(), camX = 0, camY = 0;
+  function frame(now) { const dt = Math.min(0.05, (now - prev) / 1000); prev = now; const t = now / 1000;
+    if ($('auto').checked) { $('time').value = ((+$('time').value + dt * 0.5) % 24).toFixed(2); } const hour = +$('time').value; $('timev').textContent = `${Math.floor(hour)}시${Math.round((hour % 1) * 60) ? ' ' + Math.round((hour % 1) * 60) + '분' : ''}`;
+    let mv = null; for (const k in DIRS) if (keys.has(k)) { mv = DIRS[k]; break; } player.moving = !!mv; if (mv) { player.face = mv[2]; player.x = Math.max(16, Math.min(MW * TILE - 16, player.x + mv[0] * 110 * dt)); player.y = Math.max(16, Math.min(MH * TILE - 4, player.y + mv[1] * 110 * dt)); }
+    for (const o of SCENE.objs) if (o.kind === 3) { o.t += dt; const P = 4, L = 40, leg = Math.floor(o.t / P), u = (o.t - leg * P) / 2, k = Math.min(1, u), ang = hash(o.seed, Math.floor(leg / 2), 11) * 6.28, ex = o.hx + Math.cos(ang) * L, ey = o.hy + Math.sin(ang) * L * 0.6, out = leg % 2 === 0; const fx = out ? o.hx : ex, fy = out ? o.hy : ey, tx = out ? ex : o.hx, ty = out ? ey : o.hy; o.x = fx + (tx - fx) * k; o.y = fy + (ty - fy) * k; o.dir = tx < fx ? -1 : 1; o.moving = u < 1; }
+    camX = Math.max(0, Math.min(MW * TILE - W2, player.x - W2 / 2)); camY = Math.max(0, Math.min(MH * TILE - H2, player.y - H2 / 2));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.imageSmoothingEnabled = false; ctx.fillStyle = '#2f6a3a'; ctx.fillRect(0, 0, W2, H2); ctx.setTransform(dpr, 0, 0, dpr, -camX * dpr, -camY * dpr);
+    const tx0 = Math.max(0, Math.floor(camX / TILE)), tx1 = Math.min(MW - 1, Math.ceil((camX + W2) / TILE)), ty0 = Math.max(0, Math.floor(camY / TILE)), ty1 = Math.min(MH - 1, Math.ceil((camY + H2) / TILE));
+    for (let y = ty0; y <= ty1; y++) for (let x = tx0; x <= tx1; x++) { if (!SCENE.floors.length) { ctx.fillStyle = hash(x, y) < 0.5 ? '#4a9a48' : '#52a850'; ctx.fillRect(x * TILE, y * TILE, TILE, TILE); continue; } const F = SCENE.floors[Math.floor(hash(x, y, 3) * SCENE.floors.length)], n = Math.floor(hash(x, y, 4) * F.n), sx = (n % F.cols) * 16, sy = Math.floor(n / F.cols) * 16; ctx.drawImage(F.im, sx, sy, 16, 16, x * TILE, y * TILE, TILE, TILE); }
+    const sh = shadowOf(hour), sway = $('sway').checked;
+    const list = SCENE.objs.filter((o) => o.x > camX - 100 && o.x < camX + W2 + 100 && o.y > camY - 100 && o.y < camY + H2 + 160).map((o) => ({ y: o.y, d: () => { const w = o.im.width * o.k, h = o.im.height * o.k; if (o.sil) drawShadow(o.sil, o.x, o.y, o.k, sh);
+      if (o.kind === 1 && sway) { const sw = Math.round(Math.sin(t * 1.5 + o.seed) * 1.5), half = Math.round(o.im.height * 0.55); ctx.drawImage(o.im, 0, half, o.im.width, o.im.height - half, Math.round(o.x - w / 2), Math.round(o.y - (o.im.height - half) * o.k), w, (o.im.height - half) * o.k); ctx.drawImage(o.im, 0, 0, o.im.width, half, Math.round(o.x - w / 2) + sw, Math.round(o.y - h), w, half * o.k); }
+      else if (o.kind === 3) { const bob = o.moving ? (Math.floor(t * 12) % 2) * 2 : 0; ctx.save(); ctx.translate(Math.round(o.x), Math.round(o.y - bob)); if (o.dir > 0) ctx.scale(-1, 1); ctx.drawImage(o.im, -Math.round(w / 2), -h, w, h); ctx.restore(); }
+      else ctx.drawImage(o.im, Math.round(o.x - w / 2), Math.round(o.y - h), w, h); } }));
+    if (player.img) list.push({ y: player.y, d: () => { const P = player.img, k = 3, fr = player.moving ? Math.floor(t * 12) % P.rows : 0, col = Math.min(P.cols - 1, player.face); ctx.fillStyle = `rgba(20,12,40,${sh.alpha * 0.9})`; ctx.beginPath(); ctx.ellipse(player.x + sh.skew * 6, player.y, P.cw * k * 0.42, 5, 0, 0, 6.3); ctx.fill(); ctx.drawImage(P.sheet, col * P.cw, fr * P.ch, P.cw, P.ch, Math.round(player.x - P.cw * k / 2), Math.round(player.y - P.ch * k + 2), P.cw * k, P.ch * k); } });
+    list.sort((a, b) => a.y - b.y); for (const o of list) o.d();
+    // 시간 조명
+    const [lr, lg, lb] = lightOf(hour); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgb(${lr | 0},${lg | 0},${lb | 0})`; ctx.fillRect(0, 0, W2, H2); ctx.globalCompositeOperation = 'source-over';
+    if (hour < 6 || hour > 19.5) { ctx.globalCompositeOperation = 'lighter'; const gr = ctx.createRadialGradient(player.x - camX, player.y - 20 - camY, 8, player.x - camX, player.y - 20 - camY, 130); gr.addColorStop(0, 'rgba(255,200,120,0.3)'); gr.addColorStop(1, 'rgba(255,200,120,0)'); ctx.fillStyle = gr; ctx.fillRect(0, 0, W2, H2); ctx.globalCompositeOperation = 'source-over'; }
+    requestAnimationFrame(frame); }
+  requestAnimationFrame(frame);
+  window.PT = { ITEMS, add: (name, url) => new Promise((res) => { const im = new Image(); im.onload = () => { ITEMS.push({ name, img: im, role: guessRole(name, im), out: null }); if (REF < 0) setRef(ITEMS.length - 1); else recolorAll(); renderItems(); res(); }; im.src = url; }), setRef, setRole: (i, r) => { ITEMS[i].role = r; buildScene(); }, setTime: (h) => { $('auto').checked = false; $('time').value = h; }, player, build: () => buildScene() };
+})();
+</script>
+</body>
+</html>
