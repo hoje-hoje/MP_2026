@@ -291,7 +291,7 @@
   const ART = {};
   function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('그림 파일을 불러오지 못했어요: ' + src)); i.src = src; }); }
   async function loadArt() {
-    const names = { aether: 'aether/aether.png', k_winter: 'winter/winter.png', k_town: 'kenney/town.png', k_dungeon: 'kenney/dungeon.png', k_onebit: 'kenney/onebit.png', water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
+    const names = { w_grass: 'world/grass.png', w_forest: 'world/forest.png', ...Object.fromEntries([0, 1, 2, 3, 4, 5].map((i) => ['wt_big' + i, 'world/big' + i + '.png'])), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ['wt_mid' + i, 'world/mid' + i + '.png'])), aether: 'aether/aether.png', k_winter: 'winter/winter.png', k_town: 'kenney/town.png', k_dungeon: 'kenney/dungeon.png', k_onebit: 'kenney/onebit.png', water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
     const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
     const users = fetch('assets/user/users.json').then((r) => r.json()).then((j) => {
       USER.chars = j.chars; USER.animals = j.animals; USER.monsters = j.monsters;
@@ -334,6 +334,19 @@
   function tile(g, list, h, px, py) { const [cx, cy] = list[(h * list.length) | 0]; g.drawImage(ART.floor, cx * 16, cy * 16, 16, 16, px, py, TILE, TILE); }
   // 큰 그림 (village.png 잘라 쓰기): [x, y, w, h]
   const SP = { treeA: [0, 96, 64, 48], treeB: [0, 144, 64, 48], midA: [64, 96, 32, 32], midB: [64, 144, 32, 32], stone: [112, 80, 32, 32], bush: [64, 78, 32, 18], house: [192, 97, 64, 79], house2: [256, 96, 64, 70] };
+  // 새 나무: 큰 나무(treeA·B) 6종 / 작은 나무(midA·B) 8종 중 칸마다 하나. 그림자는 해 방향으로 눕히고, 잎(위쪽 절반)만 바람에 살랑
+  const WT = { big: [], mid: [] };
+  function worldTrees() { if (WT.ready || !ART.wt_big0) return WT.ready; for (const kind of ['big', 'mid']) for (let i = 0; ART['wt_' + kind + i]; i++) { const im = ART['wt_' + kind + i], c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const q = c.getContext('2d'); q.drawImage(im, 0, 0); q.globalCompositeOperation = 'source-in'; q.fillStyle = 'rgba(20,30,40,1)'; q.fillRect(0, 0, c.width, c.height); WT[kind].push({ im, sil: c }); } return (WT.ready = true); }
+  const SHADOW = { morning: [0.75, 0.5, 0.3], lunch: [0.15, 0.32, 0.32], night: [-0.3, 0.38, 0.16] }; // [기울기, 길이, 진하기]: 아침은 길게, 점심은 짧게, 밤은 달빛으로 옅게
+  function drawWorldTree(g, k, tx, ty, X, Y, t) {
+    if (!worldTrees()) { spr(g, k, X, Y); return; }
+    const set = k === 'treeA' || k === 'treeB' ? WT.big : WT.mid, T2 = set[Math.floor(hash(tx, ty, 13) * set.length)], im = T2.im, w = im.width * 2, h = im.height * 2;
+    const [sk, len, al] = SHADOW[SLOT] || SHADOW.lunch;
+    g.save(); g.globalAlpha = al; g.translate(Math.round(X), Math.round(Y)); g.transform(1, 0, sk, len, 0, 0); g.scale(1, -1); g.drawImage(T2.sil, -w / 2, -h, w, h); g.restore();
+    const sw = Math.round(Math.sin(t * 1.4 + tx * 0.7 + ty * 1.3) * 1.5), half = Math.round(im.height * 0.6), pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+    g.drawImage(im, 0, half, im.width, im.height - half, Math.round(X - w / 2), Math.round(Y - (im.height - half) * 2), w, (im.height - half) * 2);
+    g.drawImage(im, 0, 0, im.width, half, Math.round(X - w / 2) + sw, Math.round(Y - h), w, half * 2); g.imageSmoothingEnabled = pv;
+  }
   function spr(g, name, cx, bottom, k = 2) { const [x, y, w, h] = SP[name]; g.drawImage(ART.village, x, y, w, h, Math.round(cx - w * k / 2), Math.round(bottom - h * k), w * k, h * k); }
 
   // 캐릭터: 16px 칸, 열 = 방향(아래·위·왼쪽·오른쪽), 행 = 걷기 프레임. 팀/꾸미기 색은 색상 회전으로.
@@ -497,8 +510,7 @@
             g.fillStyle = '#1b1430'; g.fillRect(px, py, TILE, TILE);
             if (h < 0.03) { g.fillStyle = h < 0.01 ? '#f3dcff' : '#8d7ab8'; g.fillRect(px + (h * 997 % 28), py + (h * 577 % 28), 2, 2); }
             break;
-          case T.GRASS: tile(g, TL.grass, h, px, py); break;
-          case T.FOREST: tile(g, TL.forest, h, px, py); break;
+          case T.GRASS: case T.FOREST: { const im = ART[t === T.GRASS ? 'w_grass' : 'w_forest']; if (im) g.drawImage(im, (x * 16) % im.width, (y * 16) % im.height, 16, 16, px, py, TILE, TILE); else tile(g, t === T.GRASS ? TL.grass : TL.forest, h, px, py); break; } // 새 잔디: 48칸 무늬를 이어 붙임
           case T.SAND: tile(g, TL.sand, h, px, py); break;
           case T.WATER: {
             const land = (a, b) => { const q = tileAt(a, b); return q !== T.WATER && q !== T.VOID; };
@@ -3900,7 +3912,7 @@
     const tx0 = Math.floor(x0 / TILE), tx1 = Math.ceil(x1 / TILE), ty0 = Math.floor(y0 / TILE), ty1 = Math.ceil(y1 / TILE);
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const k = treeAt(tx, ty);
-      if (k) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => spr(g, k, X, Y) });
+      if (k) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawWorldTree(g, k, tx, ty, X, Y, t) });
       else if (USER.animals.length && tileAt(tx, ty) === T.GRASS && !noTree[ty * W + tx]) {
         const ha = hash(tx, ty, 21);
         if (ha < 0.0025) { const a = USER.animals[(ha * 1e6 | 0) % 6], hx = tx * TILE + 16, hy = ty * TILE + 28, sd = tx * 7 + ty * 13, okAt = (x, y) => !blocked(Math.floor(x / TILE), Math.floor(y / TILE)), pos = animalPos(a, hx, hy, sd, okAt); list.push({ x: pos[0], y: pos[1], draw: (g) => drawAnimal(g, a, hx, hy, sd, okAt) }); }
