@@ -1133,13 +1133,13 @@
     $('shopTabs').hidden = !tabs.length;
     $('shopTabs').innerHTML = tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === SHOP_TAB}">${l}</button>`).join('');
     for (const b of $('shopTabs').querySelectorAll('[data-tab]')) b.onclick = () => { SHOP_TAB = b.dataset.tab; renderShop(); };
-    $('shopCoin').innerHTML = SHOP_KIND === 'hat' || SHOP_KIND === 'weapon' || (SHOP_KIND === 'vaccine' && SHOP_TAB === 'tools') || (SHOP_KIND === 'seed' && SHOP_TAB === 'sell') ? `👛 내 코인 <b>${MY_PCOIN.toLocaleString()}</b> <small>· 개인 지갑 (물고기·작물을 팔아서 모아요)</small>` : `<span class="coinIco"></span> 우리 저장소 <b>${me.coin.toLocaleString()}</b> 코인 <small>· 산 물건은 나라 저장소로 가요</small>`;
-    const card = (k, name, desc, price, counts, have) => `<div class="hvCard"><canvas data-ico="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${name}</b><small>${desc}</small>${have != null ? `<i>가진 것 ${have}개</i>` : ''}</div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${price.toLocaleString()}${counts ? '<small>/개</small>' : ''}</span><div>${(counts || [1]).map((c) => `<button type="button" data-buy="${k}" data-n="${c}" ${me.coin < price * c ? 'disabled' : ''}>${counts ? c + '개' : '사기'}</button>`).join('')}</div></div></div>`;
+    $('shopCoin').innerHTML = SHOP_KIND === 'hat' || SHOP_KIND === 'weapon' || (SHOP_KIND === 'vaccine' && SHOP_TAB === 'tools') || (SHOP_KIND === 'seed' && SHOP_TAB === 'sell') ? `👛 내 코인 <b>${MY_PCOIN.toLocaleString()}</b> <small>· 개인 지갑 (물고기·작물을 팔아서 모아요)</small>` : (SHOP_KIND === 'build' ? `📦 우리 저장소 · 목재 <b>${me.wood || 0}</b> · 돌 <b>${me.stone || 0}</b> · 광석 <b>${me.ore || 0}</b> <small>· 재료로 만들어 나라 저장소로 가요</small>` : `👛 내 코인 <b>${MY_PCOIN.toLocaleString()}</b> <small>· 산 물건은 나라 저장소로 가요</small>`);
+    const card = (k, name, desc, price, counts, have) => `<div class="hvCard"><canvas data-ico="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${name}</b><small>${desc}</small>${have != null ? `<i>가진 것 ${have}개</i>` : ''}</div><div class="hvBuy"><span class="price">${typeof price === 'object' ? `🔨 ${MPRules.costText(price)}` : `<span class="coinIco"></span>${price.toLocaleString()} <small>내 코인</small>`}${counts ? '<small>/개</small>' : ''}</span><div>${(counts || [1]).map((c) => `<button type="button" data-buy="${k}" data-n="${c}" ${(typeof price === 'object' ? Object.entries(price).some(([m2, v]) => (me[m2] || 0) < v * c) : MY_PCOIN < price * c) ? 'disabled' : ''}>${counts ? c + '개' : typeof price === 'object' ? '만들기' : '사기'}</button>`).join('')}</div></div></div>`; // 건축물 = 저장소 재료로 만들기, 씨앗·백신 = 내 코인
     let html = '';
     const want = (k) => SHOP_TAB === 'all' || SHOP_TAB === k;
     const CAT_DESC = { floor: '우리 국민이 1.5배 빨라져요', wall: `다른 나라 사람을 막아요 · 내구도 ${MPRules.NUM.buildHp}`, deco: '꾸미기 · 밟고 지나갈 수 있어요', bridge: '물 위에 놓으면 누구나 건널 수 있어요 · 이어 놓을수록 다리가 길고 멋있어져요', trap: '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임' };
     const CNT = { floor: [1, 5, 20], wall: [1, 5, 10], deco: [1, 5], trap: [1, 3], bridge: [1, 5, 10] };
-    if (SHOP_KIND === 'build') html = MPRules.BUILD.filter((b) => !FARM_CATS.has(b.cat) && b.cat !== 'crop' && (SHOP_TAB === 'trap' ? b.cat === 'trap' : b.theme === SHOP_TAB && b.cat !== 'trap')).map((b) => card(b.id, b.name, CAT_DESC[b.cat], P[b.cat], CNT[b.cat], me.items[b.id] || 0)).join('');
+    if (SHOP_KIND === 'build') html = MPRules.BUILD.filter((b) => !FARM_CATS.has(b.cat) && b.cat !== 'crop' && (SHOP_TAB === 'trap' ? b.cat === 'trap' : b.theme === SHOP_TAB && b.cat !== 'trap')).map((b) => card(b.id, b.name, CAT_DESC[b.cat], MPRules.costOf(b), CNT[b.cat], me.items[b.id] || 0)).join('');
     else if (false) html = (want('floor') ? card('floor', '황금 바닥', '우리 국민이 1.5배 빨라져요', P.floor, [1, 5, 20], me.items.floor) : '') + (want('wall') ? card('wall', '방벽', '다른 나라 사람을 막아요 (5초 맞으면 부서짐)', P.wall, [1, 5, 10], me.items.wall) : '') + (want('trap') ? card('trap', '덫', '밟은 적이 3초 동안 못 움직여요 · 적에겐 안 보임', P.trap, [1, 3], me.items.trap) : '');
     else if (SHOP_KIND === 'weapon') { const bare = myWeapon() === 'fist', wd = (W5) => W5.proj ? `멀리 ${W5.range}px` : `앞 ${W5.reach}px`;
       html = `<div class="hvCard"><canvas data-wpn="fist" width="64" height="64"></canvas><div class="hvInfo"><b>맨주먹</b><small>무기를 안 들면 맨주먹 · 피해 ${MPRules.WEAPONS.fist.dmg.join('~')}</small>${bare ? '<i>✔ 지금 맨주먹</i>' : ''}</div><div class="hvBuy"><span class="price">무료</span><div><button type="button" data-equip="" ${bare ? 'disabled' : ''}>내려놓기</button></div></div></div>`
@@ -1159,8 +1159,8 @@
     for (const b of $('shopBody').querySelectorAll('[data-wear]')) b.onclick = () => { player.look.hat = b.dataset.wear; saveLook(); renderShop(); };
     for (const c of $('shopBody').querySelectorAll('[data-tool]')) { const g = c.getContext('2d'), T2 = TOOL[{ pick: 'pick', rod: 'rod', shovel: 'shovel', axe: 'axe' }[c.dataset.tool]]; g.imageSmoothingEnabled = false; const k = Math.min(56 / T2.cv.width, 56 / T2.cv.height) | 0; g.save(); g.translate(32, 32); g.rotate(0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); }
     for (const c of $('shopBody').querySelectorAll('[data-ico]')) { if (BUILD_BY[c.dataset.ico]) { itemIcon(c, c.dataset.ico); continue; } const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(ICON[c.dataset.ico], 0, 0, 64, 64); }
-    for (const b of $('shopBody').querySelectorAll('[data-sell]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'sell', item: b.dataset.sell, n: +b.dataset.n })); $('shopSay').textContent = '싱싱하네요! 코인은 나라 저장소로 보냈어요.'; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
-    for (const b of $('shopBody').querySelectorAll('[data-buy]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'buy', item: b.dataset.buy, n: +b.dataset.n })); $('shopSay').textContent = ['고마워요! 저장소로 보냈어요.', '좋은 선택이에요!', '또 와요~'][(Math.random() * 3) | 0]; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
+    for (const b of $('shopBody').querySelectorAll('[data-sell]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'sell', item: b.dataset.sell, n: +b.dataset.n })); $('shopSay').textContent = '싱싱하네요! 판 돈은 내 코인으로 들어갔어요.'; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
+    for (const b of $('shopBody').querySelectorAll('[data-buy]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'buy', item: b.dataset.buy, n: +b.dataset.n })); $('shopSay').textContent = ['다 만들었어요! 저장소로 보냈어요.', '좋은 선택이에요!', '또 와요~'][(Math.random() * 3) | 0]; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
   }
   // 영역전 규칙서 (전쟁의 천사에게서, 3일차부터)
   const RULEBOOK = [
@@ -1815,7 +1815,7 @@
     $('bagCoin').innerHTML = `${MY_JOB ? `<span class="bagJob">${jobIcon(MY_JOB)}${MPRules.JOBS[MY_JOB].name} · ${MPRules.JOBS[MY_JOB].perk}</span>` : '<span class="bagJob">직업 없음 (오프라인 점심 전직)</span>'} 👛 내 코인 <b>${MY_PCOIN.toLocaleString()}</b>`;
     $('bagBody').innerHTML = list.length ? list.map((q) => `<div class="stItem"><canvas data-pk="${q.k}" width="56" height="56"></canvas><span>${esc(persName(q.k))}</span>${q.n > 1 || !q.k.includes(':') ? `<i>${q.n}</i>` : ''}</div>`).join('') : '<p class="stEmpty">가방이 비었어요 · 낚시로 물고기를 잡거나, 상점에서 도구·모자를 사요</p>';
     for (const c of $('bagBody').querySelectorAll('[data-pk]')) persIcon(c, c.dataset.pk);
-    $('bagDonate').hidden = !MY_NID; $('bagFrag').textContent = `📜 멸망 조각 ${MY_FRAGS.size}/${FRAG_N}${ONLINE && DAY >= SIDE_DAY && !MY_SIDE ? ' · ⚖ 편 고르기' : ''}`; $('bagFrag').hidden = !DOOM; $('bagBox').hidden = false;
+    $('bagDonate').hidden = true; /* 나라 코인 없음 */ $('bagFrag').textContent = `📜 멸망 조각 ${MY_FRAGS.size}/${FRAG_N}${ONLINE && DAY >= SIDE_DAY && !MY_SIDE ? ' · ⚖ 편 고르기' : ''}`; $('bagFrag').hidden = !DOOM; $('bagBox').hidden = false;
   }
   // 거래
   const TRADE = { tid: null, me: null, offer: null, ready: {}, go: {}, other: null };
@@ -2290,7 +2290,7 @@
   const VACCINE_BASE = 3000, VACCINE_STEP = 500, SKY_LIMIT = 5 * 60;
   const vaccinePrice = () => VACCINE_BASE + VACCINE_STEP * inv.bought;
   function saveInv() { store('mp2026.inv', inv); renderInv(); }
-  function renderInv() { if ($('invP')) $('invP').textContent = MY_PCOIN.toLocaleString(); if ($('bagBox') && !$('bagBox').hidden) openBag(); $('invCoin').textContent = (myView ? myView.me.coin : inv.coin).toLocaleString(); $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = myView ? myView.me.vaccine : inv.vaccine; $('invWood').textContent = myView ? myView.me.wood : 0; if (build.on) setBuild(true); }
+  function renderInv() { if ($('invP')) $('invP').textContent = MY_PCOIN.toLocaleString(); if ($('bagBox') && !$('bagBox').hidden) openBag(); $('invCoin').textContent = (ONLINE ? MY_PCOIN : inv.coin).toLocaleString(); /* 화면 위 코인 = 내 코인 */ $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = myView ? myView.me.vaccine : inv.vaccine; $('invWood').textContent = myView ? myView.me.wood : 0; if (build.on) setBuild(true); }
   const player = {
     x: 0, y: 0, dir: 1, moving: false, scene: 'ground', room: null, entry: null,
     name: saved.name || '나', tag: '#277a58', team: store('mp2026.team') || 3,
@@ -2679,7 +2679,7 @@
     const sa = $('storeArt'), sg = sa.getContext('2d'); sg.imageSmoothingEnabled = false; const grd = sg.createLinearGradient(0, 0, 0, 120); grd.addColorStop(0, '#bfe6ff'); grd.addColorStop(1, '#e9f7d8'); sg.fillStyle = grd; sg.fillRect(0, 0, 120, 120);
     const key = STORE_ART[(nationsPub[MY_NID] && nationsPub[MY_NID].storeLv) | 0], im = ART['x_' + key]; if (im) { const k = Math.min(100 / im.width, 90 / im.height); sg.drawImage(im, 60 - im.width * k / 2, 110 - im.height * k, im.width * k, im.height * k); }
     $('storeName').textContent = `${natName(MY_NID)} 저장소`;
-    $('storeRes').innerHTML = [['coin', '코인', me.coin], ['army', '병력', me.army], ['wood', '목재', me.wood], ['stone', '돌', me.stone], ['ore', '광석', me.ore], ['vaccine', '백신', me.vaccine]].map(([k, l, v]) => `<div class="stR"><canvas data-res="${k}" width="56" height="56"></canvas><span>${l}</span><b>${(v || 0).toLocaleString()}</b></div>`).join('');
+    $('storeRes').innerHTML = [['army', '병력', me.army], ['wood', '목재', me.wood], ['stone', '돌', me.stone], ['ore', '광석', me.ore], ['vaccine', '백신', me.vaccine]].map(([k, l, v]) => `<div class="stR"><canvas data-res="${k}" width="56" height="56"></canvas><span>${l}</span><b>${(v || 0).toLocaleString()}</b></div>`).join('');
     for (const c of $('storeRes').querySelectorAll('[data-res]')) resIcon(c, c.dataset.res);
     const TABS = [['all', '전체'], ['build', '🏗 건축'], ['farm', '🌱 농사'], ['crop', '🧺 작물·물고기']];
     const inTab = (b) => STORE_TAB === 'all' || (STORE_TAB === 'build' ? ['floor', 'wall', 'deco', 'trap'].includes(b.cat) : STORE_TAB === 'farm' ? FARM_CATS.has(b.cat) : b.cat === 'crop');
@@ -3085,12 +3085,12 @@
       case 'stun': stunUntil = performance.now() + m.ms; step.on = false; toast(m.text); break;
       case 'pos': player.x = m.x; player.y = m.y; step.on = false; netTp = true; if (m.text) toast(m.text); break;
       case 'bailList': {
-        $('bailBody').innerHTML = m.list.length ? `<p class="msg">나라 코인 ${m.coin}</p>` + m.list.map((p) => `<div class="row"><span>${esc(p.name)} · 남은 ${p.left}분 · 악명 ${p.bad}</span><button data-bail="${p.idx}">보석금 ${p.bail}</button></div>`).join('') : '<p class="msg">감옥에 있는 우리 팀원이 없어요.</p>';
+        $('bailBody').innerHTML = m.list.length ? `<p class="msg">내 코인 ${m.coin} · 보석금은 내 코인으로 내요</p>` + m.list.map((p) => `<div class="row"><span>${esc(p.name)} · 남은 ${p.left}분 · 악명 ${p.bad}</span><button data-bail="${p.idx}">보석금 ${p.bail}</button></div>`).join('') : '<p class="msg">감옥에 있는 우리 팀원이 없어요.</p>';
         for (const b of $('bailBody').querySelectorAll('[data-bail]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'bail', idx: +b.dataset.bail })); $('bailBox').hidden = true; };
         $('bailBox').hidden = false; break;
       }
       case 'mined': mined.add(m.terr); toast(m.text); SND.play('coin'); break;
-      case 'pcoin': MY_PCOIN = m.v | 0; renderInv(); toast(`👛 내 코인 +${m.add} (${m.why})`); break;
+      case 'pcoin': MY_PCOIN = m.v | 0; renderInv(); toast(`👛 내 코인 ${m.add >= 0 ? '+' : ''}${m.add} (${m.why})`); break;
       case 'hats': MY_HATS = m.hats || {}; MY_PCOIN = m.pcoin | 0; renderInv(); player.look.hat = m.id; saveLook(); toast(`🎩 ${HATS[m.id].name}을(를) 샀어요! 바로 썼어요 (꾸미기에서 바꿀 수 있어요)`); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'bag': MY_BAG = m.bag || {}; if (!$('bagBox').hidden) openBag(); if (!$('shopBox').hidden) renderShop(); break;
       case 'tradeReq': $('trqText').textContent = `${m.name}님이 거래를 신청했어요`; $('tradeReq').hidden = false; $('tradeReq').dataset.from = m.from; SND.play('ok'); clearTimeout(window.__trq); window.__trq = setTimeout(() => { $('tradeReq').hidden = true; }, 25000); break;
@@ -3621,10 +3621,10 @@
       }
       { const cur = (nationsPub[me.id] && nationsPub[me.id].race) || 'human';
         h += me.raceOpen ? `<div class="plan"><h3>🛡 병영 · 병력 종족</h3><div class="row"><span>지금 우리 병력: <b>${RACE_INFO[cur].icon} ${RACE_INFO[cur].name}</b> (${RACE_INFO[cur].weapon}) · ${me.army}명</span><button id="btnBarracks" type="button">🛡 병영 열기</button></div></div>` : `<div class="plan locked"><h3>🔒 병영 (잠김)</h3><p class="msg">영역전에서 <b>처음 이기면</b> 병영이 열려요 (공격·방어·동맹 참전 승리 모두). 병영에서는 우리 병력의 종족을 고를 수 있어요.</p></div>`; }
-      h += `<h3>나라 정보</h3><div class="msg">수도 ${esc(terrLabel(me.capital))} · 영토 ${me.territories}곳 · 병력 ${me.army} · 코인 ${me.coin} · 행동력 ${me.actions}</div>`;
+      h += `<h3>나라 정보</h3><div class="msg">수도 ${esc(terrLabel(me.capital))} · 영토 ${me.territories}곳 · 병력 ${me.army} · 목재 ${me.wood || 0} · 돌 ${me.stone || 0} · 광석 ${me.ore || 0} · 행동력 ${me.actions}</div>`;
       // 천도: 왕이 코인을 내고 우리 영역 중 아무 곳으로 (전투 대기 중 불가, 하루에 한 번)
       const mineT = Object.keys(owners).filter((k) => owners[k] === me.id && +k !== me.capital).map(Number);
-      h += `<div class="plan"><h3>🏰 천도</h3><p class="msg">수도를 우리 영역 중 다른 곳으로 옮겨요 · 코인 ${MPRules.NUM.capitalMoveCost} · 선전포고를 받은 동안은 못 하고, 하루에 한 번만 · 영역을 잃을 땐 공격팀과 가까운 곳부터 넘어가니 수도는 멀리 두는 게 안전해요</p>` +
+      h += `<div class="plan"><h3>🏰 천도</h3><p class="msg">수도를 우리 영역 중 다른 곳으로 옮겨요 · ${MPRules.costText(MPRules.NUM.capitalMoveCost)} · 선전포고를 받은 동안은 못 하고, 하루에 한 번만 · 영역을 잃을 땐 공격팀과 가까운 곳부터 넘어가니 수도는 멀리 두는 게 안전해요</p>` +
         (mineT.length ? `<div class="targets">${mineT.map((tid) => `<button class="tgt" data-cap="${tid}" ${king ? '' : 'disabled'}>${esc(terrLabel(tid))}</button>`).join('')}</div>` : '<p class="msg">옮길 수 있는 다른 영역이 없어요.</p>') + (king ? '' : '<p class="note">천도는 왕만 할 수 있어요.</p>') + '</div>';
     } else if (warTab === 'ally') { // 🤝 동맹: 왕끼리 합의, 최대 3나라, 동맹끼리 공격 불가, 동맹 전투에 한 번 참전
       const allies = v.allies || [], inReq = v.allyIn || [], out = new Set(v.allyOut || []);
@@ -3690,7 +3690,7 @@
     for (const b of box.querySelectorAll('[data-vax]')) b.onclick = () => warAction('vaccinate', { terr: +b.dataset.vax });
     for (const b of box.querySelectorAll('[data-intel]')) b.onclick = () => warAction('intel', { battle: +b.dataset.intel });
     for (const b of box.querySelectorAll('[data-race]')) b.onclick = () => warAction('setRace', { race: b.dataset.race });
-    for (const b of box.querySelectorAll('[data-cap]')) b.onclick = () => { if (confirm(`${terrLabel(+b.dataset.cap)}(으)로 천도할까요? 코인 ${MPRules.NUM.capitalMoveCost}이 들고 하루 동안 다시 못 옮겨요.`)) warAction('moveCapital', { terr: +b.dataset.cap }); };
+    for (const b of box.querySelectorAll('[data-cap]')) b.onclick = () => { if (confirm(`${terrLabel(+b.dataset.cap)}(으)로 천도할까요? ${MPRules.costText(MPRules.NUM.capitalMoveCost)}이 들고 하루 동안 다시 못 옮겨요.`)) warAction('moveCapital', { terr: +b.dataset.cap }); };
     if ($('btnDefault')) $('btnDefault').onclick = () => warAction('defaultDef', { ratio: $('ddIn').value.split(/[\s,:]+/).filter(Boolean).map((x) => Math.max(0, parseInt(x, 10) || 0)).slice(0, 30) });
     for (const b of box.querySelectorAll('[data-defend]')) {
       const bid = b.dataset.defend, F = +b.dataset.f, sumEl = $('defSum' + bid), max = +sumEl.dataset.max;

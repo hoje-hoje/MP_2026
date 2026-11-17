@@ -51,7 +51,7 @@
   function normItems(items) { const o = {}; for (const [k, v] of Object.entries(items || {})) { const id = k === 'floor' ? 'f_stone' : k === 'wall' ? 'w_brick' : k; if (BUILD_BY[id] && v > 0) o[id] = (o[id] || 0) + v; } return o; }
   function tileItem(e) { return !e ? null : e.id || (e.k === 'floor' ? LEGACY_FLOOR[e.c | 0] || 'f_stone' : e.k === 'wall' ? 'w_brick' : null); }
   const NUM = {
-    startArmy: 50, startCoin: 1000,
+    startArmy: 50, startCoin: 0, /* 나라 코인 없음 */
     maxDeclare: 2,                 // 하룻밤 선전포고 최대
     maxMembers: 6,                 // 나라 인원 최대
     // 영역전 (블로토) — 규칙서 16장
@@ -62,7 +62,7 @@
     prisonerPct: 0.1,              // 방어 승리: 공격팀이 잃은 병력의 10%를 포로로
     reinforcePct: 0.1,             // 공격팀 충원: 선전포고 병력의 10%까지 (모든 전선 합쳐)
     maxAttackers: 2,               // 한 전투 시간에 한 나라에 선전포고할 수 있는 나라 수
-    capitalMoveCost: 1000, capitalMoveCooldownH: 24, // 천도
+    capitalMoveCost: { stone: 40, wood: 40 }, capitalMoveCooldownH: 24, /* 천도: 저장소 재료 */ // 천도
     actionsPerDay: 10,             // 하루 행동력 (점령·퍼즐)
     puzzleArmy: 10,                // 우리 영토 제단 퍼즐 1문제 병력 (숫자는 나중에)
     maxMembersEarly: 6,            // 1~2일차 나라 인원 (3일차부터 제한 없음)
@@ -104,6 +104,11 @@
   // 채집 재료 (내 가방 'm_…'). shared: 나라 저장소에 넣으면 쓰이는 이름 (건축 재료)
   const MATS = { m_wood: { name: '목재', shared: 'wood' }, m_stone: { name: '돌', shared: 'stone' }, m_ore: { name: '광석', shared: 'ore' }, m_fiber: { name: '풀' }, m_flower: { name: '꽃' }, m_hide: { name: '가죽' } };
   // 땅에 난 풀·꽃 (화면에 그려지는 소품과 같은 규칙) → 채집하면 재료
+  // 건축물은 나라 저장소 재료로 (나라 코인 없음). 씨앗·비료·백신은 내 코인으로 사서 나라 저장소에
+  const MAT_NAME = { wood: '목재', stone: '돌', ore: '광석' };
+  function costOf(b) { if (!b) return null; if (b.cat === 'seed' || b.cat === 'fert') return null;
+    return { floor: b.theme === 'forest' ? { wood: 1 } : { stone: 1 }, wall: b.theme === 'forest' ? { wood: 3 } : { stone: 3 }, deco: { wood: 2 }, trap: { ore: 1, wood: 1 }, bridge: b.theme === 'stone' ? { stone: 3 } : { wood: 3 }, farm: { wood: 1 }, water: { stone: 2 } }[b.cat] || { wood: 2 }; }
+  const costText = (c, n = 1) => Object.entries(c).map(([k, v]) => `${MAT_NAME[k]} ${v * n}`).join(' + ');
   function plantKind(t, x, y) {
     if (t !== T.GRASS) return null; const h = hash(x, y, 7);
     if (h >= 0.004 && h < 0.010) return { k: 'bush', mat: 'm_fiber', n: 2, name: '덤불' };
@@ -577,7 +582,7 @@
           // 동맹과 함께 이기면 낸 병력 비율로 나눔
           const winners = [{ N: A, share: 1 - helpers.filter((h) => h.side === 'att').reduce((x, h) => x + h.share, 0) }, ...helpers.filter((h) => h.side === 'att').map((h) => ({ N: this.nation(h.nid), share: h.share }))];
           const give = (key, g, items) => { let left = g; winners.forEach((w, wi) => { const part = wi === winners.length - 1 ? left : Math.floor(g * w.share); left -= part; if (items) { w.N.items = normItems(w.N.items); w.N.items[key] = (w.N.items[key] || 0) + part; } else w.N[key] = (w.N[key] || 0) + part; }); };
-          for (const key of ['coin', 'wood', 'vaccine']) { const v = take(D, key); const g = Math.floor(v * NUM.lootPct); give(key, g, false); loot[key] = g; }
+          for (const key of ['wood', 'stone', 'ore', 'vaccine']) { const v = take(D, key); const g = Math.floor(v * NUM.lootPct); give(key, g, false); loot[key] = g; }
           D.items = normItems(D.items); A.items = normItems(A.items);
           for (const key of Object.keys(D.items)) { const v = take(D.items, key); const g = Math.floor(v * NUM.lootPct); give(key, g, true); loot[key] = g; }
           rep.loot = loot;
@@ -604,7 +609,7 @@
     }
     // 모든 영역을 잃은 나라: 멸망 → 팀원은 유랑민
     destroy(D) {
-      D.dead = true; D.army = 0; D.coin = 0; D.wood = 0; D.vaccine = 0; D.items = {}; D.members = []; D.destroyedAt = Date.now();
+      D.dead = true; D.army = 0; D.coin = 0; D.wood = 0; D.stone = 0; D.ore = 0; D.vaccine = 0; D.items = {}; D.members = []; D.destroyedAt = Date.now();
       for (const b of this.s.battles.filter((x) => x.att === D.id || x.def === D.id)) this.refund(b);
       this.s.battles = this.s.battles.filter((x) => x.att !== D.id && x.def !== D.id);
     }
@@ -618,8 +623,8 @@
       if (this.s.battles.some((b) => b.def === nid)) return { ok: false, err: '선전포고를 받은 동안은 천도할 수 없어요' };
       const wait = (n.capitalMovedAt || 0) + NUM.capitalMoveCooldownH * 3600e3 - now;
       if (wait > 0) return { ok: false, err: `천도는 하루에 한 번이에요 (${Math.ceil(wait / 3600e3)}시간 뒤)` };
-      if ((n.coin || 0) < NUM.capitalMoveCost) return { ok: false, err: `코인이 모자라요 (천도 ${NUM.capitalMoveCost})` };
-      n.coin -= NUM.capitalMoveCost; n.oldCapitals = (n.oldCapitals || []).concat(n.capital).slice(-20); n.capital = tid; n.capitalMovedAt = now;
+      { const lack = Object.entries(NUM.capitalMoveCost).filter(([k, v]) => (n[k] || 0) < v); if (lack.length) return { ok: false, err: `저장소 재료가 모자라요 (천도: ${costText(NUM.capitalMoveCost)})` }; }
+      for (const [k, v] of Object.entries(NUM.capitalMoveCost)) n[k] -= v; n.oldCapitals = (n.oldCapitals || []).concat(n.capital).slice(-20); n.capital = tid; n.capitalMovedAt = now;
       return { ok: true };
     }
 
@@ -784,5 +789,5 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { MATS, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
