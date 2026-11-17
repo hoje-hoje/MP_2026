@@ -204,7 +204,7 @@
   // 하늘로 가는 빛기둥
   function drawPortal(g, x, y, mine) { const im = ART.x_portal_blue; if (im) { // 받은 소용돌이 포털 그림 (움직임)
       const n = 9, fw = im.width / n, f = Math.floor(performance.now() / 100) % n, t = performance.now() / 1000, bob = Math.round(Math.sin(t * 1.6) * 1) * 2, k = 2, w = fw * k, h = im.height * k;
-      g.fillStyle = 'rgba(80,170,255,0.25)'; ell(g, x, y, 40, 11);
+      
       const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(im, f * fw, 0, fw, im.height, Math.round(x - w / 2), Math.round(y - h + bob - 4), w, h); g.imageSmoothingEnabled = pv;
       if (mine) { g.font = `700 15px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 4; g.strokeStyle = '#2b2340'; g.strokeText('수도', x, y - h - 14); g.fillStyle = '#fff6c8'; g.fillText('수도', x, y - h - 14); }
       return; }
