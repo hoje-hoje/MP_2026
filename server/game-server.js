@@ -796,6 +796,7 @@ wss.on('connection', (ws) => {
         if (s.scene !== 'sky' || s.room !== 'market') return;
         const item = String(m.item), cnt = Math.max(1, Math.min(50, m.n | 0));
         let cost, label;
+        if (item.startsWith('tool_')) return send(ws, { t: 'err', text: '도구는 작업대에서 재료로 만들어요' });
         if (item.startsWith('tool_') && TOOLS[item.slice(5)]) { const k = item.slice(5); if (needTool(s, k)) return send(ws, { t: 'err', text: `이미 ${TOOLS[k].name}이(가) 있어요` }); if ((s.acc.pcoin || 0) < TOOLS[k].price) return send(ws, { t: 'err', text: `내 코인이 ${TOOLS[k].price - (s.acc.pcoin || 0)} 모자라요` }); s.acc.pcoin -= TOOLS[k].price; s.acc.tools = Object.assign({}, s.acc.tools, { [k]: 1 }); dirty = true; send(ws, { t: 'tools', tools: s.acc.tools, pcoin: s.acc.pcoin, text: `${TOOLS[k].name}을(를) 샀어요! 이제 ${TOOLS[k].use}을(를) 할 수 있어요` }); return; } // 도구: 사람마다
         const B = BUILD_BY[item], mc = MPRules.costOf(B);
         if (B && B.cat !== 'crop' && mc) { // 건축물: 나라 저장소의 목재·돌·광석으로 만들기 (나라 코인 없음)
@@ -934,6 +935,19 @@ wss.on('connection', (ws) => {
         else if (done && m.t === 'fert') send(ws, { t: 'ok', text: '비료를 줬어요 · 남은 시간이 절반으로!' });
         else if (!done && why) send(ws, { t: 'err', text: why });
         break;
+      }
+      case 'craft': { // 작업대: 내 가방 재료로 도구·횃불·가구 만들기 (하늘 상점가 작업대, 또는 우리 저장소 옆)
+        const R = MPRules.RECIPE_BY[String(m.id || '')], cnt = Math.max(1, Math.min(20, m.n | 0)); if (!R) return;
+        const n = world.nationOfPlayer(s.token), here = (s.scene === 'sky' && s.room === 'market') || (s.scene === 'ground' && n && nearStore(s, n, 3));
+        if (!here) return send(ws, { t: 'err', text: '작업대 앞에서 만들어요 (하늘 상점가, 또는 우리 저장소 옆)' });
+        if (R.tool && needTool(s, R.tool)) return send(ws, { t: 'err', text: `이미 ${R.name}이(가) 있어요` });
+        const k2 = R.tool ? 1 : cnt; s.acc.bag = s.acc.bag || {};
+        const lack = Object.entries(R.mats).filter(([k, v]) => (s.acc.bag[k] | 0) < v * k2).map(([k, v]) => `${MPRules.MATS[k].name} ${v * k2 - (s.acc.bag[k] | 0)}`);
+        if (lack.length) return send(ws, { t: 'err', text: `재료가 모자라요: ${lack.join(', ')}` });
+        for (const [k, v] of Object.entries(R.mats)) { s.acc.bag[k] -= v * k2; if (!s.acc.bag[k]) delete s.acc.bag[k]; }
+        if (R.tool) { s.acc.tools = s.acc.tools || {}; s.acc.tools[R.tool] = 1; send(ws, { t: 'tools', tools: s.acc.tools, text: `🔨 ${R.name}을(를) 만들었어요!` }); }
+        else { const g = (R.give || 1) * k2; s.acc.bag[R.id] = (s.acc.bag[R.id] || 0) + g; send(ws, { t: 'ok', text: `🔨 ${R.name} ${g}개를 만들었어요 (내 가방)` }); }
+        dirty = true; send(ws, { t: 'bag', bag: s.acc.bag }); break;
       }
       case 'gather': { // 풀·꽃 채집 → 내 가방 (20분 뒤 다시 자람)
         const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y), P = MPRules.plantKind(tileAt(x, y), x, y);

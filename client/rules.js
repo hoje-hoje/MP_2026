@@ -109,6 +109,24 @@
   function costOf(b) { if (!b) return null; if (b.cat === 'seed' || b.cat === 'fert') return null;
     return { floor: b.theme === 'forest' ? { wood: 1 } : { stone: 1 }, wall: b.theme === 'forest' ? { wood: 3 } : { stone: 3 }, deco: { wood: 2 }, trap: { ore: 1, wood: 1 }, bridge: b.theme === 'stone' ? { stone: 3 } : { wood: 3 }, farm: { wood: 1 }, water: { stone: 2 } }[b.cat] || { wood: 2 }; }
   const costText = (c, n = 1) => Object.entries(c).map(([k, v]) => `${MAT_NAME[k]} ${v * n}`).join(' + ');
+  // 작업대 만들기 목록 (재료는 내 가방). tool: 도구가 생김 / 나머지: 내 가방에 물건
+  const RECIPES = [
+    { id: 'axe', cat: 'tool', name: '나무도끼', tool: 'axe', mats: { m_wood: 3, m_stone: 2 }, desc: '나무를 빨리 베고 목재를 2개씩' },
+    { id: 'pick', cat: 'tool', name: '곡괭이', tool: 'pick', mats: { m_wood: 2, m_stone: 3 }, desc: '산·금광 캐기' },
+    { id: 'rod', cat: 'tool', name: '낚싯대', tool: 'rod', mats: { m_wood: 3, m_fiber: 3 }, desc: '물가에서 낚시' },
+    { id: 'shovel', cat: 'tool', name: '삽', tool: 'shovel', mats: { m_wood: 2, m_stone: 1 }, desc: '작물 수확' },
+    { id: 'f_torch', cat: 'light', name: '횃불', mats: { m_wood: 1, m_fiber: 1 }, give: 2, desc: '밤에 들고 다니면 주변이 밝아요 (빛 시스템 때 켜짐)' },
+    { id: 'f_campfire', cat: 'light', name: '모닥불', mats: { m_wood: 4, m_stone: 2 }, desc: '놓으면 둘레가 밝아요' },
+    { id: 'f_lamp', cat: 'light', name: '가로등', mats: { m_ore: 1, m_wood: 2, m_fiber: 1 }, desc: '밤새 켜지는 등' },
+    { id: 'f_chair', cat: 'furniture', name: '의자', mats: { m_wood: 4 } },
+    { id: 'f_table', cat: 'furniture', name: '탁자', mats: { m_wood: 6 } },
+    { id: 'f_chest', cat: 'furniture', name: '상자', mats: { m_wood: 8 } },
+    { id: 'f_fence', cat: 'furniture', name: '울타리', mats: { m_wood: 2 }, give: 2 },
+    { id: 'f_sign', cat: 'furniture', name: '표지판', mats: { m_wood: 3 } },
+    { id: 'f_pot', cat: 'furniture', name: '꽃 화분', mats: { m_stone: 2, m_flower: 1 } },
+    { id: 'f_rug', cat: 'furniture', name: '러그', mats: { m_fiber: 6, m_flower: 2 } },
+  ];
+  const RECIPE_BY = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
   function plantKind(t, x, y) {
     if (t !== T.GRASS) return null; const h = hash(x, y, 7);
     if (h >= 0.004 && h < 0.010) return { k: 'bush', mat: 'm_fiber', n: 2, name: '덤불' };
@@ -789,5 +807,5 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

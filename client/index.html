@@ -121,6 +121,7 @@ button:focus-visible { outline: 3px solid var(--danger-fill); outline-offset: 2p
 .invc img { image-rendering: pixelated; }
 .coinSpin { display: inline-block; width: 18px; height: 18px; background: url(assets/extra/coin_spin.png) 0 0 / 144px 18px no-repeat; image-rendering: pixelated; animation: coinSpin 0.9s steps(8) infinite; } /* 받은 코인 그림: 빙글빙글 */
 @keyframes coinSpin { to { background-position: -144px 0; } }
+.okm { color: #2f8a4a; font-weight: 700; margin-right: 6px; } .nom { color: #c8453c; font-weight: 700; margin-right: 6px; } /* 작업대: 재료 있음/모자람 */
 #skyTimer { left: 50%; transform: translateX(-50%); top: calc(84px + env(safe-area-inset-top, 0px)); padding: 4px 14px; font-size: 13px; font-weight: 700; }
 #skyTimer b { font-family: var(--font-display); font-size: 18px; font-weight: 400; font-variant-numeric: tabular-nums; }
 #skyTimer.warn { background: #ffe1e8; }
@@ -693,6 +694,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 <div id="storeBox" class="modalbox" hidden><div class="hv storeHv"><div class="hvClouds"></div>
   <div class="hvTop"><div class="hvFace"><canvas id="storeArt" width="120" height="120"></canvas></div><div class="hvSay"><b id="storeName">우리 저장소</b><p>우리 나라 모두가 같이 쓰는 저장소예요. 산 물건·수확한 작물이 다 여기 모여요.</p></div><button id="storeClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
   <div class="stRes" id="storeRes"></div>
+  <button class="btn" id="storeCraft" type="button">🔨 작업대 열기 (도구·횃불·가구 만들기)</button>
   <button class="btn" id="storeDeposit" type="button">🎒 내 가방의 목재·돌·광석 모두 넣기</button>
   <div class="hvTabs" id="storeTabs"></div>
   <div class="stGrid" id="storeBody"></div>
@@ -747,10 +749,16 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 </div></div>
 <div id="bagBox" class="modalbox" hidden><div class="hv bagHv"><div class="hvClouds"></div>
   <div class="hvTop"><h2>👜 내 가방</h2><span class="bagCoin" id="bagCoin"></span><button id="bagClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
-  <p class="msg">나만 쓰는 것들이에요. 내 코인은 물고기를 팔면 100%, 작물을 팔면 20%가 들어와요. 다른 사람을 클릭하면 거래를 신청할 수 있어요.</p>
+  <p class="msg">나만 쓰는 것들이에요. 채집한 재료·만든 물건·물고기가 여기 들어와요. 물고기·작물을 팔면 내 코인이 돼요. 다른 사람을 클릭하면 거래를 신청할 수 있어요.</p>
   <div class="stGrid" id="bagBody"></div>
   <button id="bagFrag" type="button" class="bagFrag" hidden>📜 멸망 조각</button>
   <div class="stFoot" id="bagDonate"><span class="msg">💝 내 코인을 나라 저장소에 기부 (나라 돈 → 내 돈은 안 돼요)</span><input id="bagGiveN" type="number" min="1" value="50" style="width:80px"><button id="bagGive" type="button">기부</button></div>
+</div></div>
+<div id="craftBox" class="modalbox" hidden><div class="hv bagHv"><div class="hvClouds"></div>
+  <div class="hvTop"><h2>🔨 작업대</h2><span class="bagCoin" id="craftMats"></span><button id="craftClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
+  <p class="msg">내 가방의 재료로 만들어요. 재료는 나무 베기·풀 뜯기·꽃 따기·산 캐기·금광으로 모아요.</p>
+  <div class="hvTabs" id="craftTabs"></div>
+  <div class="hvList" id="craftBody"></div>
 </div></div>
 <div id="fragBook" class="modalbox" hidden><div class="hv fbHv"><div class="hvClouds"></div>
   <div class="hvTop"><h2>📜 멸망 조각</h2><span class="bagCoin" id="fbCount"></span><button id="fbClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
