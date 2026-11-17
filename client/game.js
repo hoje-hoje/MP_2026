@@ -126,6 +126,10 @@
   }
   function clearTrees(cx, cy, r) { for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) if (x >= 0 && y >= 0 && x < W && y < H) noTree[y * W + x] = 1; }
   const DROWN = { t: 0, sent: -1e9 };
+  let LAKE = null; function isLake(x, y) { if (x < 0 || y < 0 || x >= W || y >= H) return false; if (!LAKE) { // 맵 밖 바다에서 물길로 이어진 물 = 바다, 나머지 물 = 호수
+      const sea = new Uint8Array(W * H), q = []; for (let i = 0; i < W * H; i++) { const ix = i % W, iy = (i / W) | 0; if (terrain[i] === T.VOID || ((ix === 0 || iy === 0 || ix === W - 1 || iy === H - 1) && terrain[i] === T.WATER)) { sea[i] = 1; q.push(i); } }
+      while (q.length) { const i = q.pop(), ix = i % W, iy = (i / W) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = ix + dx, b = iy + dy; if (a < 0 || b < 0 || a >= W || b >= H) continue; const j = b * W + a; if (!sea[j] && (terrain[j] === T.WATER || terrain[j] === T.VOID)) { sea[j] = 1; q.push(j); } } }
+      LAKE = sea; } const i = y * W + x; return terrain[i] === T.WATER && !LAKE[i]; }
   function swimmable(x, y) { if (x < 0 || y < 0 || x >= W || y >= H || !ART.w_wsh) return false; const t = tileAt(x, y), e = TILES[y * W + x]; return (t === T.WATER || t === T.VOID) && !(e && e.k === 'water') && !GWALL.has(y * W + x); } // 물에 들어갈 수 있음 (깊으면 잠김)
   function depthAtPx(px, py) { const fx = px / TILE - 0.5, fy = py / TILE - 0.5, x = Math.floor(fx), y = Math.floor(fy), u = fx - x, v = fy - y, dd = (a, b) => (TILES[b * W + a] && TILES[b * W + a].k === 'bridge' ? 0 : waterDepth(a, b));
     return dd(x, y) * (1 - u) * (1 - v) + dd(x + 1, y) * u * (1 - v) + dd(x, y + 1) * (1 - u) * v + dd(x + 1, y + 1) * u * v; }
@@ -598,7 +602,7 @@
         if (lv > 0.6) { if (own) return own(cx, cy); if (sandy) { const hh = hash(wx >> 1, wy >> 1, 61); return hh < 0.05 ? BEACH.sand2 : BEACH.sand; } return grassPixel(wx, wy); }
         if (lv > 0.54) return sandy ? BEACH.wet : BEACH.line; if (lv > 0.47) return BEACH.foam; if (lv > 0.41) return BEACH.foam2; } // 모래 → 젖은 모래 → 흰 거품 → 옅은 거품 → 물
       const d = c00 * (1 - u) * (1 - v) + c10 * u * (1 - v) + c01 * (1 - u) * v + c11 * u * v + wave(wx, wy) + (BAY[((cy >> 1) & 3) * 4 + ((cx >> 1) & 3)] / 16 - 0.5) * 0.14;
-      if (ART.w_wsh) return d < 0.3 ? BEACH.foam2 : seaPixel(d, wx, wy); // 물 그림의 빛 그물 무늬: 얕은 곳 청록 / 깊은 곳 파랑 (경계는 디더로 섞임)
+      if (ART.w_wsh) return d < 0.3 ? BEACH.foam2 : seaPixel(isLake(x, y) ? 1.9 + d * 0.6 : d, wx, wy); // 호수는 얕은 하늘색 없이 중간 깊이 색부터 // 물 그림의 빛 그물 무늬: 얕은 곳 청록 / 깊은 곳 파랑 (경계는 디더로 섞임)
       return d < 0.3 ? BEACH.foam2 : d < 1.1 ? BEACH.w1 : d < 1.5 ? BEACH.w2 : d < 2.0 ? BEACH.w3 : d < 2.7 ? BEACH.w4 : BEACH.w5; });
   }
   const nearSea = (x, y) => [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]].some(([dx, dy]) => !isLand(x + dx, y + dy));
@@ -1361,16 +1365,21 @@
     if (bite) { g.font = `700 22px ${PFONT}`; g.textAlign = 'center'; g.lineWidth = 4; g.strokeStyle = '#2b2340'; g.strokeText('!', o.x, o.y - 70); g.fillStyle = '#ffd84d'; g.fillText('!', o.x, o.y - 70); }
   }
   // 비 (땅에서만): 빗줄기 + 살짝 어둡게 + 물 위 동그라미
-  function drawRain(t) {
+  function drawRain(t) { // 빗줄기·물방울을 세상 좌표에 고정 → 내가 움직여도 비가 따라오지 않고 땅에 떨어짐
+    const cx = groundCam.x * zoom, cy = groundCam.y * zoom, md = (a, m) => ((a % m) + m) % m;
     ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = 'rgba(40,60,100,0.16)'; ctx.fillRect(0, 0, vw, vh);
     ctx.strokeStyle = 'rgba(200,225,255,0.55)'; ctx.lineWidth = 1.5; ctx.beginPath();
-    for (let i = 0; i < 140; i++) { const sp = 700 + (i % 7) * 60, x = (hash(i, 3, 5) * (vw + 200) - t * 120) % (vw + 200), y = (hash(i, 4, 5) * (vh + 100) + t * sp) % (vh + 100) - 50; const X = x < -100 ? x + vw + 200 : x; ctx.moveTo(X, y); ctx.lineTo(X - 4, y + 14); }
-    ctx.stroke();
-    for (let i = 0; i < 46; i++) { const sp = 2.2 + hash(i, 9, 3), u = t * sp + hash(i, 7, 3), cyc = Math.floor(u), k = u - cyc, x = hash(i, cyc, 11) * vw, y = hash(i, cyc, 13) * vh; // 물방울 튀기
+    for (let i = 0; i < 140; i++) { const sp = 700 + (i % 7) * 60, X = md(hash(i, 3, 5) * (vw + 200) - t * 120 - cx, vw + 200) - 100, y = md(hash(i, 4, 5) * (vh + 100) + t * sp - cy, vh + 100) - 50; ctx.moveTo(X, y); ctx.lineTo(X - 4, y + 14); }
+    ctx.stroke(); ctx.restore(); ctx.save(); ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -groundCam.x * dpr * zoom, -groundCam.y * dpr * zoom);
+    const tx0 = Math.floor(groundCam.x / TILE) - 1, ty0 = Math.floor(groundCam.y / TILE) - 1, tx1 = tx0 + Math.ceil(vw / zoom / TILE) + 2, ty1 = ty0 + Math.ceil(vh / zoom / TILE) + 2;
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) { if (hash(tx, ty, 21) > 0.07) continue; // 물방울 튀기 (땅 위 정해진 자리에서)
+      const sp = 0.8 + hash(tx, ty, 22), u = t * sp + hash(tx, ty, 23) * 5, cyc = Math.floor(u), k = u - cyc; if (hash(tx, ty, cyc) > 0.6) continue;
+      const x = tx * TILE + hash(tx, cyc, 11) * TILE, y = ty * TILE + hash(ty, cyc, 13) * TILE;
       ctx.globalAlpha = 1 - k; ctx.strokeStyle = 'rgba(225,240,255,0.9)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(x, y, 3 + k * 9, 1 + k * 3, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = 'rgba(235,245,255,0.95)'; const hgt = Math.sin(k * Math.PI) * 9; ctx.fillRect(x - 5 - k * 5, y - hgt, 2, 2); ctx.fillRect(x + 4 + k * 5, y - hgt, 2, 2); ctx.fillRect(x - 1, y - hgt * 1.4, 2, 2); }
     ctx.globalAlpha = 1; ctx.restore();
   }
+
 
   // ------------------------------------------------------------ 실시간 전투 (땅 어디서나): J 누르면 공격, 꾹 눌렀다 떼면 차징
   const WPN_SPR = { sword: 'sword', dagger: 'dagger', axe: 'axe', spear: 'spear', bow: 'bow', magic: 'staff', fist: 'fist' };
