@@ -713,11 +713,7 @@
         const o = terrAt(x, y);
         const own = o > 0 ? ownerOf(o) : null;
         const mine = !!own && own === MY_NID;
-        if (own && t !== T.WATER && t !== T.MOUNTAIN) { g.fillStyle = natColor(own); g.globalAlpha = mine ? 0.34 : 0.2; g.fillRect(px, py, TILE, TILE); g.globalAlpha = 1; }
-        else if (o > 0 && t !== T.WATER && t !== T.MOUNTAIN) {
-          const [r, gg, b] = TYPE_RGB[terrs[o].type];
-          g.fillStyle = `rgba(${r},${gg},${b},0.07)`; g.fillRect(px, py, TILE, TILE);
-        }
+        /* 영토 칸을 색으로 덮는 건 뺌 (바닥 그림이 그대로 보이게) → 경계선만 */
         if (o > 0) {
           // 흰 경계선 (오른쪽·아래 칸과 영토가 다르면). 주인이 다르면 실선, 같으면 점선
           const right = terrAt(x + 1, y), down = terrAt(x, y + 1);
@@ -733,12 +729,9 @@
             const out = (a, b) => { const q = terrAt(a, b); return q > 0 && q !== o && ownerOf(q) !== MY_NID; };
             const col = natColor(own);
             const N = out(x, y - 1), S = out(x, y + 1), Wd = out(x - 1, y), E = out(x + 1, y);
-            g.fillStyle = col;
-            if (N) g.fillRect(px, py, TILE, 10); if (S) g.fillRect(px, py + TILE - 10, TILE, 10);
-            if (Wd) g.fillRect(px, py, 10, TILE); if (E) g.fillRect(px + TILE - 10, py, 10, TILE);
-            g.fillStyle = '#ffd34d'; // 금색 바깥 테두리
-            if (N) g.fillRect(px, py, TILE, 3); if (S) g.fillRect(px, py + TILE - 3, TILE, 3);
-            if (Wd) g.fillRect(px, py, 3, TILE); if (E) g.fillRect(px + TILE - 3, py, 3, TILE);
+            g.fillStyle = col; // 우리 나라 경계: 우리 색 선 하나만
+            if (N) g.fillRect(px, py, TILE, 4); if (S) g.fillRect(px, py + TILE - 4, TILE, 4);
+            if (Wd) g.fillRect(px, py, 4, TILE); if (E) g.fillRect(px + TILE - 4, py, 4, TILE);
           }
         }
       }
