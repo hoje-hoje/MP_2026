@@ -201,7 +201,14 @@
   }
 
   // 하늘로 가는 빛기둥
-  function drawPortal(g, x, y, mine) { // 하늘 포털: 구름 받침 위에 떠 있는 금빛 고리 문 + 안쪽 하늘 소용돌이 + 위로 오르는 빛 알갱이
+  function drawPortal(g, x, y, mine) { const im = ART[mine ? 'x_portal_blue' : 'x_portal_red']; if (im) { // 받은 소용돌이 포털 그림 (움직임)
+      const n = mine ? 9 : 8, fw = im.width / n, f = Math.floor(performance.now() / 100) % n, t = performance.now() / 1000, bob = Math.round(Math.sin(t * 1.6) * 1) * 2, k = 1, w = fw * k, h = im.height * k;
+      g.fillStyle = mine ? 'rgba(80,170,255,0.22)' : 'rgba(255,60,110,0.22)'; ell(g, x, y, 26, 8);
+      const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(im, f * fw, 0, fw, im.height, Math.round(x - w / 2), Math.round(y - h + bob - 4), w, h); g.imageSmoothingEnabled = pv;
+      if (mine) { g.font = `700 15px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 4; g.strokeStyle = '#2b2340'; g.strokeText('수도', x, y - h - 14); g.fillStyle = '#fff6c8'; g.fillText('수도', x, y - h - 14); }
+      return; }
+    drawPortalOld(g, x, y, mine); }
+  function drawPortalOld(g, x, y, mine) { // 하늘 포털: 구름 받침 위에 떠 있는 금빛 고리 문 + 안쪽 하늘 소용돌이 + 위로 오르는 빛 알갱이
     const t = performance.now() / 1000, bob = Math.round(Math.sin(t * 1.6) * 2), cy = y - 46 + bob;
     g.fillStyle = 'rgba(255,236,140,0.28)'; ell(g, x, y, 34, 10);
     g.fillStyle = '#dbe7fb'; for (const [dx, r] of [[-22, 9], [-8, 12], [8, 12], [22, 9]]) pxDisc(g, x + dx, y - 6, r); g.fillStyle = '#ffffff'; for (const [dx, r] of [[-22, 7], [-8, 10], [8, 10], [22, 7]]) pxDisc(g, x + dx, y - 9, r);
@@ -268,10 +275,12 @@
     const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
     const fl = HITFX.get(t.id), hot = fl && performance.now() < fl; // 맞으면 0.12초 빨갛게 + 흔들림
     const sx = hot ? Math.round(Math.sin(performance.now() / 12) * 3) : 0;
-    g.drawImage(altarSheet(t.type), f * 32, 0, 32, 32, x - 32 + sx, y - 60, 64, 64);
+    const ob = ART.x_obelisk; let top = y - 60, bx = x - 32 + sx, bw = 64, bh = 64;
+    if (ob) { const n = 32, fw = ob.width / n, fo = Math.floor(performance.now() / 80 + t.id * 5) % n; bw = fw; bh = ob.height; bx = x - 22 + sx; top = y + 4 - 78; g.drawImage(ob, fo * fw, 0, fw, bh, bx, top, bw, bh); } // 수정 대신 룬 비석
+    else g.drawImage(altarSheet(t.type), f * 32, 0, 32, 32, x - 32 + sx, y - 60, 64, 64);
     const hn = HITN.get(t.id); // 내가 때린 횟수
-    if (hn && performance.now() - hn.at < 60000 && hn.n < MPRules.NUM.scoutHits) { g.font = `700 16px ${PFONT}`; g.textAlign = 'center'; g.lineWidth = 4; g.strokeStyle = '#2b2340'; g.strokeText(`${hn.n}/${MPRules.NUM.scoutHits}`, x, y - 70); g.fillStyle = '#ffd34d'; g.fillText(`${hn.n}/${MPRules.NUM.scoutHits}`, x, y - 70); }
-    if (hot) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(255,40,60,0.55)'; g.fillRect(x - 32 + sx, y - 60, 64, 64); g.globalCompositeOperation = 'source-over'; g.fillStyle = 'rgba(255,60,80,0.35)'; ell(g, x + sx, y - 34, 22, 26); }
+    if (hn && performance.now() - hn.at < 60000 && hn.n < MPRules.NUM.scoutHits) { g.font = `700 16px ${PFONT}`; g.textAlign = 'center'; g.lineWidth = 4; g.strokeStyle = '#2b2340'; g.strokeText(`${hn.n}/${MPRules.NUM.scoutHits}`, x, top - 10); g.fillStyle = '#ffd34d'; g.fillText(`${hn.n}/${MPRules.NUM.scoutHits}`, x, top - 10); }
+    if (hot) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(255,40,60,0.55)'; g.fillRect(bx, top, bw, bh); g.globalCompositeOperation = 'source-over'; g.fillStyle = 'rgba(255,60,80,0.35)'; ell(g, x + sx, y - 34, 22, 26); }
     g.imageSmoothingEnabled = prev;
   }
   const HITFX = new Map(), HITN = new Map();
@@ -338,7 +347,7 @@
     const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
     await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
-  const EXTRA = ['door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
+  const EXTRA = ['sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
   const TEMPLE = ['emote0', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'emote6', 'emote7', 'statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
@@ -2091,6 +2100,7 @@
     for (const [x, y] of rim) circ(g, x, y, 26 + hash(x, y, 3) * 14);
     const pat = (key) => {
       const tc = document.createElement('canvas'); const tg = tc.getContext('2d');
+      if ((key === 'marble_w' || key === 'cloud') && ART.x_sky_floor) key = 'sky_floor'; // 하늘 바닥: 받은 돌 타일을 하얗게
       if (GEN_FLOOR[key]) { tc.width = tc.height = 64; tg.imageSmoothingEnabled = false; GEN_FLOOR[key](tg); return g.createPattern(tc, 'repeat'); }
       if (key.startsWith('na:')) { const [cx, cy] = key.slice(3).split(',').map(Number); tc.width = tc.height = TILE; tg.imageSmoothingEnabled = false; tg.drawImage(ART.floor, cx * 16, cy * 16, 16, 16, 0, 0, TILE, TILE); }
       else { const im = ART['x_' + key]; tc.width = im.width * 2; tc.height = im.height * 2; tg.imageSmoothingEnabled = false; tg.drawImage(im, 0, 0, tc.width, tc.height); }
@@ -2186,19 +2196,32 @@
     g.fillStyle = `rgba(255,170,60,${0.25 + Math.sin(t * 6) * 0.08})`; ell(g, x, y - 6, 70, 30);
     pix(g, 'campfire', x, y + 4, 3.5 + Math.sin(t * 9) * 0.08);
   }
+  // 아이작식 문: 벽에 박힌 돌 아치 + 어두운 문 구멍 (땅으로 가는 문은 안쪽이 금빛) — 위쪽 벽 기준으로 그린 뒤 벽 방향대로 돌림
+  const DOORC = {};
+  function isaacDoor(down) { const key = down ? 'd' : 'n'; if (DOORC[key]) return DOORC[key];
+    return (DOORC[key] = artCanvas(96, 76, (g) => { const R = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+      R('rgba(40,50,80,0.25)', 6, 70, 84, 6); // 바닥에 드리운 그림자
+      g.fillStyle = '#5d6684'; pxDisc(g, 48, 34, 34); R('#5d6684', 14, 34, 68, 40); // 바깥 테두리
+      g.fillStyle = '#c9d1e4'; pxDisc(g, 48, 34, 32); R('#c9d1e4', 16, 34, 64, 40); // 돌 아치
+      g.fillStyle = '#eef1f8'; pxDisc(g, 48, 32, 30); R('#eef1f8', 18, 32, 60, 38);
+      for (const [bx, by, bw, bh] of [[18, 40, 12, 10], [18, 54, 12, 14], [66, 40, 12, 10], [66, 54, 12, 14], [26, 14, 12, 10], [58, 14, 12, 10], [40, 6, 16, 10]]) { R('#c9d1e4', bx, by + bh - 2, bw, 2); R('#c9d1e4', bx + bw - 2, by, 2, bh); } // 돌 이음매
+      R('#ffd34d', 44, 4, 8, 6); R('#fff2b0', 46, 4, 4, 2); // 꼭대기 쐐기돌 (금)
+      g.fillStyle = '#3b3550'; pxDisc(g, 48, 40, 18); R('#3b3550', 30, 40, 36, 36); // 문 구멍 테두리
+      if (down) { g.fillStyle = '#ffe9a0'; pxDisc(g, 48, 40, 16); R('#ffe9a0', 32, 40, 32, 36); g.fillStyle = '#fff8dc'; pxDisc(g, 48, 44, 10); R('#fff8dc', 38, 44, 20, 32); }
+      else { g.fillStyle = '#120c1c'; pxDisc(g, 48, 40, 16); R('#120c1c', 32, 40, 32, 36); R('#2a2140', 32, 66, 32, 10); }
+      R('#9aa3bd', 24, 70, 10, 6); R('#9aa3bd', 62, 70, 10, 6); // 문턱 받침돌
+    })); }
   function arch(g, x, y, side, label, down) {
-    const vertical = side === 'W' || side === 'E';
-    // 위·아래 벽 가운데 문(3칸)은 구름 문, 옆벽 문은 금빛 대문 — 둘 다 문 구멍 3칸에 꽉 맞게
-    if (vertical) {
-      pix(g, 'door_gold', x, y + 16, 0, 3 * TILE);
-      sign(g, x + (side === 'W' ? 80 : -80), y - 2 * TILE - 30, (side === 'W' ? '← ' : '') + label + (side === 'E' ? ' →' : ''));
-    } else {
-      const by = side === 'N' ? y + 8 : y;
-      const im = ART.x_door_cloud, k = 3 * TILE / im.width;
-      pix(g, 'door_cloud', x, by, k);
-      sign(g, x, by - im.height * k - 18, (side === 'N' ? '↑ ' : '↓ ') + label);
-    }
+    const im = isaacDoor(down), pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.save();
+    if (side === 'N') { g.translate(x, y + TILE); }
+    else if (side === 'S') { g.translate(x, y - TILE); g.rotate(Math.PI); }
+    else if (side === 'W') { g.translate(x + TILE, y - 16); g.rotate(-Math.PI / 2); }
+    else { g.translate(x - TILE, y - 16); g.rotate(Math.PI / 2); }
+    g.drawImage(im, -48, -76 + 6); g.restore(); g.imageSmoothingEnabled = pv;
+    if (side === 'W' || side === 'E') sign(g, x + (side === 'W' ? 90 : -90), y - 2 * TILE - 20, (side === 'W' ? '← ' : '') + label + (side === 'E' ? ' →' : ''));
+    else sign(g, x, side === 'N' ? y - TILE - 26 : y - 2 * TILE - 30, (side === 'N' ? '↑ ' : '↓ ') + label);
   }
+
 
   const CLOUDS = [0, 1, 2].map((v) => artCanvas(64, 32, (g) => { // 직접 그린 구름 (테두리 없이 흰색 + 아래쪽만 연한 하늘색 그늘)
     const blobs = [[[14, 20, 9], [26, 14, 11], [40, 16, 10], [50, 21, 8]], [[12, 21, 8], [24, 16, 10], [36, 12, 11], [48, 18, 9]], [[16, 18, 10], [30, 12, 12], [44, 19, 9]]][v];
