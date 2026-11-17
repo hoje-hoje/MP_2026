@@ -136,7 +136,8 @@
     v = (landIn(1, 0) && landIn(-1, 0)) || (landIn(0, 1) && landIn(0, -1)); narrowC.set(k, v); return v; } // 양쪽에 땅이 가까운 좁은 물 = 강 // 물에 들어갈 수 있음 (깊으면 잠김)
   function depthAtPx(px, py) { const fx = px / TILE - 0.5, fy = py / TILE - 0.5, x = Math.floor(fx), y = Math.floor(fy), u = fx - x, v = fy - y, dd = (a, b) => (TILES[b * W + a] && TILES[b * W + a].k === 'bridge' ? 0 : waterDepth(a, b));
     return dd(x, y) * (1 - u) * (1 - v) + dd(x + 1, y) * u * (1 - v) + dd(x, y + 1) * (1 - u) * v + dd(x + 1, y + 1) * u * v; }
-  const sinkOf = (o) => (player.scene === 'ground' && ART.w_wsh && !isLand(Math.floor(o.x / TILE), Math.floor(o.y / TILE)) ? Math.pow(Math.max(0, Math.min(1, (depthAtPx(o.x, o.y) - 0.75) / 3.75)), 1.6) : 0); // 모래 위에선 안 잠김, 첫 물칸은 발만 // 0 = 안 잠김, 1 = 머리만
+  const sinkOf = (o) => (player.scene === 'ground' && ART.w_wsh && !isLand(Math.floor(o.x / TILE), Math.floor(o.y / TILE)) ? Math.pow(Math.max(0, Math.min(1, (depthAtPx(o.x, o.y) - 0.75) / 3.75)), 2.4) : 0);
+  function sinkSmooth(o) { const g = sinkOf(o), nw = performance.now(), dt = Math.min(0.1, (nw - (o._skT || nw)) / 1000); o._skT = nw; const c = o._sk || 0; o._sk = g > c ? Math.min(g, c + dt * 0.35) : Math.max(g, c - dt * 1.2); return o._sk; } // 천천히 잠기고 나올 땐 빨리 // 모래 위에선 안 잠김, 첫 물칸은 발만 // 0 = 안 잠김, 1 = 머리만
   function speedAt(x, y) { if (swimmable(x, y) && !(TILES[y * W + x] && TILES[y * W + x].k === 'bridge')) return 0.55; const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under) && e.n === MY_NID) return MPRules.NUM.floorSpeed; const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
 
   const terrName = (t) => MPRules.terrName(t); // 영토 이름 (rules.js 와 같은 규칙)
@@ -3920,7 +3921,7 @@
 
     // 플레이어 이동
     stepPlayer(dt); tickHold(); tickFishing();
-    if (player.scene === 'ground' && !TITLE.on && ART.w_wsh && !amDead()) { const dp = depthAtPx(player.x, player.y); DROWN.t = dp >= 4.3 ? DROWN.t + dt : 0; if (DROWN.t > 1.6 && performance.now() - DROWN.sent > 4000) { DROWN.sent = performance.now(); if (netOn) ws.send(JSON.stringify({ t: 'drown' })); } } // 깊은 물에서 1.2초 넘게 머리까지 잠기면 익사
+    if (player.scene === 'ground' && !TITLE.on && ART.w_wsh && !amDead()) { const dp = depthAtPx(player.x, player.y); DROWN.t = dp >= 4.3 && (player._sk || 0) > 0.9 ? DROWN.t + dt : 0; if (DROWN.t > 1.6 && performance.now() - DROWN.sent > 4000) { DROWN.sent = performance.now(); if (netOn) ws.send(JSON.stringify({ t: 'drown' })); } } // 깊은 물에서 1.2초 넘게 머리까지 잠기면 익사
     tickBoard(); tickQuiz(); tickWelcome(); tickWar3();
     { const show = ONLINE && player.scene === 'ground' && (matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0) && !TITLE.on; if ($('atkBtn').hidden === show) { $('atkBtn').hidden = !show; $('swapBtn').hidden = !show; } if (show && swapIcon.w !== myWeapon()) { swapIcon.w = myWeapon(); swapIcon(); } } // 패드·폰: 동그라미 공격·무기 교체 버튼
     { const a = curAct(); if (a !== lastAct) { lastAct = a; if (netOn) ws.send(JSON.stringify({ t: 'act', a, fx: FISHING.x | 0, fy: FISHING.y | 0 })); } } // 도구를 주변에 알림
@@ -4005,7 +4006,7 @@
         const wpn = o === player ? myWeapon() : remWeapon(o), act = o === player ? curAct() : o.act, nowT = performance.now();
         const hk = o.hitAt ? Math.max(0, 1 - (nowT - o.hitAt) / 200) : 0, ox = o.x, oy = o.y; if (hk > 0) { o.x += o.hitDx * 9 * hk; o.y += o.hitDy * 6 * hk; } // 맞으면 뒤로 밀림
         const atkPose = o.swing && nowT - o.swing < 260;
-        const sk = sinkOf(o), wl = o.y - 2 - sk * 34, body = () => { // 물에 잠긴 부분은 반투명 → 깊을수록 흐려져 안 보임
+        const sk = sinkSmooth(o), wl = o.y - 2 - sk * 34, body = () => { // 물에 잠긴 부분은 반투명 → 깊을수록 흐려져 안 보임
         const S2 = shadeBegin(o), G = S2 ? S2.g : ctx; // 나무 그림자 속이면 임시 판에 그린 뒤 겹친 부분만 어둡게
         if ((o.face | 0) === 1 && !down && !act) drawWeaponOn(G, o, wpn, t);
         if (hk > 0.55) G.filter = 'brightness(3.2)'; /* 맞은 순간 하얗게 번쩍 */
