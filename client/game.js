@@ -3915,7 +3915,7 @@
     // 플레이어 이동
     stepPlayer(dt); tickHold(); tickFishing();
     DROWN.msg = ''; if (player.scene === 'ground' && !TITLE.on && ART.w_wsh && !amDead()) { const dp = depthAtPx(player.x, player.y), deep = dp >= 4.2 && (player._sk || 0) > 0.8; DROWN.t = deep ? DROWN.t + dt : 0; // 얕은 바다는 괜찮음, 아주 깊은 곳에서만 3초 경고 뒤 기절
-      if (deep) DROWN.msg = `⚠ 너무 깊어요! ${Math.max(0, Math.ceil(3 - DROWN.t))}초 뒤 기절해요 · 얕은 곳으로!`; else if (dp >= 3.4 && !isLand(Math.floor(player.x / TILE), Math.floor(player.y / TILE))) DROWN.msg = '🌊 물이 깊어져요 · 더 들어가면 위험해요';
+      if (deep) DROWN.msg = `⚠ ${Math.max(0, Math.ceil(3 - DROWN.t))}초 뒤 기절!`; else if (dp >= 3.4 && !isLand(Math.floor(player.x / TILE), Math.floor(player.y / TILE))) DROWN.msg = '🌊 깊어요';
       if (DROWN.t > 3 && performance.now() - DROWN.sent > 4000) { DROWN.sent = performance.now(); if (netOn) ws.send(JSON.stringify({ t: 'drown' })); } }
     tickBoard(); tickQuiz(); tickWelcome(); tickWar3();
     { const show = ONLINE && player.scene === 'ground' && (matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0) && !TITLE.on; if ($('atkBtn').hidden === show) { $('atkBtn').hidden = !show; $('swapBtn').hidden = !show; } if (show && swapIcon.w !== myWeapon()) { swapIcon.w = myWeapon(); swapIcon(); } } // 패드·폰: 동그라미 공격·무기 교체 버튼
