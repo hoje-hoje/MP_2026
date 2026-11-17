@@ -313,7 +313,7 @@
   const ART = {};
   function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('그림 파일을 불러오지 못했어요: ' + src)); i.src = src; }); }
   async function loadArt() {
-    const names = { w_wsh: 'world/water_shallow.png', w_wdp: 'world/water_deep.png', w_grass: 'world/grass.png', w_forest: 'world/forest.png', ...Object.fromEntries([0, 1, 2, 3, 4, 5].map((i) => ['wt_big' + i, 'world/big' + i + '.png'])), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ['wt_mid' + i, 'world/mid' + i + '.png'])), aether: 'aether/aether.png', k_winter: 'winter/winter.png', k_town: 'kenney/town.png', k_dungeon: 'kenney/dungeon.png', k_onebit: 'kenney/onebit.png', water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
+    const names = { w_wsh: 'world/water_shallow.png', w_wmd: 'world/water_mid.png', w_wdp: 'world/water_deep.png', w_grass: 'world/grass.png', w_forest: 'world/forest.png', ...Object.fromEntries([0, 1, 2, 3, 4, 5].map((i) => ['wt_big' + i, 'world/big' + i + '.png'])), ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ['wt_mid' + i, 'world/mid' + i + '.png'])), aether: 'aether/aether.png', k_winter: 'winter/winter.png', k_town: 'kenney/town.png', k_dungeon: 'kenney/dungeon.png', k_onebit: 'kenney/onebit.png', water: 'na/water.png', floor: 'ninja/floor.png', village: 'ninja/village.png', chars: 'na/chars.png', faces: 'na/faces.png', towers: 'na/towers.png', flags: 'na/flags.png' };
     const meta = fetch('assets/na/chars.json').then((r) => r.json()).then((j) => { CHARS.cols = j.cols; CHARS.names = j.names; });
     const users = fetch('assets/user/users.json').then((r) => r.json()).then((j) => {
       USER.chars = j.chars; USER.animals = j.animals; USER.monsters = j.monsters;
@@ -552,7 +552,7 @@
         if (lv > 0.55) { if (sandy) { const hh = hash(wx >> 1, wy >> 1, 61); return hh < 0.05 ? BEACH.sand2 : BEACH.sand; } return grassPixel(wx, wy); }
         if (lv > 0.44) return BEACH.foam; if (lv > 0.36) return BEACH.foam2; }
       const d = c00 * (1 - u) * (1 - v) + c10 * u * (1 - v) + c01 * (1 - u) * v + c11 * u * v + wave(wx, wy) + (BAY[((cy >> 1) & 3) * 4 + ((cx >> 1) & 3)] / 16 - 0.5) * 0.14;
-      if (ART.w_wsh) return d < 0.3 ? BEACH.foam2 : d < 2.1 ? texPixel('w_wsh', wx, wy) : texPixel('w_wdp', wx, wy); // 물 그림의 빛 그물 무늬: 얕은 곳 청록 / 깊은 곳 파랑 (경계는 디더로 섞임)
+      if (ART.w_wsh) return d < 0.3 ? BEACH.foam2 : d < 1.8 ? texPixel('w_wsh', wx, wy) : d < 2.9 ? texPixel('w_wmd', wx, wy) : texPixel('w_wdp', wx, wy); // 물 그림의 빛 그물 무늬: 얕은 곳 청록 / 깊은 곳 파랑 (경계는 디더로 섞임)
       return d < 0.3 ? BEACH.foam2 : d < 1.1 ? BEACH.w1 : d < 1.5 ? BEACH.w2 : d < 2.0 ? BEACH.w3 : d < 2.7 ? BEACH.w4 : BEACH.w5; });
   }
   function beachSandTile(x, y) { // 모래 + 알갱이 + 잔디가 모래 위로 삐죽 넘어오는 가장자리 (어두운 청록 테두리)
@@ -2671,7 +2671,7 @@
     const g = c.getContext('2d');
     const img = g.createImageData(W, H);
     const d = img.data;
-    const base = { [T.VOID]: [12, 131, 196], [T.WATER]: [13, 165, 185], [T.SAND]: [252, 206, 102], [T.MOUNTAIN]: [138, 129, 151], [T.HOLY]: [250, 238, 200] };
+    const base = { [T.VOID]: [26, 86, 148], [T.WATER]: [17, 174, 194], [T.SAND]: [252, 206, 102], [T.MOUNTAIN]: [138, 129, 151], [T.HOLY]: [250, 238, 200] };
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = y * W + x, t = GCLEAR.has(i) && terrain[i] === T.MOUNTAIN ? T.GRASS : terrain[i], o = terr[i];
       let c3 = base[t];
@@ -2724,7 +2724,7 @@
     const s = mini.width;
     const span = 180; // 미니맵이 보여주는 타일 범위
     const tx = player.x / TILE, ty = player.y / TILE;
-    mg.fillStyle = '#0c83c4'; mg.fillRect(0, 0, s, s); // 지도 밖도 바다
+    mg.fillStyle = '#1a5694'; mg.fillRect(0, 0, s, s); // 지도 밖도 바다
     mg.imageSmoothingEnabled = false;
     mg.drawImage(mapImg, tx - span / 2, ty - span / 2, span, span, 0, 0, s, s);
     const k = s / span;
@@ -3992,7 +3992,7 @@
   function drawGround(t) {
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#0c83c4'; ctx.fillRect(0, 0, vw, vh); // 맵 밖도 바다
+    ctx.fillStyle = '#1a5694'; ctx.fillRect(0, 0, vw, vh); // 맵 밖도 바다
     if (shakeT > 0) shakeT = Math.max(0, shakeT - lastDt); const shk = shakeT > 0 ? 4 * shakeT / 0.3 : 0; // 맞으면 화면 흔들림
     const camX = (TITLE.on ? TITLE.x : player.x) - vw / 2 / zoom + (Math.random() - 0.5) * shk, camY = (TITLE.on ? TITLE.y : player.y) - 40 - vh / 2 / zoom + (Math.random() - 0.5) * shk;
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -camX * dpr * zoom, -camY * dpr * zoom);
