@@ -89,8 +89,30 @@
   }
   // 나무: 바닥에 굽지 않고 따로 그려서(깊이 정렬) 뒤로 지나갈 수 있게, 줄기 칸은 못 지나가게.
   let noTree = new Uint8Array(1);
+  // ------------------------------------------------------------ 단차 (시험 구역): 산 둘레가 고원(1·2단), 남쪽으로 떨어지는 곳에 돌 절벽, 군데군데 계단
+  const PILOT = { x0: 424, y0: 520, x1: 496, y1: 592 };
+  let HGT = null;
+  function buildHeights() { // 큰 덩어리 잡음(약 14칸)으로 넓은 고원 → 얇은 부분 깎기 → 가운데만 2단. 제단 둘레·구역 가장자리는 평지
+    const { x0, y0, x1, y1 } = PILOT, w = x1 - x0, h = y1 - y0;
+    const vn = (x, y, s, salt) => { const gx = Math.floor(x / s), gy = Math.floor(y / s), fx = x / s - gx, fy = y / s - gy, sm = (t) => t * t * (3 - 2 * t), u = sm(fx), v = sm(fy), a = hash(gx, gy, salt), b = hash(gx + 1, gy, salt), c = hash(gx, gy + 1, salt), e = hash(gx + 1, gy + 1, salt); return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + e * u * v; };
+    const alt = terrs.filter((t) => t && t.altar[0] >= x0 - 6 && t.altar[0] < x1 + 6 && t.altar[1] >= y0 - 6 && t.altar[1] < y1 + 6).map((t) => t.altar);
+    const land = (x, y) => { const t = tileAt(x0 + x, y0 + y); return t === T.GRASS || t === T.FOREST || t === T.SAND; };
+    const val = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const edge = Math.min(x, y, w - 1 - x, h - 1 - y), nearAlt = alt.some(([ax, ay]) => Math.hypot(x0 + x - ax, y0 + y - ay) < 6);
+      val[y * w + x] = land(x, y) && !nearAlt ? vn(x0 + x, y0 + y, 14, 91) * 0.75 + vn(x0 + x, y0 + y, 6, 92) * 0.25 - Math.max(0, 8 - edge) * 0.06 : -1; }
+    const level = (th) => { let m = new Uint8Array(w * h); for (let k = 0; k < m.length; k++) m[k] = val[k] > th ? 1 : 0;
+      const morph = (src, grow) => { const o = new Uint8Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let any = 0, all = 1; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const v = (x + dx < 0 || y + dy < 0 || x + dx >= w || y + dy >= h) ? 0 : src[(y + dy) * w + x + dx]; any |= v; all &= v; } o[y * w + x] = grow ? any : all; } return o; };
+      m = morph(morph(m, 0), 0); m = morph(morph(m, 1), 1); /* 두 칸 깎고 두 칸 키우기 → 얇은 곳 없어짐 */ for (let k = 0; k < m.length; k++) if (val[k] < 0) m[k] = 0; return m; };
+    const A = level(0.56), B = level(0.68), L = new Uint8Array(w * h);
+    for (let k = 0; k < L.length; k++) L[k] = A[k] + (A[k] && B[k] ? 1 : 0);
+    HGT = { L, w, h };
+  }
+  function hgt(x, y) { if (x < PILOT.x0 || y < PILOT.y0 || x >= PILOT.x1 || y >= PILOT.y1) return 0; if (!HGT) buildHeights(); return HGT.L[(y - PILOT.y0) * HGT.w + (x - PILOT.x0)]; }
+  const FH = 2; /* 한 단 = 절벽 2칸 높이 */ const wallRow = (x, y) => { const h0 = hgt(x, y); for (let k = 1; k <= FH * 2; k++) { const up = hgt(x, y - k) - h0; if (up >= Math.ceil(k / FH)) { let top = k; while (top < FH * 2 && hgt(x, y - top - 1) - h0 >= Math.ceil((top + 1) / FH)) top++; return k; } } return 0; }; // 몇 번째 줄 벽인지 (1 = 맨 윗줄, 잔디 끝이 걸침)
+  const isStair = (x, y) => wallRow(x, y) > 0 && ((x + Math.floor(hash(0, y - wallRow(x, y), 83) * 9)) % 11) < 2; // 절벽 11칸마다 2칸 너비 계단
+  function heightBlocked(cx, cy, nx, ny) { if (wallRow(nx, ny) && !isStair(nx, ny)) return true; const a = isStair(cx, cy) ? -1 : hgt(cx, cy) + (wallRow(cx, cy) ? 0 : 0), b = isStair(nx, ny) ? -1 : hgt(nx, ny); if (a === -1 || b === -1) return cx !== nx; /* 계단은 위아래로만 */ return a !== b; }
   function treeAt(x, y) {
-    if (x < 0 || y < 0 || x >= W || y >= H || noTree[y * W + x] || GCLEAR.has(y * W + x)) return null;
+    if (x < 0 || y < 0 || x >= W || y >= H || noTree[y * W + x] || GCLEAR.has(y * W + x) || wallRow(x, y) || wallRow(x, y + 1) === 1) return null; // 절벽과 바로 위 칸엔 나무 없음
     const t = tileAt(x, y);
     if (t !== T.FOREST && t !== T.GRASS) return null;
     const o = terr[y * W + x]; if (o !== 65535 && o > 0 && gone[o]) return null;
@@ -539,6 +561,27 @@
         if (gv > 0.5) return grassPixel(wx, wy); if (gv > 0.42) return BEACH.line; }
       return hh < 0.05 ? BEACH.sand2 : hh < 0.07 ? BEACH.sand3 : BEACH.sand; });
   }
+  // 절벽·계단 그림 (해변·잔디 팔레트에 맞춘 청회색 돌, 2px = 도트 1칸)
+  const CL = { s1: [120, 140, 146], s2: [98, 117, 125], s3: [76, 93, 103], s4: [54, 68, 80], line: [24, 48, 56], hi: [158, 176, 176] };
+  function drawCliff(g, x, y, px, py) {
+    const row = wallRow(x, y), h0 = hgt(x, y);
+    if (row) { const stair = isStair(x, y);
+      g.putImageData(tileImage((cx, cy) => { const wx = x * TILE + cx, wy = y * TILE + cy;
+        if (row === 1 && cy < 6 + Math.round((hash(wx >> 1, 0, 84) - 0.5) * 4)) return cy > 3 && hash(wx >> 1, wy >> 1, 85) < 0.5 ? CL.line : grassPixel(wx, wy); // 위 잔디가 절벽 끝에 걸침
+        if (stair) { const band = (cy >> 2) & 1, side = cx < 4 || cx >= TILE - 4; return side ? CL.s4 : (cy & 3) === 3 ? CL.line : band ? CL.s1 : CL.hi; } // 계단: 밝은·어두운 디딤판
+        const col = Math.floor((wx + Math.floor(hash(0, wy >> 3, 86) * 6)) / 8), shade = hash(col, Math.floor(wy / 24), 87); // 세로 돌기둥 무늬
+        if (((wx + Math.floor(hash(0, wy >> 3, 86) * 6)) & 7) === 0) return CL.s4; // 기둥 사이 틈
+        if (cy >= TILE - 6 && wallRow(x, y + 1) === 0) return cy >= TILE - 2 ? CL.line : CL.s4; // 절벽 밑동 어둡게
+        if (row === 1 && cy < 9) return CL.hi; // 윗단 밝은 모서리
+        return shade < 0.3 ? CL.s3 : shade < 0.7 ? CL.s2 : CL.s1; }), px, py);
+      return; }
+    // 절벽 바로 아래 땅: 그림자 띠
+    if (wallRow(x, y - 1) && !isStair(x, y - 1)) { g.fillStyle = 'rgba(20,30,40,0.34)'; g.fillRect(px, py, TILE, 8); g.fillStyle = 'rgba(20,30,40,0.2)'; g.fillRect(px, py + 8, TILE, 6); g.fillStyle = 'rgba(20,30,40,0.1)'; g.fillRect(px, py + 14, TILE, 6); }
+    // 고원 옆·뒤 가장자리: 낮은 쪽으로 어두운 테두리
+    const side = (sx, w2) => { g.fillStyle = 'rgb(98,117,125)'; g.fillRect(sx, py, w2, TILE); g.fillStyle = 'rgb(158,176,176)'; g.fillRect(sx, py, w2, 2); g.fillStyle = 'rgb(24,48,56)'; g.fillRect(sx === px ? px : px + TILE - 2, py, 2, TILE); }; // 고원 옆: 돌 테두리
+    if (hgt(x - 1, y) < h0) side(px, 6); if (hgt(x + 1, y) < h0) side(px + TILE - 6, 6); if (hgt(x, y - 1) < h0 && !wallRow(x, y)) { g.fillStyle = 'rgb(158,176,176)'; g.fillRect(px, py, TILE, 3); g.fillStyle = 'rgb(24,48,56)'; g.fillRect(px, py, TILE, 1); }
+    if (h0 > 0) { g.fillStyle = `rgba(255,250,220,${0.08 * h0})`; g.fillRect(px, py, TILE, TILE); } // 높은 곳은 살짝 밝게
+  }
   function renderChunk(ci, cj) {
     const c = document.createElement('canvas');
     c.width = c.height = CPX;
@@ -604,6 +647,7 @@
             break;
         }
         { const gf = GFLOOR.get(y * W + x); if (gf) drawSheetTile(g, gf, px, py, TILE, x * TILE, y * TILE); } // 관리자가 깐 타일
+        if (x >= PILOT.x0 && y >= PILOT.y0 && x < PILOT.x1 && y < PILOT.y1) drawCliff(g, x, y, px, py); // 단차
         { const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under)) g.drawImage(floorArtId(e.k === 'floor' ? tileItem(e) : e.under), px, py, TILE, TILE); else if (e && e.k === 'farm') g.drawImage(farmArt(nearCanal(x, y)), px, py, TILE, TILE); else if (e && e.k === 'water') g.drawImage(canalArt(canalMask(x, y)), px, py, TILE, TILE); else if (e && e.k === 'bridge') { if (e.canal) g.drawImage(canalArt(canalMask(x, y)), px, py, TILE, TILE); drawBridgeTile(g, x, y, px, py, e.id); } } // 벽·장식 밑의 바닥도 · 밭 · 수로
         // 영토 색 + 국경선: 우리 나라는 진하게, 경계는 우리 나라 색 띠 / 나머지 경계는 흰 선
         const o = terrAt(x, y);
@@ -3427,7 +3471,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
@@ -3873,7 +3917,7 @@
     const cx = Math.floor(player.x / TILE), cy = Math.floor(player.y / TILE);
     const nx = cx + d[0], ny = cy + d[1];
     const room = player.scene === 'sky' ? player.room : null;
-    if (room ? roomBlocked(room, nx, ny) : blocked(nx, ny)) { player.x = cx * TILE + 16; player.y = cy * TILE + 16; player.moving = false; return; }
+    if (room ? roomBlocked(room, nx, ny) : (blocked(nx, ny) || heightBlocked(cx, cy, nx, ny))) { player.x = cx * TILE + 16; player.y = cy * TILE + 16; player.moving = false; return; }
     step.on = true; step.t = 0;
     step.fx = player.x; step.fy = player.y; step.tx = nx * TILE + 16; step.ty = ny * TILE + 16;
     step.dur = (keys.has('shift') ? 0.04 : STEP) / (room ? 1 : speedAt(nx, ny)) * (player.carry ? 1.25 : 1); // 훔친 걸 들면 느려짐
