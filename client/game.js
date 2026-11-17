@@ -343,6 +343,18 @@
     const now = Date.now(); if (now - sunCache.t < 1000) return sunCache.v; const d = new Date(now + 9 * 3600e3), h = d.getUTCHours() + d.getUTCMinutes() / 60;
     let v; if (h >= 6 && h <= 19) { const a = (h - 6) / 13; v = [(0.5 - a) * 1.8, 0.22 + Math.abs(a - 0.5) * 0.9, 0.3]; } else v = SHADOW.night;
     if (SLOT === 'night' && ONLINE) v = SHADOW.night; sunCache = { t: now, v }; return v; }
+  // 캐릭터가 나무 그림자에 들어가면 겹친 부분만 어둡게: 보이는 나무 그림자를 한 장(그림자 지도)에 모아 두고, 캐릭터를 그릴 때 그 지도와 겹치는 곳만 칠함
+  const SHADE = { on: false, cv: document.createElement('canvas'), x0: 0, y0: 0, tmp: document.createElement('canvas'), al: 0.3 };
+  function buildShadeMask(tx0, tx1, ty0, ty1) {
+    SHADE.on = false; if (!worldTrees()) return; const x0 = tx0 * TILE, y0 = ty0 * TILE - 80, w = (tx1 - tx0 + 1) * TILE, h = (ty1 - ty0 + 1) * TILE + 160;
+    if (SHADE.cv.width !== w || SHADE.cv.height !== h) { SHADE.cv.width = w; SHADE.cv.height = h; }
+    const g = SHADE.cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h); const [sk, len, al] = sunShadow(); SHADE.al = al; SHADE.x0 = x0; SHADE.y0 = y0; let any = false;
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) { const k = treeAt(tx, ty); if (!k) continue; const set = k === 'treeA' || k === 'treeB' ? WT.big : WT.mid, T2 = set[Math.floor(hash(tx, ty, 13) * set.length)], tw = T2.im.width * 2, th = T2.im.height * 2;
+      g.save(); g.translate(tx * TILE + 16 - x0, ty * TILE + 30 - y0); g.transform(1, 0, sk, len, 0, 0); g.scale(1, -1); g.drawImage(T2.sil, -tw / 2, -th, tw, th); g.restore(); any = true; }
+    SHADE.on = any;
+  }
+  function shadeBegin(o) { if (!SHADE.on || SHADE.disabled || player.scene !== 'ground') return null; const T3 = SHADE.tmp, L = Math.round(o.x - 64), Tp = Math.round(o.y - 112); if (T3.width !== 128) { T3.width = 128; T3.height = 128; } const g = T3.getContext('2d'); g.setTransform(1, 0, 0, 1, -L, -Tp); g.clearRect(L, Tp, 128, 128); g.imageSmoothingEnabled = false; return { g, L, Tp }; }
+  function shadeEnd(S2) { const g = S2.g; g.save(); g.globalCompositeOperation = 'source-atop'; g.globalAlpha = Math.min(0.6, SHADE.al * 1.25); g.drawImage(SHADE.cv, S2.L - SHADE.x0, S2.Tp - SHADE.y0, 128, 128, S2.L, S2.Tp, 128, 128); g.restore(); const pv = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false; ctx.drawImage(SHADE.tmp, S2.L, S2.Tp); ctx.imageSmoothingEnabled = pv; }
   function drawWorldTree(g, k, tx, ty, X, Y, t) {
     if (!worldTrees()) { spr(g, k, X, Y); return; }
     const set = k === 'treeA' || k === 'treeB' ? WT.big : WT.mid, T2 = set[Math.floor(hash(tx, ty, 13) * set.length)], im = T2.im, w = im.width * 2, h = im.height * 2;
@@ -3415,7 +3427,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
@@ -3879,10 +3891,12 @@
         const wpn = o === player ? myWeapon() : remWeapon(o), act = o === player ? curAct() : o.act, nowT = performance.now();
         const hk = o.hitAt ? Math.max(0, 1 - (nowT - o.hitAt) / 200) : 0, ox = o.x, oy = o.y; if (hk > 0) { o.x += o.hitDx * 9 * hk; o.y += o.hitDy * 6 * hk; } // 맞으면 뒤로 밀림
         const atkPose = o.swing && nowT - o.swing < 260;
-        if ((o.face | 0) === 1 && !down && !act) drawWeaponOn(ctx, o, wpn, t);
-        if (hk > 0.55) ctx.filter = 'brightness(3.2)'; // 맞은 순간 하얗게 번쩍
-        drawSprite(ctx, o.x, o.y, o.look, t, o.moving && !atkPose, o.face, atkPose); ctx.filter = 'none'; if (act && !down) drawToolOn(ctx, o, act, t); // 작업 중이면 손에 도구
-        if ((o.face | 0) !== 1 && !down && !act) drawWeaponOn(ctx, o, wpn, t);
+        const S2 = shadeBegin(o), G = S2 ? S2.g : ctx; // 나무 그림자 속이면 임시 판에 그린 뒤 겹친 부분만 어둡게
+        if ((o.face | 0) === 1 && !down && !act) drawWeaponOn(G, o, wpn, t);
+        if (hk > 0.55) G.filter = 'brightness(3.2)'; /* 맞은 순간 하얗게 번쩍 */
+        drawSprite(G, o.x, o.y, o.look, t, o.moving && !atkPose, o.face, atkPose); G.filter = 'none'; if (act && !down) drawToolOn(G, o, act, t); /* 작업 중이면 손에 도구 */
+        if ((o.face | 0) !== 1 && !down && !act) drawWeaponOn(G, o, wpn, t);
+        if (S2) shadeEnd(S2);
         o.x = ox; o.y = oy; ctx.globalAlpha = 1;
       }
     }
@@ -4009,7 +4023,9 @@
     for (const f of FRAGS) if (!MY_FRAGS.has(f.i) && f.x > x0 && f.x < x1 && f.y > y0 && f.y < y1) list.push({ x: f.x, y: f.y, draw: (g, X, Y) => drawFrag(g, X, Y, t, f.i) });
     list.push(player);
     drawLoots(ctx, t);
+    buildShadeMask(tx0, tx1, ty0, ty1);
     drawActors(list, t);
+    SHADE.on = false;
     { const c = atkCharge(); if (c >= 0.25 && !ATK.chFx && PFXW) { ATK.chFx = wfx('spell-charge', player.x, player.y, {}, { follow: player }); SND.play('charge'); ATK.full = false; } if (c >= 1 && !ATK.full) { ATK.full = true; SND.play('chargeFull'); } if (c >= 0) { ctx.strokeStyle = c >= 1 ? '#fff2a8' : 'rgba(159,211,255,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(player.x, player.y - 24, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c); ctx.stroke(); if (c >= 1) { ctx.font = `700 12px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff2a8'; ctx.fillText('차징!', player.x, player.y - 100); } } }
     drawWfx(Math.min(0.05, lastDt || 0.016), groundCam.x, groundCam.y);
     if (hold.on) { // 꾹 누르기 게이지
