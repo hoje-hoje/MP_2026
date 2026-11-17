@@ -279,7 +279,7 @@
     const ob = ART.x_obelisk; let top = y - 60, bx = x - 32 + sx, bw = 64, bh = 64;
     if (ob) { const n0 = 32, fw0 = ob.width / n0; if (!OBSIL.c) { const c = document.createElement('canvas'); c.width = fw0; c.height = ob.height; const q = c.getContext('2d'); q.drawImage(ob, 0, 0, fw0, ob.height, 0, 0, fw0, ob.height); q.globalCompositeOperation = 'source-in'; q.fillStyle = '#000'; q.fillRect(0, 0, fw0, ob.height); OBSIL.c = c; } // 비석 그림자 (해 방향 따라)
       const [sk, len, al] = sunShadow(); g.save(); g.globalAlpha = al; g.translate(x + sx, y + 6); g.transform(1, 0, sk, len, 0, 0); g.scale(1, -1); g.drawImage(OBSIL.c, -44, -156, fw0 * 2, ob.height * 2); g.restore();
-      g.fillStyle = 'rgba(0,0,0,0.28)'; ell(g, x + sx, y + 4, 26, 7); }
+      g.fillStyle = 'rgba(0,0,0,0.28)'; ell(g, x + sx, y - 1, 32, 9); }
     if (ob) { const n = 32, fw = ob.width / n, fo = Math.floor(performance.now() / 80 + t.id * 5) % n; bw = fw * 2; bh = ob.height * 2; bx = x - 44 + sx; top = y + 6 - 156; g.drawImage(ob, fo * fw, 0, fw, ob.height, bx, top, bw, bh); } /* 2배로 크게 */ // 수정 대신 룬 비석
     else g.drawImage(altarSheet(t.type), f * 32, 0, 32, 32, x - 32 + sx, y - 60, 64, 64);
     const hn = HITN.get(t.id); // 내가 때린 횟수
