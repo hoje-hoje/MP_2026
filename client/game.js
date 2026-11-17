@@ -608,7 +608,7 @@
         }
         switch (t) {
           case T.VOID:
-            if (ART.w_grass) { if (waterDepth(x, y) >= 4.5 && waterDepth(x - 1, y) >= 4 && waterDepth(x + 1, y) >= 4 && waterDepth(x, y - 1) >= 4 && waterDepth(x, y + 1) >= 4) { if (ART.w_wdp) g.drawImage(ART.w_wdp, (x * 16) % 64, (y * 16) % 64, 16, 16, px, py, TILE, TILE); else { g.fillStyle = 'rgb(58,130,203)'; g.fillRect(px, py, TILE, TILE); } } else g.putImageData(beachWaterTile(x, y), px, py); break; } // 경북 밖도 바다 → 섬처럼 (먼 바다는 한 색으로 빠르게)
+            if (ART.w_grass) { if (waterDepth(x, y) >= 4.5 && waterDepth(x - 1, y) >= 4 && waterDepth(x + 1, y) >= 4 && waterDepth(x, y - 1) >= 4 && waterDepth(x, y + 1) >= 4) { if (ART.w_wdp) g.drawImage(ART.w_wdp, (x * 16) % ART.w_wdp.width, (y * 16) % ART.w_wdp.height, 16, 16, px, py, TILE, TILE); else { g.fillStyle = 'rgb(58,130,203)'; g.fillRect(px, py, TILE, TILE); } } else g.putImageData(beachWaterTile(x, y), px, py); break; } // 경북 밖도 바다 → 섬처럼 (먼 바다는 한 색으로 빠르게)
             g.fillStyle = '#1b1430'; g.fillRect(px, py, TILE, TILE);
             if (h < 0.03) { g.fillStyle = h < 0.01 ? '#f3dcff' : '#8d7ab8'; g.fillRect(px + (h * 997 % 28), py + (h * 577 % 28), 2, 2); }
             break;
