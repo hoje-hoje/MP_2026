@@ -84,6 +84,7 @@
     erodeStep: 10, erodeFall: 50,  // 균열: 멸망 선포 다음 날부터 매일 아침 영역마다 침식 +10%, 나라 전체 침식 50% 이상이면 멸망 (수도는 침식 안 됨)
     maxWalls: 60, maxTraps: 12,    // 나라당 설치 한도
     floorSpeed: 1.5,               // 우리 나라 바닥 위에서 빨라지는 배수
+    chopHandSec: 4, regrowMin: 20, gatherSec: 0.8, // 맨손 나무 베기 4초 · 풀·꽃은 20분 뒤 다시 자람
     wallBreakSec: 5, chopSec: 2,   // 방벽 부수기·나무 베기 시간
     scoutHits: 10,                 // 적 수정을 이만큼 때리면 그 나라 병력이 보임
     scoutResetMin: 10,             // 10분 동안 다시 안 때리면 횟수 처음부터
@@ -100,6 +101,16 @@
   const T = { VOID: 0, GRASS: 1, FOREST: 2, SAND: 3, WATER: 4, MOUNTAIN: 5, HOLY: 6, WALL: 7 };
   function hash(x, y, s = 0) { let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
   // 나무가 있는 칸인지 (지형 값만 보고 정해짐 → 서버와 화면이 같은 결과)
+  // 채집 재료 (내 가방 'm_…'). shared: 나라 저장소에 넣으면 쓰이는 이름 (건축 재료)
+  const MATS = { m_wood: { name: '목재', shared: 'wood' }, m_stone: { name: '돌', shared: 'stone' }, m_ore: { name: '광석', shared: 'ore' }, m_fiber: { name: '풀' }, m_flower: { name: '꽃' }, m_hide: { name: '가죽' } };
+  // 땅에 난 풀·꽃 (화면에 그려지는 소품과 같은 규칙) → 채집하면 재료
+  function plantKind(t, x, y) {
+    if (t !== T.GRASS) return null; const h = hash(x, y, 7);
+    if (h >= 0.004 && h < 0.010) return { k: 'bush', mat: 'm_fiber', n: 2, name: '덤불' };
+    if (h >= 0.010 && h < 0.016) return { k: 'flower', mat: 'm_flower', n: 1, name: '꽃' };
+    if (h >= 0.019 && h < 0.023) return { k: 'fern', mat: 'm_fiber', n: 1, name: '풀' };
+    return null;
+  }
   function treeKind(t, x, y) {
     if (t !== T.FOREST && t !== T.GRASS) return null;
     const h = hash(x, y, 7);
@@ -627,7 +638,7 @@
           vaxed: this.s.riftNext ? Object.keys(this.s.vax).filter((t) => this.s.vax[t] === this.s.riftNext.wave && this.s.owner[t] === n.id).map(Number) : [],
           erosion: this.nationErosion(n.id),
           defaultDef: n.defaultDef || null, intelAny: n.intelAny || 0, intel: n.intel || {},
-          wood: n.wood || 0, vaccine: n.vaccine || 0, items: normItems(n.items), vaccinePrice: NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0),
+          wood: n.wood || 0, stone: n.stone || 0, ore: n.ore || 0, vaccine: n.vaccine || 0, items: normItems(n.items), vaccinePrice: NUM.vaccineBase + NUM.vaccineStep * (n.vaccBought || 0),
           raceOpen: !!n.raceOpen, isKing: n.king === key, kingName: n.kingName, members: n.members.length, territories: this.territoriesOf(n.id).length,
           declaresLeft: this.declaresLeft(n.id, this.s.curSlot), provinces: n.provinces, code: n.code,
           // 접속 열쇠(토큰)는 절대 내보내지 않는다: 순번만
@@ -773,5 +784,5 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { MATS, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

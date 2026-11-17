@@ -527,6 +527,7 @@
 
   // 칸이 바뀌면 그 칸이 들어 있는 청크만 바로 다시 그린다 (깜빡임 없게)
   const staleChunks = new Map();
+  const PICKED = new Map(); const pickedNow = (i) => { const t2 = PICKED.get(i); return t2 != null && Date.now() - t2 < MPRules.NUM.regrowMin * 60e3; }; // 뜯은 풀·꽃 (다시 자랄 때까지 안 보임)
   function dirtyTile(i) {
     const x = i % W, y = Math.floor(i / W), keys = new Set();
     for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) keys.add(Math.floor((x + dx * 3) / CHUNK) + ',' + Math.floor((y + dy * 3) / CHUNK));
@@ -762,7 +763,8 @@
         if (t === T.FOREST) {
           if (h >= 0.26 && h < 0.29) pix(g, h < 0.275 ? 'stump' : 'berry', px + 16, py + 30);
         } else if (t === T.GRASS) {
-          if (h < 0.004) { /* 나무 자리 */ }
+          if (pickedNow(y * W + x)) { /* 뜯은 자리 */ }
+          else if (h < 0.004) { /* 나무 자리 */ }
           else if (h < 0.010) spr(g, 'bush', px + 16, py + 30);
           else if (h < 0.016) pix(g, h < 0.013 ? 'flower_r' : 'flower_y', px + 16, py + 30);
           else if (h < 0.019) pix(g, 'mushroom', px + 16, py + 30);
@@ -1790,13 +1792,23 @@
   }
   // ------------------------------------------------------------ 내 가방 · 거래 (메이플식)
   let MY_BAG = {};
+  function matIcon(g, k, W2, H2) { // 재료 그림 (2px 도트)
+    const s2 = Math.max(2, Math.floor(W2 / 24)), R = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(W2 / 2 + x * s2, H2 / 2 + y * s2, w * s2, h * s2); };
+    if (k === 'm_wood') { R('#2b2340', -8, -4, 16, 9); R('#9a6a35', -7, -3, 14, 7); R('#c98c4a', -7, -3, 14, 2); R('#e8c38a', 5, -3, 2, 7); R('#7a4e24', -4, 1, 6, 1); }
+    else if (k === 'm_stone') { R('#2b2340', -7, -5, 14, 11); R('#8f8aa0', -6, -4, 12, 9); R('#b9b4c8', -6, -4, 8, 3); R('#6d6880', 1, 2, 5, 2); }
+    else if (k === 'm_ore') { R('#2b2340', -7, -5, 14, 11); R('#6d6880', -6, -4, 12, 9); R('#ffd84d', -4, -2, 3, 3); R('#7fd0ff', 2, 0, 3, 3); R('#ffd84d', 0, -4, 2, 2); }
+    else if (k === 'm_fiber') { for (const [x, h] of [[-5, 9], [-2, 12], [1, 10], [4, 8]]) { R('#2b4a2e', x, 6 - h, 2, h); R('#5fbf5a', x, 6 - h, 1, h - 1); } }
+    else if (k === 'm_flower') { R('#3f8f3a', -1, 0, 2, 7); R('#2b2340', -5, -7, 10, 9); R('#ff7aa8', -4, -6, 8, 7); R('#ffe066', -1, -3, 2, 2); }
+    else if (k === 'm_hide') { R('#2b2340', -7, -6, 14, 12); R('#b07a48', -6, -5, 12, 10); R('#d9a46c', -6, -5, 12, 2); R('#8a5a30', -3, 0, 6, 3); }
+  }
   function persIcon(cv, k) { // 개인 물건 그림: 물고기 · 모자 · 도구
     const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height; g.clearRect(0, 0, W2, H2); g.imageSmoothingEnabled = false;
     if (k.startsWith('hat:')) { const H = HATS[k.slice(4)]; if (H) { const s2 = Math.min(4, Math.floor((W2 - 6) / H.cv.width), Math.floor((H2 - 6) / H.cv.height)); g.drawImage(H.cv, (W2 - H.cv.width * s2) / 2, (H2 - H.cv.height * s2) / 2, H.cv.width * s2, H.cv.height * s2); } return; }
     if (k.startsWith('tool:')) { const T2 = TOOL[k.slice(5)]; if (T2) { const s2 = Math.max(1, Math.floor((H2 - 6) / T2.cv.height)); g.save(); g.translate(W2 / 2, H2 / 2); g.rotate(0.5); g.drawImage(T2.cv, -T2.cv.width * s2 / 2, -T2.cv.height * s2 / 2, T2.cv.width * s2, T2.cv.height * s2); g.restore(); } return; }
+    if (MPRules.MATS[k]) { matIcon(g, k, W2, H2); return; }
     const B = BUILD_BY[k]; if (B && B.fish) drawFish(g, W2 / 2, H2 / 2, B.fish, Math.max(2, Math.floor(W2 / 22)));
   }
-  const persName = (k) => k.startsWith('hat:') ? (HATS[k.slice(4)] || {}).name || k : k.startsWith('tool:') ? (MPRules.TOOLS[k.slice(5)] || {}).name || k : (BUILD_BY[k] || {}).name || k;
+  const persName = (k) => MPRules.MATS[k] ? MPRules.MATS[k].name : k.startsWith('hat:') ? (HATS[k.slice(4)] || {}).name || k : k.startsWith('tool:') ? (MPRules.TOOLS[k.slice(5)] || {}).name || k : (BUILD_BY[k] || {}).name || k;
   function myTradables() { const out = []; for (const [k, v] of Object.entries(MY_BAG)) if (v > 0) out.push({ k, n: v }); for (const k of Object.keys(MY_HATS)) out.push({ k: 'hat:' + k, n: 1 }); for (const k of Object.keys(MY_TOOLS)) out.push({ k: 'tool:' + k, n: 1 }); return out; }
   function openBag() {
     const list = myTradables();
@@ -2378,6 +2390,7 @@
     if (k === 'escape') { if (BP.open) { BP.closed = true; BP.open = false; $('boardPanel').hidden = true; } $('fragBook').hidden = true; $('pmenu').hidden = true; $('barracks').hidden = true; $('bagBox').hidden = true; closeTalk(); $('rulebook').hidden = true; $('bigmap').hidden = true; $('closet').hidden = true; $('coupon').hidden = true; $('wanderBox').hidden = true; $('war').hidden = true; $('puzzle').hidden = true; $('reinBox').hidden = true; $('bailBox').hidden = true; $('warCast').hidden = true; $('storeBox').hidden = true; $('shopBox').hidden = true; if (build.on) setBuild(false); }
   });
   addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if (k === 'e') releaseE(); if (k === 'j') atkUp(); });
+  $('storeDeposit').addEventListener('click', () => { if (netOn) ws.send(JSON.stringify({ t: 'donateMat' })); });
   $('atkBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); atkDown(); });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('atkBtn').addEventListener(ev, atkUp);
   $('swapBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); swapWeapon(); });
@@ -2578,8 +2591,9 @@
       if (hx === Math.floor(ptx) && hy === Math.floor(pty)) return { kind: 'info', text: `${CROPS[f.crop.c].name} 자라는 중 · ${fmtLeft(f.crop.d - (Date.now() - f.crop.at))} 남음${f.crop.w ? ' · 💧수로' : ''}${f.crop.f ? ' · 🌿비료' : ''}` };
     }
     { const fe = TILES[fy * W + fx], wet = (tileAt(fx, fy) === T.WATER && !(fe && fe.k === 'bridge')) || (fe && fe.k === 'water') || (GFLOOR.size && isWater(GFLOOR.get(fy * W + fx))); if (wet && MY_NID && !build.on) return !MY_TOOLS.rod ? { kind: 'info', text: '🎣 물 · ' + TOOL_HINT('rod') } : { kind: 'fish', x: fx, y: fy, text: `낚시하기 (E)${WEATHER === 'rain' ? ' · 🌧 비 보너스' : ''}` }; } // 물을 바라보면 낚시
-    if (treeAt(fx, fy) && MY_NID && ownerOf(terrAt(fx, fy)) === MY_NID) return ONLINE && !MY_TOOLS.axe ? { kind: 'info', text: '🌲 나무 · ' + TOOL_HINT('axe') } : { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '🪓 나무 베기 · E 꾹 누르기' };
-    if (tileAt(fx, fy) === T.MOUNTAIN && MY_NID && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ownerOf(terrAt(fx + dx, fy + dy)) === MY_NID) && ONLINE && !build.on) return !MY_TOOLS.pick ? { kind: 'info', text: '⛰ 산 · ' + TOOL_HINT('pick') } : { kind: 'dig', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '⛏ 산 캐기 · E 꾹 누르기 (길이 열려요)' };
+    if (treeAt(fx, fy) && ONLINE && !build.on) return MY_TOOLS.axe ? { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '🪓 나무 베기 · E 꾹 누르기 (목재 → 내 가방)' } : { kind: 'chop', x: fx, y: fy, hold: MPRules.NUM.chopHandSec * 1000, text: '✋ 맨손으로 나무 베기 · E 꾹 (도끼가 있으면 빨라요)' }; // 누구나 어디서든
+    { const P = ONLINE && !build.on && !treeAt(fx, fy) && MPRules.plantKind(tileAt(fx, fy), fx, fy); if (P && !pickedNow(fy * W + fx)) return { kind: 'gather', x: fx, y: fy, hold: MPRules.NUM.gatherSec * 1000, text: `${P.mat === 'm_flower' ? '🌸 꽃 따기' : '🌿 ' + P.name + ' 뜯기'} · E 꾹` }; } // 풀·꽃 채집
+    if (tileAt(fx, fy) === T.MOUNTAIN && ONLINE && !build.on) return !MY_TOOLS.pick ? { kind: 'info', text: '⛰ 산 · ' + TOOL_HINT('pick') } : { kind: 'dig', x: fx, y: fy, hold: MPRules.NUM.chopSec * 1000, text: '⛏ 산 캐기 · E 꾹 (돌 → 내 가방 · 길이 열려요)' };
     if (e && e.k === 'wall' && e.n === MY_NID && MY_JOB === 'mechanic' && (e.hp ?? (e.max || MPRules.NUM.buildHp)) < (e.max || MPRules.NUM.buildHp)) return { kind: 'repairB', x: fx, y: fy, text: `🔧 ${(BUILD_BY[tileItem(e)] || {}).name || '벽'} 고치기 · E (꾹 = 계속) · 내구도 ${e.hp}/${e.max || MPRules.NUM.buildHp}` };
     if (e && e.k === 'wall' && e.n !== MY_NID) return { kind: 'hitB', x: fx, y: fy, text: `${natName(e.n)} ${(BUILD_BY[tileItem(e)] || {}).name || '벽'} 때리기 · E (꾹 = 계속) · 내구도 ${e.hp ?? MPRules.NUM.buildHp}/${MPRules.NUM.buildHp}` };
     return null;
@@ -2589,7 +2603,7 @@
   let stunUntil = 0, jailUntil = 0;
   let hitTimer = 0, hitOn = false;
   let farmFlash = 0;
-  function curAct() { return performance.now() < farmFlash ? 'farm' : FISHING.on ? 'fish' : hitOn ? 'hit' : hold.on ? ({ chop: 'chop', mine: 'mine', dig: 'dig' }[hold.kind] || null) : null; }
+  function curAct() { return performance.now() < farmFlash ? 'farm' : FISHING.on ? 'fish' : hitOn ? 'hit' : hold.on ? ({ chop: 'chop', mine: 'mine', dig: 'dig', gather: 'farm' }[hold.kind] || null) : null; }
   function pressE() { if (near && near.kind === 'mine') { startMine(near); return; } if (near && (near.kind === 'hitB' || near.kind === 'repairB')) { const n = near, go = () => { if (netOn) ws.send(JSON.stringify({ t: n.kind, x: n.x, y: n.y })); player.atkT = 0.2; }; go(); clearInterval(hitTimer); hitTimer = setInterval(go, 420); hitOn = true; return; } if (near && near.hold) startHold(near); else interact(); }
   function releaseE() { clearInterval(hitTimer); hitOn = false; if (hold.on && hold.kind !== 'mine') cancelHold(); }
   function startHold(n) {
@@ -2603,7 +2617,7 @@
   function tickHold() {
     if (!hold.on || performance.now() - hold.t0 < hold.ms) return;
     hold.on = false;
-    if (netOn) ws.send(JSON.stringify(hold.kind === 'mine' ? { t: 'mine', terr: hold.terr } : hold.kind === 'steal' ? { t: 'steal', nid: hold.nid } : { t: hold.kind === 'chop' ? 'chop' : hold.kind === 'dig' ? 'dig' : 'breakWall', x: hold.x, y: hold.y }));
+    if (netOn) ws.send(JSON.stringify(hold.kind === 'mine' ? { t: 'mine', terr: hold.terr } : hold.kind === 'steal' ? { t: 'steal', nid: hold.nid } : { t: hold.kind === 'chop' ? 'chop' : hold.kind === 'dig' ? 'dig' : hold.kind === 'gather' ? 'gather' : 'breakWall', x: hold.x, y: hold.y }));
   }
   // 설치 모드 (G): 저장소의 바닥·방벽·덫을 바로 앞 칸에 놓기
   const build = { on: false, id: 'f_stone', tab: 'all', shape: '1' };
@@ -2653,6 +2667,7 @@
   let STORE_TAB = 'all';
   function resIcon(cv, kind) { // 저장소 재료 그림 (직접 그림)
     const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, cv.width, cv.height); g.save(); g.translate(cv.width / 2, cv.height / 2); g.scale(2, 2);
+    if (kind === 'stone' || kind === 'ore') { g.restore(); matIcon(g, 'm_' + kind, cv.width, cv.height); return; } // 저장소: 돌·광석
     if (kind === 'coin' && ART.x_coin) { g.drawImage(ART.x_coin, -10, -10, 20, 20); } /* 저장소: 받은 코인 그림 (멈춤) */ else if (kind === 'coin') { g.fillStyle = '#2b2340'; pxDisc(g, 0, 0, 10); g.fillStyle = '#b8862b'; pxDisc(g, 0, 0, 8); g.fillStyle = '#ffd84d'; pxDisc(g, -1, -1, 7); g.fillStyle = '#fff6c8'; g.fillRect(-4, -5, 4, 2); g.fillStyle = '#b8862b'; g.fillRect(-1, -4, 2, 8); }
     if (kind === 'army') { g.fillStyle = '#2b2340'; g.fillRect(-2, -12, 4, 18); g.fillStyle = '#e8ecf4'; g.fillRect(-1, -11, 2, 15); g.fillStyle = '#e8c260'; g.fillRect(-6, 4, 12, 3); g.fillStyle = '#8a5a2b'; g.fillRect(-1, 7, 2, 5); g.fillStyle = '#ffd84d'; g.fillRect(-2, 11, 4, 2); }
     if (kind === 'wood') { for (const [x, y] of [[-6, 2], [4, 2], [-1, -6]]) { g.fillStyle = '#2b2340'; g.fillRect(x - 6, y - 4, 12, 9); g.fillStyle = '#9a6a3a'; g.fillRect(x - 5, y - 3, 10, 7); g.fillStyle = '#e0aa6a'; pxDisc(g, x + 3, y, 3); g.fillStyle = '#b07a44'; g.fillRect(x + 2, y - 1, 2, 2); } }
@@ -2664,7 +2679,7 @@
     const sa = $('storeArt'), sg = sa.getContext('2d'); sg.imageSmoothingEnabled = false; const grd = sg.createLinearGradient(0, 0, 0, 120); grd.addColorStop(0, '#bfe6ff'); grd.addColorStop(1, '#e9f7d8'); sg.fillStyle = grd; sg.fillRect(0, 0, 120, 120);
     const key = STORE_ART[(nationsPub[MY_NID] && nationsPub[MY_NID].storeLv) | 0], im = ART['x_' + key]; if (im) { const k = Math.min(100 / im.width, 90 / im.height); sg.drawImage(im, 60 - im.width * k / 2, 110 - im.height * k, im.width * k, im.height * k); }
     $('storeName').textContent = `${natName(MY_NID)} 저장소`;
-    $('storeRes').innerHTML = [['coin', '코인', me.coin], ['army', '병력', me.army], ['wood', '목재', me.wood], ['vaccine', '백신', me.vaccine]].map(([k, l, v]) => `<div class="stR"><canvas data-res="${k}" width="56" height="56"></canvas><span>${l}</span><b>${(v || 0).toLocaleString()}</b></div>`).join('');
+    $('storeRes').innerHTML = [['coin', '코인', me.coin], ['army', '병력', me.army], ['wood', '목재', me.wood], ['stone', '돌', me.stone], ['ore', '광석', me.ore], ['vaccine', '백신', me.vaccine]].map(([k, l, v]) => `<div class="stR"><canvas data-res="${k}" width="56" height="56"></canvas><span>${l}</span><b>${(v || 0).toLocaleString()}</b></div>`).join('');
     for (const c of $('storeRes').querySelectorAll('[data-res]')) resIcon(c, c.dataset.res);
     const TABS = [['all', '전체'], ['build', '🏗 건축'], ['farm', '🌱 농사'], ['crop', '🧺 작물·물고기']];
     const inTab = (b) => STORE_TAB === 'all' || (STORE_TAB === 'build' ? ['floor', 'wall', 'deco', 'trap'].includes(b.cat) : STORE_TAB === 'farm' ? FARM_CATS.has(b.cat) : b.cat === 'crop');
@@ -2989,6 +3004,7 @@
     switch (m.t) {
       case 'welcome': {
         myId = m.id; netOn = true; store('mp2026.token', m.token);
+        if (m.picked) { PICKED.clear(); const t0 = Date.now(); for (const i of m.picked) PICKED.set(i, t0); } // 뜯긴 풀·꽃
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
         player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {}; MY_JOB = m.job || null; PV.hp = m.hp ?? HPMAX; player.hp = PV.hp; loadPfxW(); // 전투 이펙트 미리 불러 둠 (첫 공격부터 보이게) MY_FRAGS = new Set(m.myFrags || []); MY_SIDE = m.side || null; FRAGS = m.frags || []; LOOTS.clear(); for (const L of m.loot || []) LOOTS.set(L.id, L); MY_PCOIN = m.pcoin | 0; MY_HATS = m.hats || {}; MY_BAG = m.bag || {}; if (player.look.hat && !MY_HATS[player.look.hat]) player.look.hat = ''; renderInv();
@@ -3056,6 +3072,7 @@
       case 'tile': { const prev = TILES[m.i]; if (m.e && prev && m.e.hp != null && m.e.hp !== (prev.hp ?? (prev.max || MPRules.NUM.buildHp))) { HPSEEN.set(m.i, performance.now()); SND.play(m.e.hp < (prev.hp ?? 1e9) ? 'hit' : 'place'); } else if (m.e && m.e.n === MY_NID && !prev) SND.play('place'); const wasW = prev && (prev.k === 'water' || prev.k === 'bridge'), isW = m.e && (m.e.k === 'water' || m.e.k === 'bridge'); if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); if (wasW || isW) { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx || dy) dirtyTile(m.i + dy * W + dx); if ((m.e || prev).k === 'bridge') for (let k = 3; k <= 16; k++) { dirtyTile(m.i + k); dirtyTile(m.i - k); dirtyTile(m.i + k * W); dirtyTile(m.i - k * W); } } break; } // 수로가 바뀌면 이웃 밭·수로 다시 그림
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
       case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break;
+      case 'picked': PICKED.set(m.i, Date.now()); dirtyTile(m.i); SND.play('place'); break;
       case 'dug': GCLEAR.add(m.i); invalidateChunks(); mapSig = ''; SND.play('chop'); break;
       case 'weapons': MY_WEAPONS = m.weapons || {}; MY_WEAPON = m.weapon || null; swapIcon.w = null; if (m.pcoin != null) { MY_PCOIN = m.pcoin; renderInv(); } if (m.text) toast(m.text); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'hitfx': HITFX.set(m.terr, performance.now() + 120); break;
@@ -3559,7 +3576,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), face: (f) => { if (testMode) player.face = f; }, shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
