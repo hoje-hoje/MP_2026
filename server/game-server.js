@@ -228,6 +228,7 @@ const TERRAIN = Buffer.from(MAP.terrain_b64, 'base64');
 let CLEAR_SET = new Set();
 function rebuildClear() { CLEAR_SET = new Set(Object.keys((state.groundEdits || {}).clear || {}).map((k) => { const [x, y] = k.split(',').map(Number); return y * MAP.width + x; })); for (const i of Object.keys((world && world.s && world.s.dug) || {})) CLEAR_SET.add(+i); } // 관리자가 치운 산 + 곡괭이로 캔 산
 const tileAt = (x, y) => { if (x < 0 || y < 0 || x >= MAP.width || y >= MAP.height) return TT.VOID; const i = y * MAP.width + x, t = TERRAIN[i]; return t === TT.MOUNTAIN && CLEAR_SET.has(i) ? TT.GRASS : t; };
+for (const t of MAP.territories) if (t && t.portal) { const q = MPRules.portalSpot(Object.assign({}, t, { portal: null }), tileAt); t.portal = q; if (world.t[t.id]) world.t[t.id].portal = q; } // 비석이 커져서 하늘 포털 기본 자리를 비석 옆으로
 const treeHere = (x, y) => !CLEAR_SET.has(y * MAP.width + x) && treeKind(tileAt(x, y), x, y);
 const terrAtTile = (x, y) => terrAtPx(x * 32 + 16, y * 32 + 16);
 const walkableTerrain = (k) => k === TT.GRASS || k === TT.FOREST || k === TT.SAND;

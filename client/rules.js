@@ -674,7 +674,7 @@
     return out;
   }
   // 하늘 포털 자리: 수도 후보 영토는 지도에 정해진 자리, 그 밖의 영토(천도한 수도 등)는 제단 위쪽의 걸을 수 있는 칸
-  const PORTAL_OFFS = [[0, -3], [0, 3], [-3, -2], [3, -2], [-3, 2], [3, 2], [0, -4], [0, 4], [-4, 0], [4, 0]];
+  const PORTAL_OFFS = [[4, 1], [-4, 1], [4, 3], [-4, 3], [5, 0], [-5, 0], [3, 4], [-3, 4], [0, 5], [0, -5]]; // 비석이 커져서 포털은 옆으로
   function portalSpot(t, tileAt) {
     if (t.portal) return t.portal;
     for (const [dx, dy] of PORTAL_OFFS) { const x = t.altar[0] + dx, y = t.altar[1] + dy, k = tileAt(x, y); if ((k === T.GRASS || k === T.FOREST || k === T.SAND) && !treeKind(k, x, y) && (tileAt(x, y + 1) === T.GRASS || tileAt(x, y + 1) === T.SAND || tileAt(x, y + 1) === T.FOREST)) return [x, y]; }

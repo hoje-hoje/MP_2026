@@ -160,6 +160,7 @@
     for (const t of data.territories) { terrs[t.id] = t; t.name = NM[t.id]; if (!window.MP_ONLINE && t.rift && WAVE_DAY[t.rift] <= DAY) gone[t.id] = 1; }
     solid = new Uint8Array(W * H);
     noTree = new Uint8Array(W * H);
+    for (const t of data.territories) if (t.portal) t.portal = MPRules.portalSpot(Object.assign({}, t, { portal: null }), tileAt); // 포털 기본 자리: 비석 옆
     for (const t of data.territories) { clearTrees(t.altar[0], t.altar[1], 3); if (t.portal) clearTrees(t.portal[0], t.portal[1], 3); }
     ulleung = data.ulleung;
     // 프로토타입: 지도 가운데에서 가장 가까운 수도 후보를 '우리 수도'로 삼는다
@@ -201,9 +202,9 @@
   }
 
   // 하늘로 가는 빛기둥
-  function drawPortal(g, x, y, mine) { const im = ART[mine ? 'x_portal_blue' : 'x_portal_red']; if (im) { // 받은 소용돌이 포털 그림 (움직임)
-      const n = mine ? 9 : 8, fw = im.width / n, f = Math.floor(performance.now() / 100) % n, t = performance.now() / 1000, bob = Math.round(Math.sin(t * 1.6) * 1) * 2, k = 1, w = fw * k, h = im.height * k;
-      g.fillStyle = mine ? 'rgba(80,170,255,0.22)' : 'rgba(255,60,110,0.22)'; ell(g, x, y, 26, 8);
+  function drawPortal(g, x, y, mine) { const im = ART.x_portal_blue; if (im) { // 받은 소용돌이 포털 그림 (움직임)
+      const n = 9, fw = im.width / n, f = Math.floor(performance.now() / 100) % n, t = performance.now() / 1000, bob = Math.round(Math.sin(t * 1.6) * 1) * 2, k = 2, w = fw * k, h = im.height * k;
+      g.fillStyle = 'rgba(80,170,255,0.25)'; ell(g, x, y, 40, 11);
       const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(im, f * fw, 0, fw, im.height, Math.round(x - w / 2), Math.round(y - h + bob - 4), w, h); g.imageSmoothingEnabled = pv;
       if (mine) { g.font = `700 15px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 4; g.strokeStyle = '#2b2340'; g.strokeText('수도', x, y - h - 14); g.fillStyle = '#fff6c8'; g.fillText('수도', x, y - h - 14); }
       return; }
@@ -276,7 +277,7 @@
     const fl = HITFX.get(t.id), hot = fl && performance.now() < fl; // 맞으면 0.12초 빨갛게 + 흔들림
     const sx = hot ? Math.round(Math.sin(performance.now() / 12) * 3) : 0;
     const ob = ART.x_obelisk; let top = y - 60, bx = x - 32 + sx, bw = 64, bh = 64;
-    if (ob) { const n = 32, fw = ob.width / n, fo = Math.floor(performance.now() / 80 + t.id * 5) % n; bw = fw; bh = ob.height; bx = x - 22 + sx; top = y + 4 - 78; g.drawImage(ob, fo * fw, 0, fw, bh, bx, top, bw, bh); } // 수정 대신 룬 비석
+    if (ob) { const n = 32, fw = ob.width / n, fo = Math.floor(performance.now() / 80 + t.id * 5) % n; bw = fw * 2; bh = ob.height * 2; bx = x - 44 + sx; top = y + 6 - 156; g.drawImage(ob, fo * fw, 0, fw, ob.height, bx, top, bw, bh); } /* 2배로 크게 */ // 수정 대신 룬 비석
     else g.drawImage(altarSheet(t.type), f * 32, 0, 32, 32, x - 32 + sx, y - 60, 64, 64);
     const hn = HITN.get(t.id); // 내가 때린 횟수
     if (hn && performance.now() - hn.at < 60000 && hn.n < MPRules.NUM.scoutHits) { g.font = `700 16px ${PFONT}`; g.textAlign = 'center'; g.lineWidth = 4; g.strokeStyle = '#2b2340'; g.strokeText(`${hn.n}/${MPRules.NUM.scoutHits}`, x, top - 10); g.fillStyle = '#ffd34d'; g.fillText(`${hn.n}/${MPRules.NUM.scoutHits}`, x, top - 10); }
@@ -347,7 +348,7 @@
     const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
     await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
-  const EXTRA = ['sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
+  const EXTRA = ['door_isaac', 'door_isaac_down', 'sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
   const TEMPLE = ['emote0', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'emote6', 'emote7', 'statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
@@ -2212,12 +2213,12 @@
       R('#9aa3bd', 24, 70, 10, 6); R('#9aa3bd', 62, 70, 10, 6); // 문턱 받침돌
     })); }
   function arch(g, x, y, side, label, down) {
-    const im = isaacDoor(down), pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.save();
+    const im = ART[down ? 'x_door_isaac_down' : 'x_door_isaac'] || isaacDoor(down), pv = g.imageSmoothingEnabled, dw = im.width === 48 ? 96 : im.width, dh = im.width === 48 ? 80 : im.height; g.imageSmoothingEnabled = false; g.save();
     if (side === 'N') { g.translate(x, y + TILE); }
     else if (side === 'S') { g.translate(x, y - TILE); g.rotate(Math.PI); }
     else if (side === 'W') { g.translate(x + TILE, y - 16); g.rotate(-Math.PI / 2); }
     else { g.translate(x - TILE, y - 16); g.rotate(Math.PI / 2); }
-    g.drawImage(im, -48, -76 + 6); g.restore(); g.imageSmoothingEnabled = pv;
+    g.drawImage(im, -dw / 2, -dh + 6, dw, dh); g.restore(); g.imageSmoothingEnabled = pv;
     if (side === 'W' || side === 'E') sign(g, x + (side === 'W' ? 90 : -90), y - 2 * TILE - 20, (side === 'W' ? '← ' : '') + label + (side === 'E' ? ' →' : ''));
     else sign(g, x, side === 'N' ? y - TILE - 26 : y - 2 * TILE - 30, (side === 'N' ? '↑ ' : '↓ ') + label);
   }
