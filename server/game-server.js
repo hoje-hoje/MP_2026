@@ -190,7 +190,7 @@ function canHurt(a, b) {
   return true;
 }
 function areaSend(s, msg) { const str = JSON.stringify(msg); for (const o of online.values()) if ((o === s || o.known.has(s.id) || (o.scene === s.scene && o.x != null && Math.hypot(o.x - s.x, o.y - s.y) < 900)) && o.ws.readyState === 1) o.ws.send(str); }
-function hurt(att, t, dmg, crit) {
+function hurt(att, t, dmg, crit, howO) {
   t.acc.hp = Math.max(0, (t.acc.hp ?? NUM.pvp.hp) - dmg); t.lastHurt = now(); dirty = true;
   if (t.acc.hp > 0) return { id: t.id, dmg, hp: t.acc.hp, crit };
   // 쓰러짐: 훔친 것은 원래 나라로, 내 가방 물고기 30%를 그 자리에 떨어뜨림
@@ -200,7 +200,7 @@ function hurt(att, t, dmg, crit) {
   if (drops.length) send(t.ws, { t: 'bag', bag: t.acc.bag });
   drops.forEach((d, i) => { const id = ++lootSeq, a = (i / Math.max(1, drops.length)) * Math.PI * 2; const L = { id, k: d.k, n: d.n, x: t.x + Math.cos(a) * 26, y: t.y + Math.sin(a) * 16, exp: now() + NUM.pvp.lootMin * 60e3 }; LOOT.set(id, L); areaSend(t, { t: 'loot', l: L }); });
   const an = world.nationOfPlayer(att.token), wk = att.atkW || 'fist', W3 = MPRules.WEAPONS[wk];
-  const how = `${W3.name}${att.atkLv ? ' 차징 공격' : ' 공격'}${crit ? ' (치명타!)' : ''}`;
+  const how = howO || `${W3.name}${att.atkLv ? ' 차징 공격' : ' 공격'}${crit ? ' (치명타!)' : ''}`;
   send(t.ws, { t: 'dead', by: att.acc.name, byNation: an ? an.name : '', byJob: jobOf(att) ? MPRules.JOBS[jobOf(att)].name : '', how, dmg, sec: NUM.pvp.respawnSec, drops });
   areaSend(t, { t: 'ko', a: att.id, v: t.id, by: att.acc.name, who: t.acc.name, how, sec: NUM.pvp.respawnSec });
   return { id: t.id, dmg, hp: 0, crit, dead: true };
@@ -989,6 +989,13 @@ wss.on('connection', (ws) => {
         if (!(n.items[B.id] > 0)) return send(ws, { t: 'err', text: '팔 작물이 없어요' });
         n.items[B.id] -= cnt; const coin = B.sell * cnt, mine = Math.max(1, Math.round(coin * NUM.cropSellMe)); n.coin += coin - mine; dirty = true; sendViews([n.id]); addPcoin(s, mine, `${B.name} 판매 몫 20%`);
         notifyNation(n.id, `🧺 ${s.acc.name}님이 ${B.name} ${cnt}개를 팔았어요 (나라 코인 +${coin - mine})`);
+        break;
+      }
+      case 'drown': { // 깊은 물에 너무 들어가면 익사 (주변에 땅이 없는 물 칸인지 서버가 확인)
+        if (s.scene !== 'ground' || s.x == null || (s.deadUntil || 0) > now()) return;
+        const tx = Math.floor(s.x / 32), ty = Math.floor(s.y / 32), wet = (a, b) => { const q = tileAt(a, b), e = world.s.tiles[tileIdx(a, b)]; return (q === TT.WATER || q === TT.VOID) && !(e && e.k === 'bridge'); };
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (!wet(tx + dx, ty + dy)) return;
+        hurt({ id: s.id, token: null, atkW: 'fist', atkLv: 0, acc: { name: '깊은 바다' } }, s, s.acc.hp ?? NUM.pvp.hp, false, '물에 빠짐');
         break;
       }
       case 'atk': { // 공격: 바라보는 방향 앞 네모 (멀리 쏘는 무기는 직선) · 서버가 판정

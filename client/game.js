@@ -125,7 +125,12 @@
     return h < 0.004 ? 'midA' : null;
   }
   function clearTrees(cx, cy, r) { for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) if (x >= 0 && y >= 0 && x < W && y < H) noTree[y * W + x] = 1; }
-  function speedAt(x, y) { const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under) && e.n === MY_NID) return MPRules.NUM.floorSpeed; const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
+  const DROWN = { t: 0, sent: -1e9 };
+  function swimmable(x, y) { if (x < 0 || y < 0 || x >= W || y >= H || !ART.w_wsh) return false; const t = tileAt(x, y), e = TILES[y * W + x]; return (t === T.WATER || t === T.VOID) && !(e && e.k === 'water') && !GWALL.has(y * W + x); } // 물에 들어갈 수 있음 (깊으면 잠김)
+  function depthAtPx(px, py) { const fx = px / TILE - 0.5, fy = py / TILE - 0.5, x = Math.floor(fx), y = Math.floor(fy), u = fx - x, v = fy - y, dd = (a, b) => (TILES[b * W + a] && TILES[b * W + a].k === 'bridge' ? 0 : waterDepth(a, b));
+    return dd(x, y) * (1 - u) * (1 - v) + dd(x + 1, y) * u * (1 - v) + dd(x, y + 1) * (1 - u) * v + dd(x + 1, y + 1) * u * v; }
+  const sinkOf = (o) => (player.scene === 'ground' && ART.w_wsh ? Math.max(0, Math.min(1, (depthAtPx(o.x, o.y) - 0.5) / 2.2)) : 0); // 0 = 안 잠김, 1 = 머리만
+  function speedAt(x, y) { if (swimmable(x, y) && !(TILES[y * W + x] && TILES[y * W + x].k === 'bridge')) return 0.55; const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under) && e.n === MY_NID) return MPRules.NUM.floorSpeed; const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
 
   const terrName = (t) => MPRules.terrName(t); // 영토 이름 (rules.js 와 같은 규칙)
 
@@ -580,25 +585,27 @@
       q.putImageData(id, 0, 0); out.push(c); } return out; }
   const deepCache = {}; function deepTile(x, y) { const P = ART.w_wdp.width, n = P / (P % 16 ? (P % 8 ? 1 : 8) : 16), k = ((x % n) + '_' + (y % n)); /* 무늬 주기마다 반복되는 칸 그림을 한 번만 만들어 둠 */
     if (!deepCache[k]) { const c = document.createElement('canvas'); c.width = c.height = TILE; c.getContext('2d').putImageData(tileImage((cx, cy) => seaPixel(9, x * TILE + cx, y * TILE + cy)), 0, 0); deepCache[k] = c; } return deepCache[k]; }
-  function beachWaterTile(x, y) {
+  function beachWaterTile(x, y, own) {
     if (SEA_MASK) { const f0 = beachWaterFill(x, y); return tileImage((cx, cy) => { SEAHIT = null; SHLV = -1; f0(cx, cy); if (SEAHIT && SEAREC) SEAREC(cx, cy, SEAD); if (SHLV >= 0 && SHREC) SHREC(cx, cy, SHLV); return SEAHIT || [0, 0, 0]; }); }
-    return tileImage(beachWaterFill(x, y)); }
-  function beachWaterFill(x, y) {
+    return tileImage(beachWaterFill(x, y, own)); }
+  function beachWaterFill(x, y, own) {
     const [c00, c10, c01, c11] = cornerVal(waterDepth, x, y), [l00, l10, l01, l11] = cornerVal((a, b) => (isLand(a, b) ? 1 : 0), x, y), shore = l00 + l10 + l01 + l11 > 0;
     const sandy = [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]].some(([dx, dy]) => tileAt(x + dx, y + dy) === T.SAND);
     return ((cx0, cy0) => { const cx = cx0 & ~1, cy = cy0 & ~1, u = (cx + 1) / TILE, v = (cy + 1) / TILE, wx = x * TILE + cx, wy = y * TILE + cy; // 2px 단위로 계산 → 도트 1칸씩 깔끔하게
       if (shore) { const lv = (l00 * (1 - u) * (1 - v) + l10 * u * (1 - v) + l01 * (1 - u) * v + l11 * u * v) * 1.25 + wave(wx, wy) * 0.4 + (hash(wx >> 3, wy >> 3, 73) - 0.5) * 0.18; /* 잔 점박이 없이 굵은 들쭉날쭉만 */ // 땅이 물 쪽으로 구불구불 튀어나옴 → 해안선이 칸 모양으로 안 보이게
         if (sandy && !SEA_MASK && lv > 0.41 && lv <= 0.6) return BEACH.wet; // 파도가 오르내리는 진한(젖은) 모래 띠
         if (sandy && SEA_MASK && lv > 0.41 && lv <= 0.6) { SHLV = lv; return BEACH.wet; }
-        if (lv > 0.6) { if (sandy) { const hh = hash(wx >> 1, wy >> 1, 61); return hh < 0.05 ? BEACH.sand2 : BEACH.sand; } return grassPixel(wx, wy); }
+        if (lv > 0.6) { if (own) return own(cx, cy); if (sandy) { const hh = hash(wx >> 1, wy >> 1, 61); return hh < 0.05 ? BEACH.sand2 : BEACH.sand; } return grassPixel(wx, wy); }
         if (lv > 0.54) return sandy ? BEACH.wet : BEACH.line; if (lv > 0.47) return BEACH.foam; if (lv > 0.41) return BEACH.foam2; } // 모래 → 젖은 모래 → 흰 거품 → 옅은 거품 → 물
       const d = c00 * (1 - u) * (1 - v) + c10 * u * (1 - v) + c01 * (1 - u) * v + c11 * u * v + wave(wx, wy) + (BAY[((cy >> 1) & 3) * 4 + ((cx >> 1) & 3)] / 16 - 0.5) * 0.14;
       if (ART.w_wsh) return d < 0.3 ? BEACH.foam2 : seaPixel(d, wx, wy); // 물 그림의 빛 그물 무늬: 얕은 곳 청록 / 깊은 곳 파랑 (경계는 디더로 섞임)
       return d < 0.3 ? BEACH.foam2 : d < 1.1 ? BEACH.w1 : d < 1.5 ? BEACH.w2 : d < 2.0 ? BEACH.w3 : d < 2.7 ? BEACH.w4 : BEACH.w5; });
   }
-  function beachSandTile(x, y) { // 모래 + 알갱이 + 잔디가 모래 위로 삐죽 넘어오는 가장자리 (어두운 청록 테두리)
+  const nearSea = (x, y) => [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]].some(([dx, dy]) => !isLand(x + dx, y + dy));
+  function beachSandTile(x, y) { return tileImage(beachSandFill(x, y)); }
+  function beachSandFill(x, y) { // 모래 + 알갱이 + 잔디가 모래 위로 삐죽 넘어오는 가장자리 (어두운 청록 테두리)
     const [g00, g10, g01, g11] = cornerVal((a, b) => (isGrassy(a, b) ? 1 : 0), x, y), any = g00 + g10 + g01 + g11 > 0;
-    return tileImage((cx, cy) => { const wx = x * TILE + cx, wy = y * TILE + cy, hh = hash(wx >> 1, wy >> 1, 61);
+    return ((cx, cy) => { const wx = x * TILE + cx, wy = y * TILE + cy, hh = hash(wx >> 1, wy >> 1, 61);
       if (any) { const u = (cx + 1) / TILE, v = (cy + 1) / TILE, gv = (g00 * (1 - u) * (1 - v) + g10 * u * (1 - v) + g01 * (1 - u) * v + g11 * u * v) * 1.25 + wave(wx, wy) * 0.4 + jag(wx, wy, 2);
         if (gv > 0.5) return grassPixel(wx, wy); if (gv > 0.42) return BEACH.line; }
       return hh < 0.05 ? BEACH.sand2 : hh < 0.07 ? BEACH.sand3 : BEACH.sand; });
@@ -655,8 +662,8 @@
             g.fillStyle = '#1b1430'; g.fillRect(px, py, TILE, TILE);
             if (h < 0.03) { g.fillStyle = h < 0.01 ? '#f3dcff' : '#8d7ab8'; g.fillRect(px + (h * 997 % 28), py + (h * 577 % 28), 2, 2); }
             break;
-          case T.GRASS: case T.FOREST: { const mixed = ART.w_forest && [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]].some(([dx, dy]) => { const q = tileAt(x + dx, y + dy); return (q === T.GRASS || q === T.FOREST) && q !== t; }); if (mixed) { g.putImageData(grassForestTile(x, y), px, py); break; } const im = ART[t === T.FOREST && ART.w_forest ? 'w_forest' : 'w_grass']; /* 숲 바닥은 조금 어둡게 (느려지는 곳이 보이게) */ if (im) g.drawImage(im, (x * 16) % im.width, (y * 16) % im.height, 16, 16, px, py, TILE, TILE); else tile(g, t === T.GRASS ? TL.grass : TL.forest, h, px, py); break; } // 새 잔디: 48칸 무늬를 이어 붙임
-          case T.SAND: if (ART.w_grass) { g.putImageData(beachSandTile(x, y), px, py); } else tile(g, TL.sand, h, px, py); break;
+          case T.GRASS: case T.FOREST: { if (ART.w_wsh && nearSea(x, y)) { const tk = t === T.FOREST && ART.w_forest ? 'w_forest' : 'w_grass'; g.putImageData(beachWaterTile(x, y, (cx, cy) => texPixel(tk, x * TILE + cx, y * TILE + cy)), px, py); seaRec(px, py); seaM().putImageData(seaMaskTile(x, y), px, py); SEAREC = SHREC = null; break; } /* 바다 옆 잔디도 해안선이 파고듦 */ const mixed = ART.w_forest && [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]].some(([dx, dy]) => { const q = tileAt(x + dx, y + dy); return (q === T.GRASS || q === T.FOREST) && q !== t; }); if (mixed) { g.putImageData(grassForestTile(x, y), px, py); break; } const im = ART[t === T.FOREST && ART.w_forest ? 'w_forest' : 'w_grass']; /* 숲 바닥은 조금 어둡게 (느려지는 곳이 보이게) */ if (im) g.drawImage(im, (x * 16) % im.width, (y * 16) % im.height, 16, 16, px, py, TILE, TILE); else tile(g, t === T.GRASS ? TL.grass : TL.forest, h, px, py); break; } // 새 잔디: 48칸 무늬를 이어 붙임
+          case T.SAND: if (ART.w_grass) { if (nearSea(x, y)) { g.putImageData(beachWaterTile(x, y, beachSandFill(x, y)), px, py); seaRec(px, py); seaM().putImageData(seaMaskTile(x, y), px, py); SEAREC = SHREC = null; } else g.putImageData(beachSandTile(x, y), px, py); } else tile(g, TL.sand, h, px, py); break;
           case T.WATER: {
             if (ART.w_grass) { g.putImageData(beachWaterTile(x, y), px, py); seaRec(px, py); seaM().putImageData(seaMaskTile(x, y), px, py); SEAREC = SHREC = null; break; } // 새 물: 해안까지 거리로 얕은·깊은 색 + 해안선 따라 거품
             const land = (a, b) => { const q = tileAt(a, b); return q !== T.WATER && q !== T.VOID; };
@@ -3901,6 +3908,7 @@
 
     // 플레이어 이동
     stepPlayer(dt); tickHold(); tickFishing();
+    if (player.scene === 'ground' && !TITLE.on && ART.w_wsh && !amDead()) { const dp = depthAtPx(player.x, player.y); DROWN.t = dp >= 2.6 ? DROWN.t + dt : 0; if (DROWN.t > 1.6 && performance.now() - DROWN.sent > 4000) { DROWN.sent = performance.now(); if (netOn) ws.send(JSON.stringify({ t: 'drown' })); } } // 깊은 물에서 1.2초 넘게 머리까지 잠기면 익사
     tickBoard(); tickQuiz(); tickWelcome(); tickWar3();
     { const show = ONLINE && player.scene === 'ground' && (matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0) && !TITLE.on; if ($('atkBtn').hidden === show) { $('atkBtn').hidden = !show; $('swapBtn').hidden = !show; } if (show && swapIcon.w !== myWeapon()) { swapIcon.w = myWeapon(); swapIcon(); } } // 패드·폰: 동그라미 공격·무기 교체 버튼
     { const a = curAct(); if (a !== lastAct) { lastAct = a; if (netOn) ws.send(JSON.stringify({ t: 'act', a, fx: FISHING.x | 0, fy: FISHING.y | 0 })); } } // 도구를 주변에 알림
@@ -3962,7 +3970,7 @@
     const cx = Math.floor(player.x / TILE), cy = Math.floor(player.y / TILE);
     const nx = cx + d[0], ny = cy + d[1];
     const room = player.scene === 'sky' ? player.room : null;
-    if (room ? roomBlocked(room, nx, ny) : (blocked(nx, ny) || heightBlocked(cx, cy, nx, ny))) { player.x = cx * TILE + 16; player.y = cy * TILE + 16; player.moving = false; return; }
+    if (room ? roomBlocked(room, nx, ny) : ((blocked(nx, ny) && !swimmable(nx, ny)) || heightBlocked(cx, cy, nx, ny))) { player.x = cx * TILE + 16; player.y = cy * TILE + 16; player.moving = false; return; }
     step.on = true; step.t = 0;
     step.fx = player.x; step.fy = player.y; step.tx = nx * TILE + 16; step.ty = ny * TILE + 16;
     step.dur = (keys.has('shift') ? 0.04 : STEP) / (room ? 1 : speedAt(nx, ny)) * (player.carry ? 1.25 : 1); // 훔친 걸 들면 느려짐
@@ -3980,12 +3988,14 @@
         const wpn = o === player ? myWeapon() : remWeapon(o), act = o === player ? curAct() : o.act, nowT = performance.now();
         const hk = o.hitAt ? Math.max(0, 1 - (nowT - o.hitAt) / 200) : 0, ox = o.x, oy = o.y; if (hk > 0) { o.x += o.hitDx * 9 * hk; o.y += o.hitDy * 6 * hk; } // 맞으면 뒤로 밀림
         const atkPose = o.swing && nowT - o.swing < 260;
+        const sk = sinkOf(o), wl = o.y - 2 - sk * 28; if (sk > 0.02) { ctx.save(); ctx.beginPath(); ctx.rect(o.x - 80, o.y - 200, 160, 200 - (o.y - wl)); ctx.clip(); } // 물에 잠긴 만큼 아래를 가림
         const S2 = shadeBegin(o), G = S2 ? S2.g : ctx; // 나무 그림자 속이면 임시 판에 그린 뒤 겹친 부분만 어둡게
         if ((o.face | 0) === 1 && !down && !act) drawWeaponOn(G, o, wpn, t);
         if (hk > 0.55) G.filter = 'brightness(3.2)'; /* 맞은 순간 하얗게 번쩍 */
         drawSprite(G, o.x, o.y, o.look, t, o.moving && !atkPose, o.face, atkPose); G.filter = 'none'; if (act && !down) drawToolOn(G, o, act, t); /* 작업 중이면 손에 도구 */
         if ((o.face | 0) !== 1 && !down && !act) drawWeaponOn(G, o, wpn, t);
         if (S2) shadeEnd(S2);
+        if (sk > 0.02) { ctx.restore(); const rr = 13 + Math.sin(t * 4 + o.x) * 1.5; ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(o.x, wl, rr, rr * 0.35, 0, 0, Math.PI * 2); ctx.stroke(); }
         o.x = ox; o.y = oy; ctx.globalAlpha = 1;
       }
     }
