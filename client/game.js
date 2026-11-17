@@ -602,7 +602,7 @@
         if (lv > 0.6) { if (own) return own(cx, cy); if (sandy) { const hh = hash(wx >> 1, wy >> 1, 61); return hh < 0.05 ? BEACH.sand2 : BEACH.sand; } return grassPixel(wx, wy); }
         if (lv > 0.54) return sandy ? BEACH.wet : BEACH.line; if (lv > 0.47) return BEACH.foam; if (lv > 0.41) return BEACH.foam2; } // 모래 → 젖은 모래 → 흰 거품 → 옅은 거품 → 물
       const d = c00 * (1 - u) * (1 - v) + c10 * u * (1 - v) + c01 * (1 - u) * v + c11 * u * v + wave(wx, wy) + (BAY[((cy >> 1) & 3) * 4 + ((cx >> 1) & 3)] / 16 - 0.5) * 0.14;
-      if (ART.w_wsh) return d < 0.3 ? BEACH.foam2 : seaPixel(isLake(x, y) ? 1.9 + d * 0.6 : d, wx, wy); // 호수는 얕은 하늘색 없이 중간 깊이 색부터 // 물 그림의 빛 그물 무늬: 얕은 곳 청록 / 깊은 곳 파랑 (경계는 디더로 섞임)
+      if (ART.w_wsh) return d < 0.3 ? BEACH.foam2 : seaPixel(isLake(x, y) ? 2.3 + d * 1.0 : d, wx, wy); // 호수는 얕은 하늘색 없이 중간 깊이 색부터 // 물 그림의 빛 그물 무늬: 얕은 곳 청록 / 깊은 곳 파랑 (경계는 디더로 섞임)
       return d < 0.3 ? BEACH.foam2 : d < 1.1 ? BEACH.w1 : d < 1.5 ? BEACH.w2 : d < 2.0 ? BEACH.w3 : d < 2.7 ? BEACH.w4 : BEACH.w5; });
   }
   const nearSea = (x, y) => [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]].some(([dx, dy]) => !isLand(x + dx, y + dy));
