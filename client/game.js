@@ -133,7 +133,7 @@
   function swimmable(x, y) { if (x < 0 || y < 0 || x >= W || y >= H || !ART.w_wsh) return false; const t = tileAt(x, y), e = TILES[y * W + x]; return (t === T.WATER || t === T.VOID) && !(e && e.k === 'water') && !GWALL.has(y * W + x); } // 물에 들어갈 수 있음 (깊으면 잠김)
   function depthAtPx(px, py) { const fx = px / TILE - 0.5, fy = py / TILE - 0.5, x = Math.floor(fx), y = Math.floor(fy), u = fx - x, v = fy - y, dd = (a, b) => (TILES[b * W + a] && TILES[b * W + a].k === 'bridge' ? 0 : waterDepth(a, b));
     return dd(x, y) * (1 - u) * (1 - v) + dd(x + 1, y) * u * (1 - v) + dd(x, y + 1) * (1 - u) * v + dd(x + 1, y + 1) * u * v; }
-  const sinkOf = (o) => (player.scene === 'ground' && ART.w_wsh ? Math.max(0, Math.min(1, (depthAtPx(o.x, o.y) - 0.5) / 2.2)) : 0); // 0 = 안 잠김, 1 = 머리만
+  const sinkOf = (o) => (player.scene === 'ground' && ART.w_wsh ? Math.max(0, Math.min(1, (depthAtPx(o.x, o.y) - 0.8) / 3.2)) : 0); // 0 = 안 잠김, 1 = 머리만
   function speedAt(x, y) { if (swimmable(x, y) && !(TILES[y * W + x] && TILES[y * W + x].k === 'bridge')) return 0.55; const e = TILES[y * W + x]; if (e && (e.k === 'floor' || e.under) && e.n === MY_NID) return MPRules.NUM.floorSpeed; const t = tileAt(x, y); return t === T.FOREST ? 0.7 : t === T.SAND ? 0.85 : 1; }
 
   const terrName = (t) => MPRules.terrName(t); // 영토 이름 (rules.js 와 같은 규칙)
@@ -3917,7 +3917,7 @@
 
     // 플레이어 이동
     stepPlayer(dt); tickHold(); tickFishing();
-    if (player.scene === 'ground' && !TITLE.on && ART.w_wsh && !amDead()) { const dp = depthAtPx(player.x, player.y); DROWN.t = dp >= 2.6 ? DROWN.t + dt : 0; if (DROWN.t > 1.6 && performance.now() - DROWN.sent > 4000) { DROWN.sent = performance.now(); if (netOn) ws.send(JSON.stringify({ t: 'drown' })); } } // 깊은 물에서 1.2초 넘게 머리까지 잠기면 익사
+    if (player.scene === 'ground' && !TITLE.on && ART.w_wsh && !amDead()) { const dp = depthAtPx(player.x, player.y); DROWN.t = dp >= 3.7 ? DROWN.t + dt : 0; if (DROWN.t > 1.6 && performance.now() - DROWN.sent > 4000) { DROWN.sent = performance.now(); if (netOn) ws.send(JSON.stringify({ t: 'drown' })); } } // 깊은 물에서 1.2초 넘게 머리까지 잠기면 익사
     tickBoard(); tickQuiz(); tickWelcome(); tickWar3();
     { const show = ONLINE && player.scene === 'ground' && (matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0) && !TITLE.on; if ($('atkBtn').hidden === show) { $('atkBtn').hidden = !show; $('swapBtn').hidden = !show; } if (show && swapIcon.w !== myWeapon()) { swapIcon.w = myWeapon(); swapIcon(); } } // 패드·폰: 동그라미 공격·무기 교체 버튼
     { const a = curAct(); if (a !== lastAct) { lastAct = a; if (netOn) ws.send(JSON.stringify({ t: 'act', a, fx: FISHING.x | 0, fy: FISHING.y | 0 })); } } // 도구를 주변에 알림
@@ -3986,8 +3986,13 @@
     player.moving = true;
   }
 
+  const WAKES = [];
+  function drawWakes() { const nw = performance.now(); ctx.lineWidth = 2; // 퍼지면서 사라지는 물결 (도트 굵기 2px)
+    for (let i = WAKES.length - 1; i >= 0; i--) { const w = WAKES[i], k = (nw - w.t0) / (w.mv ? 900 : 1600); if (k >= 1) { WAKES.splice(i, 1); continue; }
+      const r = 6 + k * (w.mv ? 22 : 16), a = Math.atan2(-w.dy, -w.dx); ctx.strokeStyle = `rgba(235,250,255,${(1 - k) * 0.7})`; ctx.beginPath();
+      if (w.mv) ctx.ellipse(w.x, w.y, r, r * 0.4, 0, a - 1.1, a + 1.1); else ctx.ellipse(w.x, w.y, r, r * 0.4, 0, 0, Math.PI * 2); ctx.stroke(); } }
   function drawActors(list, t) {
-    list.sort((a, b) => a.y - b.y);
+    list.sort((a, b) => a.y - b.y); if (player.scene === 'ground') drawWakes();
     ctx.imageSmoothingEnabled = true;
     for (const o of list) {
       if (o.draw) o.draw(ctx, o.x, o.y);
@@ -4004,7 +4009,9 @@
         drawSprite(G, o.x, o.y, o.look, t, o.moving && !atkPose, o.face, atkPose); G.filter = 'none'; if (act && !down) drawToolOn(G, o, act, t); /* 작업 중이면 손에 도구 */
         if ((o.face | 0) !== 1 && !down && !act) drawWeaponOn(G, o, wpn, t);
         if (S2) shadeEnd(S2);
-        if (sk > 0.02) { ctx.restore(); const rr = 13 + Math.sin(t * 4 + o.x) * 1.5; ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(o.x, wl, rr, rr * 0.35, 0, 0, Math.PI * 2); ctx.stroke(); }
+        if (sk > 0.02) { ctx.restore(); const nw = performance.now(), mv = Math.hypot(o.x - (o._wx ?? o.x), o.y - (o._wy ?? o.y)) > 0.3; // 물결파: 움직이면 뒤로 퍼지는 물결, 서 있으면 가끔 잔잔한 물결
+          if (nw - (o._wk || 0) > (mv ? 130 : 1300)) { o._wk = nw; WAKES.push({ x: o.x, y: wl, t0: nw, dx: o.x - (o._wx ?? o.x), dy: o.y - (o._wy ?? o.y), mv }); if (WAKES.length > 120) WAKES.shift(); } }
+        o._wx = o.x; o._wy = o.y;
         o.x = ox; o.y = oy; ctx.globalAlpha = 1;
       }
     }
