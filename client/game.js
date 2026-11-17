@@ -126,7 +126,7 @@
     return h < 0.004 ? 'midA' : null;
   }
   function clearTrees(cx, cy, r) { for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) if (x >= 0 && y >= 0 && x < W && y < H) noTree[y * W + x] = 1; }
-  const DROWN = { t: 0, sent: -1e9 };
+  const DROWN = { t: 0, sent: -1e9, msg: '' };
   let LAKE = null; function isLake(x, y) { if (x < 0 || y < 0 || x >= W || y >= H) return false; if (!LAKE) { // 맵 밖 바다에서 물길로 이어진 물 = 바다, 나머지 물 = 호수
       const sea = new Uint8Array(W * H), q = []; for (let i = 0; i < W * H; i++) { const ix = i % W, iy = (i / W) | 0; if (terrain[i] === T.VOID || ((ix === 0 || iy === 0 || ix === W - 1 || iy === H - 1) && terrain[i] === T.WATER)) { sea[i] = 1; q.push(i); } }
       while (q.length) { const i = q.pop(), ix = i % W, iy = (i / W) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = ix + dx, b = iy + dy; if (a < 0 || b < 0 || a >= W || b >= H) continue; const j = b * W + a; if (!sea[j] && (terrain[j] === T.WATER || terrain[j] === T.VOID)) { sea[j] = 1; q.push(j); } } }
@@ -3914,7 +3914,9 @@
 
     // 플레이어 이동
     stepPlayer(dt); tickHold(); tickFishing();
-    if (player.scene === 'ground' && !TITLE.on && ART.w_wsh && !amDead()) { const dp = depthAtPx(player.x, player.y); DROWN.t = dp >= 4.3 && (player._sk || 0) > 0.9 ? DROWN.t + dt : 0; if (DROWN.t > 1.6 && performance.now() - DROWN.sent > 4000) { DROWN.sent = performance.now(); if (netOn) ws.send(JSON.stringify({ t: 'drown' })); } } // 깊은 물에서 1.2초 넘게 머리까지 잠기면 익사
+    DROWN.msg = ''; if (player.scene === 'ground' && !TITLE.on && ART.w_wsh && !amDead()) { const dp = depthAtPx(player.x, player.y), deep = dp >= 4.2 && (player._sk || 0) > 0.8; DROWN.t = deep ? DROWN.t + dt : 0; // 얕은 바다는 괜찮음, 아주 깊은 곳에서만 3초 경고 뒤 기절
+      if (deep) DROWN.msg = `⚠ 너무 깊어요! ${Math.max(0, Math.ceil(3 - DROWN.t))}초 뒤 기절해요 · 얕은 곳으로!`; else if (dp >= 3.4 && !isLand(Math.floor(player.x / TILE), Math.floor(player.y / TILE))) DROWN.msg = '🌊 물이 깊어져요 · 더 들어가면 위험해요';
+      if (DROWN.t > 3 && performance.now() - DROWN.sent > 4000) { DROWN.sent = performance.now(); if (netOn) ws.send(JSON.stringify({ t: 'drown' })); } }
     tickBoard(); tickQuiz(); tickWelcome(); tickWar3();
     { const show = ONLINE && player.scene === 'ground' && (matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0) && !TITLE.on; if ($('atkBtn').hidden === show) { $('atkBtn').hidden = !show; $('swapBtn').hidden = !show; } if (show && swapIcon.w !== myWeapon()) { swapIcon.w = myWeapon(); swapIcon(); } } // 패드·폰: 동그라미 공격·무기 교체 버튼
     { const a = curAct(); if (a !== lastAct) { lastAct = a; if (netOn) ws.send(JSON.stringify({ t: 'act', a, fx: FISHING.x | 0, fy: FISHING.y | 0 })); } } // 도구를 주변에 알림
@@ -4019,6 +4021,7 @@
       { const hp = o === player ? PV.hp : o.hp, dl = (o.downUntil || 0) - performance.now(); if (player.scene === 'ground' && hp != null && hp < HPMAX && dl <= 0) drawHpBar2(ctx, o.x, o.y - 76, hp);
         if (dl > 0) { const txt = `💫 기절 · 부활 중 ${Math.ceil(dl / 1000)}`; ctx.font = `700 13px ${PFONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const w = ctx.measureText(txt).width + 14; ctx.fillStyle = 'rgba(43,35,64,0.85)'; ctx.fillRect(o.x - w / 2, o.y - 92, w, 20); ctx.fillStyle = '#ffd84d'; ctx.fillText(txt, o.x, o.y - 82);
           const k = 1 - dl / (MPRules.NUM.pvp.respawnSec * 1000); ctx.fillStyle = '#5a1a2a'; ctx.fillRect(o.x - w / 2, o.y - 72, w, 4); ctx.fillStyle = '#9fd3ff'; ctx.fillRect(o.x - w / 2, o.y - 72, w * Math.max(0, Math.min(1, k)), 4); } }
+      if (o === player && DROWN.msg) { const deep = DROWN.msg[0] === '⚠'; ctx.font = `800 14px ${PFONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const w = ctx.measureText(DROWN.msg).width + 18, yy = o.y - 84 + (deep ? Math.sin(performance.now() / 80) * 1.5 : 0); ctx.fillStyle = deep ? 'rgba(170,20,40,0.92)' : 'rgba(20,60,110,0.85)'; ctx.fillRect(o.x - w / 2, yy - 12, w, 24); ctx.fillStyle = '#fff'; ctx.fillText(DROWN.msg, o.x, yy + 1); } // 익사 경고
       nameTag(ctx, o.x, o.y - 56, (SIDE_ICON[o === player ? MY_SIDE : o.side] || '') + jobIcon(o === player ? MY_JOB : o.job) + (o === player ? player.name : o.name) + ((o === player ? player.teacher : o.teacher) ? ' 선생님' : '') + (o.badge ? ' ' + o.badge : ''), o === player ? player.tag : o.tag); // 이름 옆 악명 (💀 / 체포왕 👮)
       if (o.carry) { // 훔친 가방: 머리 옆에 큰 자루
         const b = Math.sin(performance.now() / 150) * 2, bx = o.x + 24, by = o.y - 40 + b;
