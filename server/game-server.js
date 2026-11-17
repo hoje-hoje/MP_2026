@@ -766,6 +766,7 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'buyWeapon': { // 3일차부터: 대장장이 천사에게 내 코인으로 무기 사기 (사면 바로 듦)
+        if (!NUM.pvp.on) return send(ws, { t: 'err', text: '무기 상점은 지금 닫혀 있어요' });
         if (s.scene !== 'sky' || s.room !== 'market') return;
         if (gameClock().day < NUM.weaponDay) return send(ws, { t: 'err', text: `무기 상점은 ${NUM.weaponDay}일차에 열려요` });
         const w = String(m.w || ''), W4 = MPRules.WEAPONS[w]; if (!W4 || !W4.price) return;
@@ -1000,6 +1001,7 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'atk': { // 공격: 바라보는 방향 앞 네모 (멀리 쏘는 무기는 직선) · 서버가 판정
+        if (!NUM.pvp.on) return; // 플레이어끼리 싸우기 꺼 둠
         if (s.scene !== 'ground' || s.x == null || (s.deadUntil || 0) > now() || jailed(s.acc)) return;
         const W2 = MPRules.WEAPONS[weaponOf(s)], lv = m.lv ? 1 : 0, cd = W2.cd * (lv ? 1.5 : 1);
         if (now() - (s.lastAtk || 0) < cd - 60) return; s.lastAtk = now(); s.invUntil = 0; s.atkW = weaponOf(s); s.atkLv = lv; // 때리면 무적 풀림

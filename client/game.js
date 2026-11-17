@@ -1115,6 +1115,7 @@
   function openShop(tab = 'build', npcId) {
     const me = myView && myView.me;
     if (!me && tab !== 'hat' && tab !== 'weapon') { toast('나라가 있어야 살 수 있어요 (나라 공용 저장소에서 내요)'); return; } // 모자·무기는 내 코인이라 나라 없어도 됨
+    if (tab === 'weapon' && !MPRules.NUM.pvp.on) { toast('⚔ 무기 상점은 지금 닫혀 있어요'); return; }
     SHOP_KIND = tab; SHOP_TAB = 'all'; SHOP_NPC = npcId || ({ weapon: 'smith', hat: 'stylist' }[tab]) || tab;
     const npc = NPCS[SHOP_NPC]; $('shopWho').textContent = npc.name; facePortrait($('shopFace'), npc);
     $('shopSay').textContent = npc.lines[0];
@@ -1431,7 +1432,7 @@
     const pv = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false; ctx.drawImage(P.off, ox, oy, fw * FXK, fh * FXK); ctx.imageSmoothingEnabled = pv;
   }
   const amDead = () => performance.now() < PV.deadUntil;
-  function canAttack() { return ONLINE && netOn && player.scene === 'ground' && !amDead() && !(jailUntil > Date.now()) && !build.on && $('talk').hidden && !FISHING.on && !document.querySelector('.modalbox:not([hidden]), #closet:not([hidden])'); }
+  function canAttack() { return MPRules.NUM.pvp.on && ONLINE && netOn && player.scene === 'ground' && !amDead() && !(jailUntil > Date.now()) && !build.on && $('talk').hidden && !FISHING.on && !document.querySelector('.modalbox:not([hidden]), #closet:not([hidden])'); }
   let LAST_WEAPON = null;
   function swapWeapon() { // 주먹 ↔ 무기 (여러 개면 차례로)
     if (!ONLINE || !netOn) return; const owned = Object.keys(MY_WEAPONS || {}); if (!owned.length) { toast(`가진 무기가 없어요 · ${MPRules.NUM.weaponDay}일차부터 하늘 상점가 무기 상점에서 사요`); return; }
@@ -1450,7 +1451,7 @@
   }
   const atkCharge = () => ATK.down ? Math.min(1, (performance.now() - ATK.t0) / 550) : -1;
   // 무기 그리기 (공격 순간 휘두름 · 차징 중엔 뒤로 젖힘)
-  function drawWeaponOn(g, o, w, t) {
+  function drawWeaponOn(g, o, w, t) { if (!MPRules.NUM.pvp.on) return; // 싸우기 꺼 두면 손에 무기 안 보임
     const S = TOOL[WPN_SPR[w]]; if (!S || player.scene !== 'ground') return;
     const face = o.face | 0, side = face === 2 ? -1 : 1, up = face === 1, down = face === 0;
     const swing = o.swing ? (performance.now() - o.swing) / 1000 : 9, chg = o === player ? atkCharge() : -1;
@@ -1636,7 +1637,7 @@
   function tickWar3() { // 3일차 처음 들어오면: "영역전 개막!" 쾅 + 무기 상점 열림 (한 번만)
     if (!ONLINE || !netOn || !titleDone || TITLE.on || OP.on || DAY < MPRules.NUM.weaponDay || store('mp2026.war3')) return;
     if (!$('welcome').hidden || document.querySelector('.modalbox:not([hidden]), #found:not([hidden]), #doomPop:not([hidden]), #closet:not([hidden]), #loading:not([hidden])')) return;
-    store('mp2026.war3', 1); const el = $('war3'); el.hidden = false; el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); SND.play('war'); shakeT = 0.6;
+    store('mp2026.war3', 1); const el = $('war3'); { const ws2 = el.querySelector('.w3shop'); if (ws2) ws2.hidden = !MPRules.NUM.pvp.on; } // 싸우기 꺼 두면 무기 상점 안내 숨김 el.hidden = false; el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); SND.play('war'); shakeT = 0.6;
     setTimeout(() => SND.play('war'), 450); setTimeout(() => { el.classList.add('out'); setTimeout(() => { el.hidden = true; el.classList.remove('out', 'go'); }, 700); }, 4200);
   }
   function tickBoard() {
@@ -1892,7 +1893,7 @@
         { x: 13, y: 4, w: 4, h: 2, npc: 'vaccine', draw: (g, x, y) => pavilion(g, x, y, '#ff9fc4', '치유의 샘 · 백신·도구', NPCS.vaccine.ch) },
         { x: 23, y: 4, w: 4, h: 2, npc: 'seed', draw: (g, x, y) => pavilion(g, x, y, '#8fe0a8', '정원 상점 · 씨앗', NPCS.seed.ch) },
         { x: 13, y: 13, w: 4, h: 2, draw: lightFountain },
-        { x: 23, y: 12, w: 4, h: 2, npc: 'smith', draw: (g, x, y) => { pavilion(g, x, y, DAY >= MPRules.NUM.weaponDay ? '#ff8a5a' : '#b8b0c0', DAY >= MPRules.NUM.weaponDay ? '⚔ 무기 상점' : '무기 상점 · 3일차부터', NPCS.smith.ch); if (DAY < MPRules.NUM.weaponDay) sign(g, x, y - 40, '준비 중'); } },
+        { x: 23, y: 12, w: 4, h: 2, npc: 'smith', draw: (g, x, y) => { const wOpen = MPRules.NUM.pvp.on && DAY >= MPRules.NUM.weaponDay; pavilion(g, x, y, wOpen ? '#ff8a5a' : '#b8b0c0', wOpen ? '⚔ 무기 상점' : MPRules.NUM.pvp.on ? '무기 상점 · 3일차부터' : '무기 상점', NPCS.smith.ch); if (!wOpen) sign(g, x, y - 40, '준비 중'); } },
         { x: 3, y: 12, w: 4, h: 2, npc: 'stylist', draw: (g, x, y) => pavilion(g, x, y, '#c9a7ff', '꾸미기 상점 · 모자', NPCS.stylist.ch) },
         P1(8, 13, cloudBench, { w: 2 }), P1(21, 13, cloudBench, { w: 2 }),
         P1(27, 12, urn), P1(2, 16, urn), P1(27, 16, urn),
@@ -2369,7 +2370,7 @@
     if (k === 'e' && !e.repeat && !document.querySelector('.modalbox:not([hidden]), #closet:not([hidden])')) pressE(); // 창이 열려 있으면 E 무시 (상점 연 뒤 대화창이 또 뜨던 버그)
     if (MQ.on && k >= '1' && k <= '4') { if (!e.repeat) answerQuiz(+k - 1); return; }
     if (k === 'j' && !e.repeat) atkDown();
-    if (k === 'q' && !e.repeat && player.scene === 'ground' && !document.querySelector('.modalbox:not([hidden])')) swapWeapon();
+    if (k === 'q' && !e.repeat && MPRules.NUM.pvp.on && player.scene === 'ground' && !document.querySelector('.modalbox:not([hidden])')) swapWeapon();
     if (k === 'g' && ONLINE) setBuild(!build.on);
     if (k >= '1' && k <= '8') emote(+k - 1);
     if (k === 'enter' && ONLINE) { e.preventDefault(); $('chatIn').focus(); }
@@ -3947,7 +3948,7 @@
       if (deep) DROWN.msg = `⚠ ${Math.max(1, Math.ceil(3 - DROWN.t))}!`; else if (dp >= 3.4 && !isLand(Math.floor(player.x / TILE), Math.floor(player.y / TILE))) DROWN.msg = '🌊 깊어요';
       if (DROWN.t > 3 && performance.now() - DROWN.sent > 4000) { DROWN.sent = performance.now(); if (netOn) ws.send(JSON.stringify({ t: 'drown' })); } }
     tickBoard(); tickQuiz(); tickWelcome(); tickWar3();
-    { const show = ONLINE && player.scene === 'ground' && (matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0) && !TITLE.on; if ($('atkBtn').hidden === show) { $('atkBtn').hidden = !show; $('swapBtn').hidden = !show; } if (show && swapIcon.w !== myWeapon()) { swapIcon.w = myWeapon(); swapIcon(); } } // 패드·폰: 동그라미 공격·무기 교체 버튼
+    { const show = MPRules.NUM.pvp.on && ONLINE && player.scene === 'ground' && (matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0) && !TITLE.on; if ($('atkBtn').hidden === show) { $('atkBtn').hidden = !show; $('swapBtn').hidden = !show; } if (show && swapIcon.w !== myWeapon()) { swapIcon.w = myWeapon(); swapIcon(); } } // 패드·폰: 동그라미 공격·무기 교체 버튼
     { const a = curAct(); if (a !== lastAct) { lastAct = a; if (netOn) ws.send(JSON.stringify({ t: 'act', a, fx: FISHING.x | 0, fy: FISHING.y | 0 })); } } // 도구를 주변에 알림
     if (player.scene === 'sky' && !(player.room.id === 'jail' && jailUntil > Date.now()) && !EDIT.on) {
       // 하늘 체류 시간 제한 없음 (나갔다 들어오면 어차피 초기화돼서 없앰)

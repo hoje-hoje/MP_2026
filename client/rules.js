@@ -74,7 +74,7 @@
     price: { floor: 20, wall: 60, deco: 30, trap: 150 }, // 건축 상점 가격 (코인, 1개 · 종류별로 같음, 테마는 모양만 다름)
     cropSellMe: 0.2, // 작물 판 값: 나라 80% · 판 사람 20% (내 코인). 물고기는 내 가방 → 100% 내 코인
     tradeSlots: 6, tradeTiles: 2,
-    pvp: { hp: 100, respawnSec: 10, invMs: 3000, regenAfterMs: 6000, regen: 3, dropPct: 0.3, lootMin: 3, crit: 0.1 },
+    pvp: { on: false, hp: 100, /* on: false = 플레이어끼리 싸우기 꺼 둠 (나중에 싸움 방식 정하면 켬) */ respawnSec: 10, invMs: 3000, regenAfterMs: 6000, regen: 3, dropPct: 0.3, lootMin: 3, crit: 0.1 },
     weaponDay: 3, digCoin: 15, digPerDay: 40,
     maxAlly: 3, rainChance: 0.18, allyMeetTiles: 3,
     fishPerDay: 40, fishBite: [2.5, 6.5], fishRainK: 0.6, mineHoldMs: 2400,
