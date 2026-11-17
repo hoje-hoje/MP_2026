@@ -1,0 +1,60 @@
+<title>마법 실험실</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root { --bg:#1b1430; --panel:#2b2340; --line:#4a3f6b; --fg:#f4efff; --dim:#b9aee0; --acc:#ffd34d; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.4 "Galmuri11", system-ui, sans-serif; margin: 0; }
+.wrap { display: grid; grid-template-columns: 280px 1fr; gap: 12px; padding: 12px max(16px, env(safe-area-inset-right, 0px)) 12px max(16px, env(safe-area-inset-left, 0px)); height: calc(100vh - 24px); box-sizing: border-box; }
+@media (max-width: 760px) { .wrap { grid-template-columns: 1fr; height: auto; } }
+.side { background: var(--panel); border: 2px solid var(--line); overflow: auto; padding: 8px; min-width: 0; }
+.side h1 { font-size: 16px; margin: 4px 4px 8px; color: var(--acc); }
+.side p { margin: 0 4px 10px; color: var(--dim); font-size: 12px; }
+.cat { margin: 10px 4px 4px; font-weight: 700; color: var(--acc); }
+.list { display: flex; flex-wrap: wrap; gap: 4px; }
+.list button { background: #3a3058; color: var(--fg); border: 1px solid var(--line); padding: 3px 6px; font: inherit; font-size: 12px; cursor: pointer; }
+.list button:hover, .list button:focus-visible { background: #51437c; outline: 2px solid var(--acc); }
+.list button.on { background: var(--acc); color: #2b2340; }
+.stage { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+canvas { width: 100%; image-rendering: pixelated; border: 2px solid var(--line); background: #3f7a44; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--dim); }
+.bar b { color: var(--fg); }
+</style>
+<div class="wrap">
+  <div class="side"><h1>🧪 마법 실험실</h1><p>pixelfx 효과를 눌러 보세요. 왼쪽 사람이 마법사, 오른쪽이 허수아비예요. 발사체는 날아가서 맞아요. 화면을 누르면 그 자리에 다시 터져요.</p><div id="cats"></div></div>
+  <div class="stage"><canvas id="cv" width="320" height="180"></canvas><div class="bar"><span>지금: <b id="cur">-</b></span><span id="desc"></span></div></div>
+</div>
+<script type="module">
+const CATS = {"arcane": ["arcane-beam", "arcane-missiles", "arcane-orb", "blink-in", "blink-out", "magic-circle-cast", "mana-burst", "portal", "rune-circle", "spell-charge", "star-fall", "time-stop"], "explosions": ["barrel-explosion", "big-explosion", "cartoon-pow", "dirt-explosion", "firework-burst", "firework-rocket", "grenade", "implosion", "nuke", "plasma-explosion", "small-explosion", "smoke-bomb"], "fire": ["brazier", "campfire", "candle", "fire-breath", "fire-ring", "fire-tornado", "fireball", "flame-pillar", "flamethrower", "meteor", "spirit-flame", "torch"], "holy": ["blessing", "divine-shield", "feather-burst", "halo", "heal-aoe", "heal", "holy-pillar", "resurrection", "smite", "sunburst"], "ice": ["blizzard-vortex", "freeze", "frost-breath", "frost-nova", "ice-crystal", "ice-lance", "ice-shatter", "ice-spikes", "icicle-fall", "snowflake-burst"], "impacts": ["blunt-hit", "bullet-impact", "crit-hit", "ground-slam", "heavy-landing", "hit-flash", "hit-spark", "impact-frame", "parry", "ricochet", "shield-block"], "lightning": ["ball-lightning", "chain-lightning", "charge-up", "electrified", "lightning-strike", "plasma-ball", "spark-arc", "storm-cloud", "tesla-coil", "thunderclap", "zap-hit"], "melee": ["claw-swipe", "dagger-flurry", "double-slash", "hammer-smash", "heavy-cleave", "scythe-reap", "spear-sweep", "spin-slash", "sword-slash", "thrust", "uppercut", "whip-crack"], "moves": ["arrow-shot", "dash-strike", "earth-stomp", "fireball-throw", "ground-pound", "holy-smite", "ice-lance-throw", "lightning-call", "meteor-call", "pistol-shots", "rocket-launcher", "sword-combo"], "nature": ["acid-splash", "boulder", "earth-spike", "healing-bloom", "leaf-storm", "poison-cloud", "quake", "root-snare", "spore-burst", "thorns", "tornado", "toxic-puddle", "vine-whip"], "projectiles": ["arrow", "bullet-tracer", "cannonball", "energy-disc", "flare", "homing-missile", "laser-bolt", "magic-missile", "muzzle-pistol", "muzzle-shotgun", "muzzle-smg", "plasma-shot", "rocket"], "spawn": ["coin-drop", "disintegrate", "dissolve-burn", "egg-hatch", "poof", "respawn-beam", "shatter-death", "soul-rise", "spawn-portal", "summon-rise"], "status": ["bleeding", "burning", "charmed", "confused", "cursed", "frozen", "haste", "petrified", "poisoned", "rage", "sleep", "slowed", "stunned"], "ui": ["achievement", "coin-collect", "combo-counter", "confetti", "countdown", "crit-number", "damage-number", "exclamation", "health-bar-hit", "heart-lost", "level-up", "quest-complete"]}, KO = {"arcane": "✨ 비전", "fire": "🔥 불", "ice": "❄ 얼음", "lightning": "⚡ 번개", "holy": "🌟 신성", "nature": "🌿 자연", "explosions": "💥 폭발", "moves": "🎯 기술(연속 동작)", "status": "🌀 상태 이상", "spawn": "👻 나타남·사라짐", "projectiles": "➶ 발사체", "impacts": "💢 맞는 효과", "melee": "⚔ 근접", "ui": "🏆 UI 연출"}, ORDER = ["arcane", "fire", "ice", "lightning", "holy", "nature", "explosions", "moves", "status", "spawn", "projectiles", "impacts", "melee", "ui"];
+const P = '/assets/pixelfx/';
+const core = await import(P + 'core/index.js');
+const cache = {}; const load = async (k) => (cache[k] = cache[k] || await import(P + 'fx/' + k + '.js'));
+const VW = 320, VH = 180, cv = document.getElementById('cv'), g = cv.getContext('2d');
+const frame = core.createFrame(VW, VH), img = new ImageData(VW, VH), off = document.createElement('canvas'); off.width = VW; off.height = VH;
+const grass = new Image(); grass.src = '/assets/world/grass.png';
+let fx = [], movers = [], cur = null;
+const caster = { x: 90, y: 120 }, target = { x: 230, y: 120 };
+const box = document.getElementById('cats');
+for (const c of ORDER) { if (!CATS[c]) continue; const h = document.createElement('div'); h.className = 'cat'; h.textContent = KO[c] || c; box.append(h); const l = document.createElement('div'); l.className = 'list';
+  for (const n of CATS[c]) { const b = document.createElement('button'); b.type = 'button'; b.textContent = n; b.onclick = () => play(c + '/' + n, b); l.append(b); } box.append(l); }
+async function play(key, btn, at) {
+  const mod = await load(key); cur = key; document.querySelectorAll('.list button.on').forEach((x) => x.classList.remove('on')); if (btn) btn.classList.add('on');
+  const m = mod.meta || {}; document.getElementById('cur').textContent = (m.name || key) + (m.loop ? ' (반복)' : ''); document.getElementById('desc').textContent = (m.tags || []).slice(0, 5).join(' · ');
+  for (const f of fx) f.stop();
+  const tags = m.tags || [], proj = tags.includes('projectile') && !at;
+  if (proj) { const f = core.createFx(mod, { x: caster.x + 10, y: caster.y - 14 }); fx.push(f); movers.push({ f, t: 0 }); return; }
+  const pos = at || (tags.includes('directional') || key.startsWith('moves/') || key.startsWith('melee/') ? { x: caster.x + 24, y: caster.y - 8 } : { x: target.x, y: target.y - 4 });
+  const f = core.createFx(mod, pos); fx.push(f); if (m.loop) setTimeout(() => f.stop(), 2600);
+}
+cv.addEventListener('click', (e) => { if (!cur) return; const r = cv.getBoundingClientRect(); play(cur, null, { x: Math.round((e.clientX - r.left) / r.width * VW), y: Math.round((e.clientY - r.top) / r.height * VH) }); });
+function person(x, y, col) { g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x - 6, y - 1, 12, 3); g.fillStyle = '#2b2340'; g.fillRect(x - 5, y - 22, 10, 21); g.fillStyle = col; g.fillRect(x - 4, y - 12, 8, 10); g.fillStyle = '#ffe1cc'; g.fillRect(x - 4, y - 21, 8, 8); g.fillStyle = '#2b2340'; g.fillRect(x - 2, y - 18, 1, 2); g.fillRect(x + 1, y - 18, 1, 2); }
+let last = performance.now();
+function loop(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (grass.complete && grass.width) { const pat = g.createPattern(grass, 'repeat'); g.save(); g.scale(1, 1); g.fillStyle = pat; g.fillRect(0, 0, VW, VH); g.restore(); } else { g.fillStyle = '#3f7a44'; g.fillRect(0, 0, VW, VH); }
+  person(caster.x, caster.y, '#6b4fb3'); g.fillStyle = '#8a5a2b'; g.fillRect(target.x - 1, target.y - 26, 2, 26); g.fillStyle = '#d9b26a'; g.fillRect(target.x - 7, target.y - 22, 14, 12); g.fillStyle = '#2b2340'; g.fillRect(target.x - 3, target.y - 18, 1, 2); g.fillRect(target.x + 2, target.y - 18, 1, 2);
+  for (const mv of movers) { mv.t += dt; const k = Math.min(1, mv.t / 0.7); mv.f.options.x = caster.x + 10 + (target.x - caster.x - 16) * k; if (k >= 1 && !mv.hit) { mv.hit = true; mv.f.stop(); load('impacts/hit-spark').then((m) => fx.push(core.createFx(m, { x: target.x, y: target.y - 12 }))); } }
+  movers = movers.filter((m) => !m.hit);
+  core.clearFrame(frame); for (const f of fx) { f.update(dt); f.draw(frame); } fx = fx.filter((f) => !f.done());
+  core.composite(frame, img.data, null); off.getContext('2d').putImageData(img, 0, 0); g.drawImage(off, 0, 0);
+  requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+window.FXLAB = { play, count: () => fx.length };
+</script>
