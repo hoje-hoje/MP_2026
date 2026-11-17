@@ -92,6 +92,7 @@
     const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0); const d = g.getImageData(0, 0, c.width, c.height).data;
     const pts = []; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) pts.push([...oklab(d[i], d[i + 1], d[i + 2])]);
     if (!pts.length) return [];
+    { const uniq = new Map(); for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) uniq.set((d[i] << 16) | (d[i + 1] << 8) | d[i + 2], 1); if (uniq.size <= 48) return [...uniq.keys()].map((c) => oklab(c >> 16, (c >> 8) & 255, c & 255)).sort((a, b) => a[0] - b[0]); } // 색이 적은 기준 그림은 원래 색 그대로 (평균 내서 새 색 만들지 않기)
     let boxes = [pts];
     while (boxes.length < k) { let bi = -1, br = -1, bax = 0;
       boxes.forEach((B, i) => { if (B.length < 2) return; for (let ax = 0; ax < 3; ax++) { let lo = 1e9, hi = -1e9; for (const p of B) { if (p[ax] < lo) lo = p[ax]; if (p[ax] > hi) hi = p[ax]; } const r = (hi - lo) * (ax === 0 ? 1 : 1.4) * Math.sqrt(B.length); if (r > br) { br = r; bi = i; bax = ax; } } });
@@ -116,14 +117,16 @@
   const ITEMS = []; let REF = -1, PAL = [];
   const ROLES = ['바닥', '나무', '사람', '동물', '물건'];
   // 배경 자동 지우기: 투명한 곳이 없는 그림이면, 테두리에서 시작해 테두리 색과 비슷한 칸을 번져 나가며 투명하게
-  function cutBg(im) { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0); const id = g.getImageData(0, 0, c.width, c.height), d = id.data, w = c.width, h = c.height;
+  function cutBg(im, name = '') { if (/grass|floor|tile|ground|dirt|sand|바닥|잔디|흙/i.test(name)) return im; // 바닥 그림은 배경이 아님
+    const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0); const id = g.getImageData(0, 0, c.width, c.height), d = id.data, w = c.width, h = c.height;
     let clear = 0; for (let i = 3; i < d.length; i += 4) if (d[i] < 128) clear++; if (clear > w * h * 0.02 || !$('cutBg').checked) return im; // 이미 투명 배경이면 그대로
     const seen = new Uint8Array(w * h), q = [], tol = 40, near = (i, r, gg, b) => Math.abs(d[i] - r) + Math.abs(d[i + 1] - gg) + Math.abs(d[i + 2] - b) < tol;
     for (let x = 0; x < w; x++) q.push(x, (h - 1) * w + x); for (let y = 0; y < h; y++) q.push(y * w, y * w + w - 1);
     while (q.length) { const k = q.pop(); if (seen[k]) continue; seen[k] = 1; const i = k * 4, x = k % w, y = (k / w) | 0; const r = d[i], gg = d[i + 1], b = d[i + 2]; d[i + 3] = 0;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue; const nk = ny * w + nx; if (!seen[nk] && near(nk * 4, r, gg, b)) q.push(nk); } }
-    g.putImageData(id, 0, 0); const out = new Image(); out.src = c.toDataURL(); return c; }
-  function addFiles(files) { for (const f of files) { const im0 = new Image(); im0.onload = () => { const im = cutBg(im0); ITEMS.push({ name: f.name, img: im, role: guessRole(f.name, im), out: null }); if (REF < 0) setRef(ITEMS.length - 1); else recolorAll(); renderItems(); }; im0.src = URL.createObjectURL(f); } }
+    let gone = 0; for (let i = 3; i < d.length; i += 4) if (d[i] === 0) gone++; if (gone > w * h * 0.85) return im; // 거의 다 지워지면 무늬(바닥)였던 것 → 그대로
+    g.putImageData(id, 0, 0); return c; }
+  function addFiles(files) { for (const f of files) { const im0 = new Image(); im0.onload = () => { const im = cutBg(im0, f.name); ITEMS.push({ name: f.name, img: im, role: guessRole(f.name, im), out: null }); if (REF < 0) setRef(ITEMS.length - 1); else recolorAll(); renderItems(); }; im0.src = URL.createObjectURL(f); } }
   function guessRole(n, im) { n = n.toLowerCase(); if (/grass|ground|floor|tile|dirt|sand/.test(n)) return 0; if (/tree|bush|plant|rock|stone/.test(n)) return 1; if (/char|player|hero|npc|walk/.test(n)) return 2; if (/cow|pig|chick|sheep|rabbit|dog|cat|animal/.test(n)) return 3; return im.width <= 48 && im.height <= 48 && im.width === im.height ? 0 : 4; } // 큰 그림은 물건 (바닥으로 착각해 잘게 잘라 깔지 않게)
   $('drop').onclick = () => $('file').click(); $('file').onchange = (e) => addFiles(e.target.files);
   for (const ev of ['dragenter', 'dragover']) $('drop').addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.add('on'); });
@@ -152,9 +155,10 @@
     const im = it.out || it.img; if (it.role === 2 && im.width % 16 === 0 && im.height % 16 === 0 && (im.width > 16 || im.height > 16)) { const cols = Math.min(4, im.width / 16), rows = Math.min(4, im.height / 16); return { sheet: im, cols, rows, cw: 16, ch: 16 }; } return { sheet: im, cols: 1, rows: 1, cw: im.width, ch: im.height }; }
   function buildScene(reseed) { if (reseed) SCENE.seed = (SCENE.seed * 7 + 3) % 1000; const byRole = (r) => ITEMS.filter((it) => it.role === r && (it.out || it.img));
     const floors = byRole(0), trees = byRole(1), chars = byRole(2), animals = byRole(3), things = byRole(4); const S = SCENE.seed;
-    SCENE.floors = floors.map((it) => { const im = it.out || it.img; return { im, big: im.width > 48 || im.height > 48 }; }); // 작은 타일은 통째로 한 칸, 큰 그림은 이어 붙인 무늬
+    SCENE.floors = floors.map((it) => { const im = it.out || it.img; return { im, big: im.width > 16 || im.height > 16 }; }); // 작은 타일은 통째로 한 칸, 큰 그림은 이어 붙인 무늬
     SCENE.objs = []; const taken = new Set();
-    const place = (list, density, kind, cap) => { if (!list.length) return; let n = 0; for (let y = 1; y < MH - 1; y++) for (let x = 1; x < MW - 1; x++) { const h = hash(x, y, S + kind * 17); if (h < density && n < cap) { n++; const it = list[Math.floor(hash(x, y, S + 99 + kind) * list.length)], im = it.out || it.img; if (taken.has(y * MW + x)) continue; taken.add(y * MW + x); SCENE.objs.push({ kind, im, sil: it.sil, x: x * TILE + 16, y: y * TILE + 30, k: 2, seed: h * 99, hx: x * TILE + 16, hy: y * TILE + 30, dir: 1, t: hash(x, y, S + 5) * 10 }); } } };
+    const place = (list, density, kind, cap) => { if (!list.length) return; const cand = []; for (let y = 1; y < MH - 1; y++) for (let x = 1; x < MW - 1; x++) if (hash(x, y, S + kind * 17) < density * 3) cand.push([hash(x, y, S + kind * 31), x, y]); cand.sort((a, b) => a[0] - b[0]); // 맵 전체에서 고르게 뽑기 (위쪽에 몰리지 않게)
+      for (const [, x, y] of cand.slice(0, cap)) { const h = hash(x, y, S + kind * 17); { const it = list[Math.floor(hash(x, y, S + 99 + kind) * list.length)], im = it.out || it.img; if (taken.has(y * MW + x)) continue; taken.add(y * MW + x); SCENE.objs.push({ kind, im, sil: it.sil, x: x * TILE + 16, y: y * TILE + 30, k: 2, seed: h * 99, hx: x * TILE + 16, hy: y * TILE + 30, dir: 1, t: hash(x, y, S + 5) * 10 }); } } };
     place(trees, 0.045, 1, 40); place(things, 0.004, 4, 6); place(animals, 0.004, 3, 6); // 물건·동물은 몇 개만
     player.img = chars.length ? slice(chars[0]) : null; $('hint').textContent = ITEMS.length ? (chars.length ? '방향키로 사람 이동 · 시간 슬라이더로 낮밤' : '사람 역할 그림을 넣으면 걸어 다닐 수 있어요') : '그림을 넣고 기준을 고르면 여기에 장면이 생겨요'; }
   function resize() { dpr = Math.min(2, devicePixelRatio || 1); const r = cv.parentElement.getBoundingClientRect(); W2 = r.width; H2 = r.height; cv.width = W2 * dpr; cv.height = H2 * dpr; cv.style.width = W2 + 'px'; cv.style.height = H2 + 'px'; } addEventListener('resize', resize); resize();
@@ -187,7 +191,7 @@
     if (hour < 6 || hour > 19.5) { ctx.globalCompositeOperation = 'lighter'; const gr = ctx.createRadialGradient(player.x - camX, player.y - 20 - camY, 8, player.x - camX, player.y - 20 - camY, 130); gr.addColorStop(0, 'rgba(255,200,120,0.3)'); gr.addColorStop(1, 'rgba(255,200,120,0)'); ctx.fillStyle = gr; ctx.fillRect(0, 0, W2, H2); ctx.globalCompositeOperation = 'source-over'; }
     requestAnimationFrame(frame); }
   requestAnimationFrame(frame);
-  window.PT = { ITEMS, SCENE: () => SCENE, add: (name, url) => new Promise((res) => { const im0 = new Image(); im0.onload = () => { const im = cutBg(im0); ITEMS.push({ name, img: im, role: guessRole(name, im), out: null }); if (REF < 0) setRef(ITEMS.length - 1); else recolorAll(); renderItems(); res(); }; im0.src = url; }), setRef, setRole: (i, r) => { ITEMS[i].role = r; buildScene(); }, setTime: (h) => { $('auto').checked = false; $('time').value = h; }, player, build: () => buildScene() };
+  window.PT = { ITEMS, SCENE: () => SCENE, add: (name, url) => new Promise((res) => { const im0 = new Image(); im0.onload = () => { const im = cutBg(im0, name); ITEMS.push({ name, img: im, role: guessRole(name, im), out: null }); if (REF < 0) setRef(ITEMS.length - 1); else recolorAll(); renderItems(); res(); }; im0.src = url; }), setRef, setRole: (i, r) => { ITEMS[i].role = r; buildScene(); }, setTime: (h) => { $('auto').checked = false; $('time').value = h; }, player, build: () => buildScene() };
 })();
 </script>
 </body>
