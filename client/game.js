@@ -343,9 +343,10 @@
     const set = k === 'treeA' || k === 'treeB' ? WT.big : WT.mid, T2 = set[Math.floor(hash(tx, ty, 13) * set.length)], im = T2.im, w = im.width * 2, h = im.height * 2;
     const [sk, len, al] = SHADOW[SLOT] || SHADOW.lunch;
     g.save(); g.globalAlpha = al; g.translate(Math.round(X), Math.round(Y)); g.transform(1, 0, sk, len, 0, 0); g.scale(1, -1); g.drawImage(T2.sil, -w / 2, -h, w, h); g.restore();
-    const sw = Math.round(Math.sin(t * 1.4 + tx * 0.7 + ty * 1.3) * 1.5), half = Math.round(im.height * 0.6), pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
-    g.drawImage(im, 0, half, im.width, im.height - half, Math.round(X - w / 2), Math.round(Y - (im.height - half) * 2), w, (im.height - half) * 2);
-    g.drawImage(im, 0, 0, im.width, half, Math.round(X - w / 2) + sw, Math.round(Y - h), w, half * 2); g.imageSmoothingEnabled = pv;
+    const sw = Math.sin(t * 1.4 + tx * 0.7 + ty * 1.3) * 3, base = Math.round(im.height * 0.6), pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+    for (let sy = 0; sy < im.height; sy += 2) { const k = sy >= base ? 0 : (base - sy) / base, o = Math.round(sw * k * k) * 2; /* 2칸씩 잘게: 위로 갈수록 조금씩 더 휘어서 이음매 없음, 줄기는 고정 */
+      g.drawImage(im, 0, sy, im.width, Math.min(2, im.height - sy), Math.round(X - w / 2) + o, Math.round(Y - h) + sy * 2, w, Math.min(2, im.height - sy) * 2); }
+    g.imageSmoothingEnabled = pv;
   }
   function spr(g, name, cx, bottom, k = 2) { const [x, y, w, h] = SP[name]; g.drawImage(ART.village, x, y, w, h, Math.round(cx - w * k / 2), Math.round(bottom - h * k), w * k, h * k); }
 
