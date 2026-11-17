@@ -197,7 +197,7 @@
     pix(g, 'boulder', x, y + 2);
     if (empty) return;
     const bob = Math.sin(performance.now() / 300 + x) * 2;
-    pix(g, 'coin', x - 10, y - 18 + bob, 0, 16); pix(g, 'coin', x + 8, y - 24 - bob, 0, 14);
+    pix(g, 'coinA', x - 10, y - 18 + bob, 0, 16); pix(g, 'coinA', x + 8, y - 24 - bob, 0, 14);
     pix(g, 'burst', x + 14, y - 30, 0, 14 + Math.sin(performance.now() / 200 + x) * 4, 0.8);
   }
 
@@ -303,7 +303,7 @@
   const STORE_ART = ['store2', 'store3', 'store4']; // 저장소 모습: 기본 → 목재 500 이상 → 1000 이상 (ninja/village.png 에서 자른 창고)
   function drawStore(g, x, y, nid) { // 수도 저장소 (크기에 맞춰 장작·코인·팻말 위치)
     const key = STORE_ART[(nationsPub[nid] && nationsPub[nid].storeLv) | 0], im = ART['x_' + key], w = im ? im.width * 2 : 96, h = im ? im.height * 2 : 80;
-    pix(g, key, x, y + 4, 2); pix(g, 'woodpile', x + w / 2 + 12, y + 4, 2); pix(g, 'coin', x - w / 2 - 8, y - 2, 0, 18);
+    pix(g, key, x, y + 4, 2); pix(g, 'woodpile', x + w / 2 + 12, y + 4, 2); pix(g, 'coinA', x - w / 2 - 8, y - 2, 0, 18);
     sign(g, x, y - h - 16, nid === MY_NID ? '우리 저장소' : `${natName(nid)} 저장소`);
   }
 
@@ -351,10 +351,12 @@
     const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
     await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
-  const EXTRA = ['door_isaac', 'door_isaac_down', 'sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
+  const EXTRA = ['coin_spin', 'door_isaac', 'door_isaac_down', 'sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
   const TEMPLE = ['emote0', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'emote6', 'emote7', 'statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
+    if (key === 'coinA' && ART.x_coin_spin) { const im2 = ART.x_coin_spin, f = Math.floor(performance.now() / 110) % 8, sc = fitH ? fitH / 8 : k, w = 8 * sc, pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(im2, f * 8, 0, 8, 8, Math.round(cx - w / 2), Math.round(bottom - w), Math.round(w), Math.round(w)); g.imageSmoothingEnabled = pv; return; } // 땅 위 코인: 빙글빙글
+    if (key === 'coinA') key = 'coin';
     const im = key.startsWith('u:') ? ART['u_' + key.slice(2)] : ART['x_' + key]; if (!im) return;
     const sc = fitH ? fitH / im.height : k, w = im.width * sc, h = im.height * sc;
     const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
@@ -2650,7 +2652,7 @@
   let STORE_TAB = 'all';
   function resIcon(cv, kind) { // 저장소 재료 그림 (직접 그림)
     const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, cv.width, cv.height); g.save(); g.translate(cv.width / 2, cv.height / 2); g.scale(2, 2);
-    if (kind === 'coin') { g.fillStyle = '#2b2340'; pxDisc(g, 0, 0, 10); g.fillStyle = '#b8862b'; pxDisc(g, 0, 0, 8); g.fillStyle = '#ffd84d'; pxDisc(g, -1, -1, 7); g.fillStyle = '#fff6c8'; g.fillRect(-4, -5, 4, 2); g.fillStyle = '#b8862b'; g.fillRect(-1, -4, 2, 8); }
+    if (kind === 'coin' && ART.x_coin) { g.drawImage(ART.x_coin, -10, -10, 20, 20); } /* 저장소: 받은 코인 그림 (멈춤) */ else if (kind === 'coin') { g.fillStyle = '#2b2340'; pxDisc(g, 0, 0, 10); g.fillStyle = '#b8862b'; pxDisc(g, 0, 0, 8); g.fillStyle = '#ffd84d'; pxDisc(g, -1, -1, 7); g.fillStyle = '#fff6c8'; g.fillRect(-4, -5, 4, 2); g.fillStyle = '#b8862b'; g.fillRect(-1, -4, 2, 8); }
     if (kind === 'army') { g.fillStyle = '#2b2340'; g.fillRect(-2, -12, 4, 18); g.fillStyle = '#e8ecf4'; g.fillRect(-1, -11, 2, 15); g.fillStyle = '#e8c260'; g.fillRect(-6, 4, 12, 3); g.fillStyle = '#8a5a2b'; g.fillRect(-1, 7, 2, 5); g.fillStyle = '#ffd84d'; g.fillRect(-2, 11, 4, 2); }
     if (kind === 'wood') { for (const [x, y] of [[-6, 2], [4, 2], [-1, -6]]) { g.fillStyle = '#2b2340'; g.fillRect(x - 6, y - 4, 12, 9); g.fillStyle = '#9a6a3a'; g.fillRect(x - 5, y - 3, 10, 7); g.fillStyle = '#e0aa6a'; pxDisc(g, x + 3, y, 3); g.fillStyle = '#b07a44'; g.fillRect(x + 2, y - 1, 2, 2); } }
     if (kind === 'vaccine') { g.restore(); g.save(); g.drawImage(ICON.vaccine, 0, 0, 16, 16, cv.width / 2 - 24, cv.height / 2 - 24, 48, 48); }
@@ -4053,7 +4055,7 @@
       if (o.carry) { // 훔친 가방: 머리 옆에 큰 자루
         const b = Math.sin(performance.now() / 150) * 2, bx = o.x + 24, by = o.y - 40 + b;
         ctx.fillStyle = '#2b2340'; ctx.fillRect(bx - 12, by - 14, 24, 22); ctx.fillStyle = '#9a6a35'; ctx.fillRect(bx - 10, by - 12, 20, 18); ctx.fillStyle = '#c98c4a'; ctx.fillRect(bx - 10, by - 12, 20, 5);
-        ctx.fillStyle = '#2b2340'; ctx.fillRect(bx - 6, by - 18, 12, 6); pix(ctx, 'coin', bx, by + 4, 0, 14);
+        ctx.fillStyle = '#2b2340'; ctx.fillRect(bx - 6, by - 18, 12, 6); pix(ctx, 'coinA', bx, by + 4, 0, 14);
       }
       if (o.emote) bubble(ctx, o.x, o.y - 80, o.emote);
     }
