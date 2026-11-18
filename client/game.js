@@ -4931,19 +4931,49 @@
       else if (l.shadow && onAt(x - 1, yy - 1)) put(x, yy, hex(l.shadow));
       else if (l.ol && (onAt(x + 1, yy) || onAt(x - 1, yy) || onAt(x, yy + 1) || onAt(x, yy - 1))) put(x, yy, hex(l.ol)); }
     g.putImageData(out, 0, 0); }
-  // 타이틀 5종 (사용자 참고 그림 각각) — 들어올 때마다 바뀜
+  // 타이틀 여러 종 (사용자 참고 그림 각각의 느낌) — 들어올 때 고르고, 시간이 지나면 연기처럼 흩어져 다음 타이틀로
+  const TLn = (t, px, o) => Object.assign({ t, px }, o);
   const TITLES = [
-    { id: 'serif', lay: 'left', orn: '2 0 2 6', logo: (cv) => makeTitleLogo(cv) },
-    { id: 'arco', lay: 'lefttop', orn: '', menu: 'caps', logo: (cv) => makeTextLogo(cv, [{ t: 'MATH', px: 22, bold: true, sp: 1, c: '#f6ecd6', c2: '#d8c29a', shadow: '#2a1a10', ol: '#2a1a10', align: 'left' }, { t: 'PUZZLE', px: 22, bold: true, sp: 1, c: '#f6ecd6', c2: '#d8c29a', shadow: '#2a1a10', ol: '#2a1a10', align: 'left' }]) },
-    { id: 'witch', lay: 'right', orn: '', logo: (cv) => makeTextLogo(cv, [{ t: 'the adventures of', px: 11, c: '#efe3c4', align: 'center', gap: 2 }, { t: 'MATH', px: 22, bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' }, { t: 'WORLD', px: 22, bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' }]) },
-    { id: 'camp', lay: 'center', orn: '✦', logo: (cv) => makeTextLogo(cv, [{ t: 'the', px: 11, c: '#f4ead2', align: 'left', gap: -2 }, { t: 'Puzzle', px: 22, sp: 1, c: '#ffffff', c2: '#e8e0cc', shadow: '#1a2a24', align: 'center' }]) },
-    { id: 'play', lay: 'rightmid', orn: 'M P  ·  2 0 2 6', menu: 'bigfirst', logo: null },
+    { id: 'serif', lay: 'left', orn: '✦', logo: (cv) => makeTitleLogo(cv) },
+    { id: 'arco', lay: 'lefttop', menu: 'caps', logo: (cv) => makeTextLogo(cv, [TLn('MATH', 22, { bold: true, sp: 1, c: '#f6ecd6', c2: '#d8c29a', shadow: '#2a1a10', ol: '#2a1a10', align: 'left' }), TLn('PUZZLE', 22, { bold: true, sp: 1, c: '#f6ecd6', c2: '#d8c29a', shadow: '#2a1a10', ol: '#2a1a10', align: 'left' })]) },
+    { id: 'witch', lay: 'right', logo: (cv) => makeTextLogo(cv, [TLn('the adventures of', 11, { c: '#efe3c4', align: 'center', gap: 2 }), TLn('MATH', 22, { bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' }), TLn('WORLD', 22, { bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' })]) },
+    { id: 'camp', lay: 'center', orn: '✦', logo: (cv) => makeTextLogo(cv, [TLn('the', 11, { c: '#f4ead2', align: 'left', gap: -2 }), TLn('Puzzle', 22, { sp: 1, c: '#ffffff', c2: '#e8e0cc', shadow: '#1a2a24', align: 'center' })]) },
+    { id: 'play', lay: 'rightmid', orn: 'M  P', menu: 'bigfirst', logo: null },
+    { id: 'quest', lay: 'lefttop', menu: 'caps', logo: (cv) => makeTextLogo(cv, [TLn('NUMBER', 22, { bold: true, sp: 1, c: '#d6fff4', c2: '#5fd3b8', ol: '#0e2f2a', shadow: '#0e2f2a', align: 'left' }), TLn('QUEST', 22, { bold: true, sp: 3, c: '#d6fff4', c2: '#5fd3b8', ol: '#0e2f2a', shadow: '#0e2f2a', align: 'left' })]) },
+    { id: 'rpg', lay: 'center', logo: (cv) => makeTextLogo(cv, [TLn('a math', 11, { c: '#ffd6ec', align: 'center', gap: 1, sp: 2 }), TLn('Puzzle RPG', 22, { sp: 1, c: '#ffe0f2', c2: '#b48cff', ol: '#2a1838', shadow: '#2a1838', align: 'center' })]) },
+    { id: 'kingdom', lay: 'right', orn: '— ✦ —', logo: (cv) => makeTextLogo(cv, [TLn('수학 왕국', 22, { bold: true, sp: 2, c: '#fff0d0', c2: '#ff9a5a', ol: '#3a1608', shadow: '#3a1608', align: 'center' }), TLn('KINGDOM OF NUMBERS', 11, { c: '#ffd9b0', align: 'center' })]) },
+    { id: 'word', lay: 'left', logo: (cv) => makeTextLogo(cv, [TLn('Math', 22, { sp: 1, c: '#e8f2ff', c2: '#8fb6ff', shadow: '#121c34', align: 'left' }), TLn('Puzzle World', 11, { sp: 1, c: '#c9dcff', align: 'left' })]) },
   ];
-  function pickTitle() { let last = -1; try { last = +localStorage.getItem('mp2026.titleV'); } catch (e) { /* 없음 */ }
-    let i = Math.floor(Math.random() * TITLES.length); if (i === last) i = (i + 1) % TITLES.length; try { localStorage.setItem('mp2026.titleV', i); } catch (e) { /* 없음 */ }
+  function pickTitle(force) { let i = force;
+    if (i == null) { let last = -1; try { last = +localStorage.getItem('mp2026.titleV'); } catch (e) { /* 없음 */ } i = Math.floor(Math.random() * TITLES.length); if (i === last) i = (i + 1) % TITLES.length; }
+    try { localStorage.setItem('mp2026.titleV', i); } catch (e) { /* 없음 */ } TITLE.v = i;
     const T = TITLES[i], tt = $('title'); tt.dataset.lay = T.lay; tt.dataset.menu = T.menu || ''; tt.dataset.tv = T.id;
-    const lc = $('tLogo2'); lc.hidden = !T.logo; if (T.logo) { T.logo(lc); const k = Math.max(2, Math.floor(Math.min(380, innerWidth * 0.42) / lc.width)); lc.style.width = lc.width * k + 'px'; } /* 정수배로 키워 픽셀이 또렷하게 */ $('tOrnT').textContent = T.orn; $('tOrnW').hidden = !T.orn;
+    const lc = $('tLogo2'); lc.hidden = !T.logo; if (T.logo) { T.logo(lc); const k = Math.max(2, Math.floor(Math.min(470, innerWidth * 0.46) / lc.width)); lc.style.width = lc.width * k + 'px'; } /* 정수배로 키워 픽셀이 또렷하게 */
+    $('tOrnT').textContent = T.orn || ''; $('tOrnW').hidden = !T.orn;
     $('tStart').textContent = T.menu === 'caps' ? '새로 시작' : T.menu === 'bigfirst' ? 'PLAY' : '시작하기'; }
+  // 연기: 지금 글자의 점들이 흩어져 → 다음 타이틀 글자 자리로 날아가 모임
+  function titlePoints(n) { const lc = $('tLogo2'), pts = [];
+    if (!lc.hidden && lc.width) { const r = lc.getBoundingClientRect(), d = lc.getContext('2d').getImageData(0, 0, lc.width, lc.height).data, on = [];
+      for (let y = 0; y < lc.height; y++) for (let x = 0; x < lc.width; x++) if (d[(y * lc.width + x) * 4 + 3] > 0) on.push([r.left + (x + 0.5) * r.width / lc.width, r.top + (y + 0.5) * r.height / lc.height]);
+      for (let k = 0; k < n && on.length; k++) pts.push(on[Math.floor(Math.random() * on.length)]); }
+    if (!pts.length) { const r = $('tMenu').getBoundingClientRect(); for (let k = 0; k < n; k++) pts.push([r.left + Math.random() * r.width, r.top + Math.random() * r.height]); }
+    return pts; }
+  function titleMorph() { if (!TITLE.on || TITLE.leaving || TITLE.morph || document.hidden) return;
+    const cv = $('tSmoke'), g = cv.getContext('2d'); cv.width = innerWidth; cv.height = innerHeight; TITLE.morph = true;
+    const N = 420, from = titlePoints(N), block = document.querySelector('#title .tBlock'); block.classList.add('fadeOut');
+    const P = from.map(([x, y]) => ({ x, y, sx: x, sy: y, tx: x, ty: y, cx: x + (Math.random() - 0.5) * 220, cy: y - 80 - Math.random() * 160, r: 1.5 + Math.random() * 3.5, d: Math.random() * 400 }));
+    let next = (TITLE.v + 1 + Math.floor(Math.random() * (TITLES.length - 1))) % TITLES.length;
+    setTimeout(() => { pickTitle(next); block.classList.remove('fadeOut'); block.classList.add('hideNow'); requestAnimationFrame(() => { const to = titlePoints(N); P.forEach((p, k) => { p.tx = to[k][0]; p.ty = to[k][1]; }); }); }, 650);
+    const t0 = performance.now(), DUR = 2600;
+    const step = (now) => { const t = now - t0; g.clearRect(0, 0, cv.width, cv.height);
+      for (const p of P) { const u = Math.min(1, Math.max(0, (t - p.d) / (DUR - 700))), e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; // 부드럽게
+        const x = (1 - e) * (1 - e) * p.sx + 2 * (1 - e) * e * p.cx + e * e * p.tx, y = (1 - e) * (1 - e) * p.sy + 2 * (1 - e) * e * p.cy + e * e * p.ty;
+        const a = Math.sin(Math.PI * Math.min(1, u * 1.05)) * 0.3, rr = p.r * (1 + 1.6 * Math.sin(Math.PI * u));
+        const gr = g.createRadialGradient(x, y, 0, x, y, rr); gr.addColorStop(0, `rgba(255,246,226,${a})`); gr.addColorStop(1, 'rgba(255,246,226,0)'); g.fillStyle = gr; g.beginPath(); g.arc(x, y, rr, 0, 7); g.fill(); }
+      if (t > DUR - 650 && block.classList.contains('hideNow')) { block.classList.remove('hideNow'); block.classList.add('fadeIn'); }
+      if (t < DUR && TITLE.on) requestAnimationFrame(step); else { g.clearRect(0, 0, cv.width, cv.height); block.classList.remove('fadeIn', 'hideNow', 'fadeOut'); TITLE.morph = false; } };
+    requestAnimationFrame(step); }
+  setInterval(() => { if (!matchMedia('(prefers-reduced-motion: reduce)').matches) titleMorph(); }, 15000); // 15초마다 다음 타이틀로
   const tMenuBtns = () => [...document.querySelectorAll('#tMenu button:not([hidden])')];
   function tSelect(i) { const b = tMenuBtns(); TITLE.sel = (i + b.length) % b.length; b.forEach((x, k) => x.classList.toggle('sel', k === TITLE.sel)); }
   function startTitle() {
@@ -4985,7 +5015,8 @@
   function applyPad() { const el = $('skillPad'); el.style.right = PAD.r != null ? PAD.r + 'px' : ''; el.style.bottom = PAD.b != null ? PAD.b + 'px' : ''; el.style.setProperty('right', PAD.r != null ? PAD.r + 'px' : '', PAD.r != null ? 'important' : ''); el.style.setProperty('bottom', PAD.b != null ? PAD.b + 'px' : '', PAD.b != null ? 'important' : ''); el.style.transform = `scale(${PAD.s / 100})`; el.style.transformOrigin = 'bottom right'; }
   applyPad();
   function openSettings() { const vb = store('mp2026.bgm') ?? 60, vs = store('mp2026.sfx') ?? 70; $('sBgm').value = vb; $('sBgmV').textContent = vb + '%'; $('sSfx').value = vs; $('sSfxV').textContent = vs + '%'; $('sPad').value = PAD.s; $('sPadV').textContent = PAD.s + '%'; $('setBox').hidden = false; }
-  $('btnSet').addEventListener('click', openSettings); $('setClose').addEventListener('click', () => { document.body.classList.remove('padEdit'); $('sPadMove').textContent = '위치 옮기기'; $('setBox').hidden = true; });
+  $('btnSet').addEventListener('click', openSettings);
+  $('setHome').addEventListener('click', () => { $('setClose').click(); for (const m of document.querySelectorAll('.modalbox:not([hidden])')) m.hidden = true; startTitle(); }); // 집 버튼: 타이틀 화면으로 $('setClose').addEventListener('click', () => { document.body.classList.remove('padEdit'); $('sPadMove').textContent = '위치 옮기기'; $('setBox').hidden = true; });
   const rangeFill = () => { for (const r of document.querySelectorAll('#setBox input[type=range]')) r.style.setProperty('--v', (r.value - r.min) / (r.max - r.min) * 100 + '%'); }; // 슬라이더 채움 색
   for (const r of document.querySelectorAll('#setBox input[type=range]')) r.addEventListener('input', rangeFill);
   $('btnSet').addEventListener('click', () => setTimeout(rangeFill, 0));

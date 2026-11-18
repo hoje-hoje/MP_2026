@@ -718,6 +718,10 @@ body #vitals .vbar b { font-size: 10px; text-shadow: 0 1px 0 #2a1810, 1px 0 0 #2
 #irisFx.open::before { animation: irisOpen .95s cubic-bezier(.2,.7,.2,1) forwards; }
 @keyframes irisClose { from { width: 300vmax; height: 300vmax; } to { width: 0; height: 0; } }
 @keyframes irisOpen { from { width: 0; height: 0; } to { width: 300vmax; height: 300vmax; } }
+#tSmoke { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+#title .tBlock { transition: opacity .6s ease, filter .6s ease; } #title .tBlock.fadeOut { opacity: 0; filter: blur(6px); } #title .tBlock.hideNow { opacity: 0; transition: none; } #title .tBlock.fadeIn { animation: tIn .7s ease-out both; }
+.setHead .homeBtn { margin-left: auto; margin-right: 8px; width: 33px; height: 33px; min-height: 0; padding: 0; border: 0 !important; border-image: none !important; background: none !important; } .setHead .homeBtn img { image-rendering: pixelated; display: block; } .setHead .homeBtn:hover { filter: brightness(1.1); }
+#title[data-tv="kingdom"] .tOrn, #title[data-tv="play"] .tOrn { width: auto; }
 /* ===== 설정 창 (나무 틀) ===== */
 .gearBtn { min-width: 44px; padding: 0 8px !important; display: grid; place-items: center; }
 /* 설정: 사용자 두루마리 그림을 다시 그린 픽셀 틀 (assets/ui/scroll.png) */
@@ -959,7 +963,7 @@ body:not(.building) #prompt { bottom: calc(10px + var(--chatH, 56px) + 10px + en
   </div>
 </div></div>
 <div id="setBox" class="modalbox" hidden><div class="setPanel">
-  <div class="setHead"><b><img src="assets/ui/icon_gear.png" alt="" width="32" height="32">설정</b><button id="setClose" class="scrX" type="button" aria-label="닫기"></button></div>
+  <div class="setHead"><b><img src="assets/ui/icon_gear.png" alt="" width="32" height="32">설정</b><button id="setHome" class="homeBtn" type="button" title="타이틀 화면으로" aria-label="타이틀 화면으로"><img src="assets/ui/icon_home.png" alt="" width="33" height="33"></button><button id="setClose" class="scrX" type="button" aria-label="닫기"></button></div>
   <section class="setCard"><h3>소리</h3>
   <label class="setRow"><span>배경음악</span><input id="sBgm" type="range" min="0" max="100" value="60"><output id="sBgmV">60%</output></label>
   <label class="setRow"><span>효과음</span><input id="sSfx" type="range" min="0" max="100" value="70"><output id="sSfxV">70%</output></label></section>
@@ -1085,7 +1089,7 @@ body:not(.building) #prompt { bottom: calc(10px + var(--chatH, 56px) + 10px + en
 
 <div id="irisFx" hidden aria-hidden="true"></div>
 <div id="title" hidden>
-  <div class="tRays" aria-hidden="true"></div>
+  <div class="tRays" aria-hidden="true"></div><canvas id="tSmoke" aria-hidden="true"></canvas>
   <div class="tBlock">
     <canvas class="tLogo2" id="tLogo2" aria-label="MP"></canvas>
     <div class="tOrn" id="tOrnW" aria-hidden="true"><i></i><span id="tOrnT">2 0 2 6</span><i></i></div>
