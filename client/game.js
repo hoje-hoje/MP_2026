@@ -4888,11 +4888,14 @@
   function applyPad() { const el = $('skillPad'); el.style.right = PAD.r != null ? PAD.r + 'px' : ''; el.style.bottom = PAD.b != null ? PAD.b + 'px' : ''; el.style.setProperty('right', PAD.r != null ? PAD.r + 'px' : '', PAD.r != null ? 'important' : ''); el.style.setProperty('bottom', PAD.b != null ? PAD.b + 'px' : '', PAD.b != null ? 'important' : ''); el.style.transform = `scale(${PAD.s / 100})`; el.style.transformOrigin = 'bottom right'; }
   applyPad();
   function openSettings() { const vb = store('mp2026.bgm') ?? 60, vs = store('mp2026.sfx') ?? 70; $('sBgm').value = vb; $('sBgmV').textContent = vb + '%'; $('sSfx').value = vs; $('sSfxV').textContent = vs + '%'; $('sPad').value = PAD.s; $('sPadV').textContent = PAD.s + '%'; $('setBox').hidden = false; }
-  $('btnSet').addEventListener('click', openSettings); $('setClose').addEventListener('click', () => { document.body.classList.remove('padEdit'); $('sPadMove').textContent = '✋ 위치 옮기기'; $('setBox').hidden = true; });
+  $('btnSet').addEventListener('click', openSettings); $('setClose').addEventListener('click', () => { document.body.classList.remove('padEdit'); $('sPadMove').textContent = '위치 옮기기'; $('setBox').hidden = true; });
+  const rangeFill = () => { for (const r of document.querySelectorAll('#setBox input[type=range]')) r.style.setProperty('--v', (r.value - r.min) / (r.max - r.min) * 100 + '%'); }; // 슬라이더 채움 색
+  for (const r of document.querySelectorAll('#setBox input[type=range]')) r.addEventListener('input', rangeFill);
+  $('btnSet').addEventListener('click', () => setTimeout(rangeFill, 0));
   $('sBgm').addEventListener('input', () => { SND.setVol('bgm', +$('sBgm').value); $('sBgmV').textContent = $('sBgm').value + '%'; $('tBgm').value = $('sBgm').value; });
   $('sSfx').addEventListener('input', () => { SND.setVol('sfx', +$('sSfx').value); $('sSfxV').textContent = $('sSfx').value + '%'; $('tSfx').value = $('sSfx').value; SND.play('coin'); });
   $('sPad').addEventListener('input', () => { PAD.s = +$('sPad').value; $('sPadV').textContent = PAD.s + '%'; applyPad(); store('mp2026.pad', PAD); });
-  $('sPadMove').addEventListener('click', () => { const on = !document.body.classList.contains('padEdit'); document.body.classList.toggle('padEdit', on); $('sPadMove').textContent = on ? '✔ 다 옮겼어요' : '✋ 위치 옮기기'; $('skillPad').hidden = false; });
+  $('sPadMove').addEventListener('click', () => { const on = !document.body.classList.contains('padEdit'); document.body.classList.toggle('padEdit', on); $('sPadMove').textContent = on ? '다 옮겼어요' : '위치 옮기기'; $('skillPad').hidden = false; });
   $('sPadReset').addEventListener('click', () => { PAD.r = null; PAD.b = null; PAD.s = 100; $('sPad').value = 100; $('sPadV').textContent = '100%'; applyPad(); store('mp2026.pad', PAD); });
   $('sReplay').addEventListener('click', () => { $('setBox').hidden = true; $('tReplay').click(); });
   { let drag = null; const pad = $('skillPad'); // 위치 옮기기: 끌어다 놓기

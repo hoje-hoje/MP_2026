@@ -674,11 +674,21 @@ button.pfSlot { cursor: pointer; } button.pfSlot:hover { transform: translateY(-
 .pfCoinIco { width: 18px; height: 19px; image-rendering: pixelated; vertical-align: -4px; margin-right: 5px; }
 /* ===== 설정 창 (나무 틀) ===== */
 .gearBtn { min-width: 44px; padding: 0 8px !important; display: grid; place-items: center; }
-#setBox .setPanel { position: relative; width: min(420px, 94vw); background: #f3e6c8; border: 4px solid #3a2616; box-shadow: 0 0 0 4px #8a6a3a, 0 12px 30px rgba(0,0,0,.45); padding: 16px 18px; color: #3a2616; display: flex; flex-direction: column; gap: 10px; animation: bookIn .22s ease-out; }
-.setHead { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-display); font-size: 20px; } .setHead .bookX { position: static; }
-.setRow { display: flex; align-items: center; gap: 10px; font-size: 14px; flex-wrap: wrap; } .setRow input[type=range] { flex: 1; min-width: 120px; accent-color: #6b4a2b; }
-.setSec { font-weight: 700; color: #6b4a2b; border-bottom: 1px dashed #b8904f; margin-top: 6px; padding-bottom: 2px; }
-.setNote { margin: 0; font-size: 12px; color: #6b4a2b; }
+/* 설정: 사용자 두루마리 그림을 다시 그린 픽셀 틀 (assets/ui/scroll.png) */
+#setBox .setPanel { position: relative; width: min(440px, 94vw); max-height: 92vh; overflow-y: auto; border: solid; border-width: 27px 15px 27px 12px; border-image: url(assets/ui/scroll.png) 9 5 9 4 fill / 27px 15px 27px 12px round; image-rendering: pixelated; padding: 10px 14px 12px; color: #4a2610; display: flex; flex-direction: column; gap: 10px; animation: scrollIn .35s cubic-bezier(.2,.8,.25,1); transform-origin: top center; filter: drop-shadow(0 12px 20px rgba(0,0,0,.5)); }
+@keyframes scrollIn { from { transform: scaleY(.15); opacity: .4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #setBox .setPanel { animation: none; } }
+.setHead { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-display); font-size: 24px; } .setHead b { display: flex; align-items: center; gap: 10px; font-weight: 400; } .setHead img { image-rendering: pixelated; }
+.scrX { width: 33px; height: 33px; min-height: 0; padding: 0; border: 0 !important; border-image: none !important; background: url(assets/ui/scroll_x.png) 0 0 / 100% 100% !important; image-rendering: pixelated; } .scrX:hover { filter: brightness(1.1); }
+.setCard { background: rgba(201,138,70,.18); box-shadow: inset 0 0 0 3px rgba(143,82,38,.55); padding: 10px 12px 12px; clip-path: polygon(3px 0, calc(100% - 3px) 0, calc(100% - 3px) 3px, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 3px calc(100% - 3px), 0 calc(100% - 3px), 0 3px, 3px 3px); display: flex; flex-direction: column; gap: 8px; }
+.setCard h3 { margin: 0 0 2px; font-family: var(--font-display); font-weight: 400; font-size: 16px; color: #7a3e18; } .setCard h3 small { font-size: 12px; color: #9c5f2c; margin-left: 6px; }
+.setRow { display: grid; grid-template-columns: 70px 1fr 46px; align-items: center; gap: 10px; font-size: 14px; } .setRow output { text-align: right; font-variant-numeric: tabular-nums; }
+.setRow input[type=range] { -webkit-appearance: none; appearance: none; height: 12px; margin: 0; background: linear-gradient(90deg, #c96a2a var(--v, 50%), #e9c590 var(--v, 50%)); box-shadow: inset 0 0 0 2px #5a2e14, inset 0 3px 0 2px rgba(0,0,0,.12); cursor: pointer; }
+.setRow input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 26px; background: url(assets/ui/knob.png) 0 0 / 100% 100%; image-rendering: pixelated; border: 0; }
+.setRow input[type=range]::-moz-range-thumb { width: 20px; height: 26px; background: url(assets/ui/knob.png) 0 0 / 100% 100%; image-rendering: pixelated; border: 0; border-radius: 0; }
+.setRow input[type=range]:focus-visible { outline: 2px solid #7a3e18; outline-offset: 4px; }
+.setBtns { display: flex; gap: 10px; flex-wrap: wrap; } .setBtns button { font-size: 14px; min-height: 40px; padding: 0 14px; }
+.setNote { margin: 0; font-size: 12px; line-height: 1.5; color: #7a4a26; }
 body.padEdit #skillPad { outline: 3px dashed #ffd34d; outline-offset: 8px; cursor: move; z-index: 40; } body.padEdit #setBox { background: transparent; pointer-events: none; } body.padEdit #setBox .setPanel { pointer-events: auto; opacity: .92; }
 /* ===== 나라 창: 크게 + 폰처럼 아래에서 올라오며 열림 ===== */
 #war .panel { width: min(860px, 100%) !important; height: min(760px, calc(100vh - 32px)); max-height: none !important; border-radius: 22px; animation: phoneUp .32s cubic-bezier(.2, .9, .3, 1.15); }
@@ -744,7 +754,7 @@ body.padEdit #skillPad { outline: 3px dashed #ffd34d; outline-offset: 8px; curso
   <button id="btnHome" type="button">수도 (T)</button>
   <button id="btnCoupon" type="button">쿠폰</button>
   <button id="btnBag" type="button" class="icoBtn"><img src="assets/ui/icon_bag.png" alt="" width="20" height="23">프로필 (I)</button>
-  <button id="btnSet" type="button" class="gearBtn" title="설정" aria-label="설정"><svg viewBox="0 0 16 16" width="22" height="22" shape-rendering="crispEdges" aria-hidden="true"><path fill="#3a2616" d="M6 0h4v2h2v2h2v2h2v4h-2v2h-2v2h-2v2H6v-2H4v-2H2v-2H0V6h2V4h2V2h2z"/><path fill="#e7d3a8" d="M7 1h2v2h2v1h1v1h1v2h2v2h-2v2h-1v1h-1v1H9v2H7v-2H5v-1H4v-1H3V9H1V7h2V5h1V4h1V3h2z"/><path fill="#6b4a2b" d="M6 6h4v4H6z"/><path fill="#3a2616" d="M7 7h2v2H7z"/></svg></button>
+  <button id="btnSet" type="button" class="gearBtn" title="설정" aria-label="설정"><img src="assets/ui/icon_gear.png" alt="" width="24" height="24" class="pxIco"></button>
   <button id="btnSkill" type="button" hidden>마법 (K)</button>
   <button id="btnCloset" type="button" hidden>꾸미기</button>
 </div>
@@ -902,15 +912,16 @@ body.padEdit #skillPad { outline: 3px dashed #ffd34d; outline-offset: 8px; curso
   <div class="page right"><div class="pfBody" id="pfBody"></div></div>
 </div></div>
 <div id="setBox" class="modalbox" hidden><div class="setPanel">
-  <div class="setHead"><b>⚙ 설정</b><button id="setClose" class="bookX" type="button" aria-label="닫기">✕</button></div>
-  <label class="setRow">🎵 배경음악 <input id="sBgm" type="range" min="0" max="100" value="60"> <span id="sBgmV">60%</span></label>
-  <label class="setRow">🔔 효과음 <input id="sSfx" type="range" min="0" max="100" value="70"> <span id="sSfxV">70%</span></label>
-  <div class="setSec">🎮 마법 버튼 (패드·폰)</div>
-  <label class="setRow">크기 <input id="sPad" type="range" min="70" max="160" value="100"> <span id="sPadV">100%</span></label>
-  <div class="setRow"><button id="sPadMove" class="pfBtn" type="button">✋ 위치 옮기기</button><button id="sPadReset" class="pfBtn" type="button">처음 자리로</button></div>
-  <p class="setNote" id="sPadNote">위치 옮기기를 누르고 화면의 마법 버튼을 끌어다 놓으세요. 다 놓으면 다시 눌러 끝내요.</p>
-  <div class="setSec">🎬 기타</div>
-  <div class="setRow"><button id="sReplay" class="pfBtn" type="button">오프닝 다시 보기</button></div>
+  <div class="setHead"><b><img src="assets/ui/icon_gear.png" alt="" width="32" height="32">설정</b><button id="setClose" class="scrX" type="button" aria-label="닫기"></button></div>
+  <section class="setCard"><h3>소리</h3>
+  <label class="setRow"><span>배경음악</span><input id="sBgm" type="range" min="0" max="100" value="60"><output id="sBgmV">60%</output></label>
+  <label class="setRow"><span>효과음</span><input id="sSfx" type="range" min="0" max="100" value="70"><output id="sSfxV">70%</output></label></section>
+  <section class="setCard"><h3>마법 버튼 <small>패드·폰</small></h3>
+  <label class="setRow"><span>크기</span><input id="sPad" type="range" min="70" max="160" value="100"><output id="sPadV">100%</output></label>
+  <div class="setBtns"><button id="sPadMove" type="button">위치 옮기기</button><button id="sPadReset" type="button">처음 자리로</button></div>
+  <p class="setNote" id="sPadNote">위치 옮기기를 누르고 화면의 마법 버튼을 끌어다 놓으세요. 다 놓으면 다시 눌러 끝내요.</p></section>
+  <section class="setCard"><h3>기타</h3>
+  <div class="setBtns"><button id="sReplay" type="button">오프닝 다시 보기</button></div></section>
 </div></div>
 <div id="craftBox" class="modalbox" hidden><div class="hv bagHv"><div class="hvClouds"></div>
   <div class="hvTop"><h2>🔨 작업대</h2><span class="bagCoin" id="craftMats"></span><button id="craftClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
