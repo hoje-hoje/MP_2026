@@ -1,0 +1,13 @@
+# UI 그림 출처 (사용자 제공 zip, 2026-11-18)
+
+사용자가 Pinterest 등에서 모은 그림을 도트로 다시 뽑고(jpeg → 픽셀) 색을 바꿔 씀. **행사 전에 출처·허락 확인 필요 (DESIGN_TODO E1).**
+
+| 파일 | 원본 | 바꾼 것 |
+|---|---|---|
+| book_l.png · book_r.png · book_clasp.png · book_x.png · book_cover.png | 도감 책 UI (분홍 책 + 오른쪽 리본) | 같은 모양으로 어두운 밤하늘 색으로 다시 그림 |
+| rib_bag / rib_magic / rib_look / rib_stats / rib_chat.png | 같은 책의 오른쪽 리본 | 떼어 냄, 통계 리본은 오각형 그림으로 바꿈 |
+| stone_1~3.png | 보석·광석 5×5 그림 (주황 줄) | 흑백으로 바꿔 게임에서 속성 색으로 칠함 (Ⅰ 원석 · Ⅱ 결정 · Ⅲ 보석) |
+| mat_stone.png · mat_ore.png | 같은 그림의 회색 돌 · 광석 | 그대로 |
+| icon_bag.png · icon_gold.png · icon_map.png | 가방 · 금화 주머니 · 지도 도트 그림 | 배경 지움 |
+
+타이틀 화면 참고 그림(숲 + PLAY)은 U23 "맨 처음 PLAY 화면" 참고용으로만 둠 (게임에 안 넣음).

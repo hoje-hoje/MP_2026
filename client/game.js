@@ -1796,6 +1796,8 @@
   let MY_BAG = {};
   function matIcon(g, k, W2, H2) { // 재료 그림 (2px 도트)
     const s2 = Math.max(2, Math.floor(W2 / 24)), R = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(W2 / 2 + x * s2, H2 / 2 + y * s2, w * s2, h * s2); };
+    const ui = k === 'm_stone' ? UIIMG.mat_stone : k === 'm_ore' ? UIIMG.mat_ore : null; // 사용자 그림 (돌·광석)
+    if (ui && ui.complete && ui.naturalWidth) { const kk = Math.min(W2 * 0.8 / ui.naturalWidth, H2 * 0.8 / ui.naturalHeight); g.drawImage(ui, (W2 - ui.naturalWidth * kk) / 2, (H2 - ui.naturalHeight * kk) / 2, ui.naturalWidth * kk, ui.naturalHeight * kk); return; }
     if (k === 'm_wood') { R('#2b2340', -8, -4, 16, 9); R('#9a6a35', -7, -3, 14, 7); R('#c98c4a', -7, -3, 14, 2); R('#e8c38a', 5, -3, 2, 7); R('#7a4e24', -4, 1, 6, 1); }
     else if (k === 'm_stone') { R('#2b2340', -7, -5, 14, 11); R('#8f8aa0', -6, -4, 12, 9); R('#b9b4c8', -6, -4, 8, 3); R('#6d6880', 1, 2, 5, 2); }
     else if (k === 'm_ore') { R('#2b2340', -7, -5, 14, 11); R('#6d6880', -6, -4, 12, 9); R('#ffd84d', -4, -2, 3, 3); R('#7fd0ff', 2, 0, 3, 3); R('#ffd84d', 0, -4, 2, 2); }
@@ -1865,8 +1867,8 @@
     if (noFlip()) return; const book = $('profile').querySelector('.book'), L = book.querySelector('.page.left'), R = book.querySelector('.page.right');
     for (const o of book.querySelectorAll('.pfLeaf')) o.remove();
     const fwd = PF_ORDER.indexOf(to) > PF_ORDER.indexOf(from), leaf = pfBox(book, fwd ? R : L, 'pfLeaf ' + (fwd ? 'fwd' : 'bwd'));
-    const front = fwd ? oldRight : pfClone(L), back = fwd ? pfClone(L) : pfClone(R, '.bmarks'); front.className = 'front'; back.className = 'back'; leaf.append(front, back);
-    if (!fwd) { const stay = pfBox(book, R, 'pfLeaf'); oldRight.className = 'front'; stay.appendChild(oldRight); book.appendChild(stay); setTimeout(() => stay.remove(), 330); }
+    const front = fwd ? oldRight : pfClone(L), back = fwd ? pfClone(L) : pfClone(R, '.bmarks'); front.className = 'front ' + (fwd ? 'pgR' : 'pgL'); back.className = 'back ' + (fwd ? 'pgL' : 'pgR'); leaf.append(front, back);
+    if (!fwd) { const stay = pfBox(book, R, 'pfLeaf'); oldRight.className = 'front pgR'; stay.appendChild(oldRight); book.appendChild(stay); setTimeout(() => stay.remove(), 330); }
     book.appendChild(leaf); leaf.addEventListener('animationend', (e) => { if (e.target === leaf) leaf.remove(); }); setTimeout(() => leaf.remove(), 900); }
   function openProfile(tab, noCover) {
     const was = !$('profile').hidden, from = PF.tab, book = $('profile').querySelector('.book'); tab = tab || PF.tab;
@@ -1885,7 +1887,7 @@
   function renderProfile() {
     for (const b of document.querySelectorAll('#pfTabs [data-pf]')) b.setAttribute('aria-pressed', String(b.dataset.pf === PF.tab));
     const me = myView && myView.me; $('pfName').textContent = player.name; $('pfSub').textContent = `${me ? me.name + (me.isKing ? ' · 👑 왕' : ' · 국민') : '유랑민'}${MY_JOB ? ' · ' + jobIcon(MY_JOB) + MPRules.JOBS[MY_JOB].name : ''}`;
-    $('pfLine').innerHTML = `<span>코인<b>${MY_PCOIN.toLocaleString()}</b></span><span>배운 마법<b>${Object.keys(MY_SKILLS).filter((k) => MY_SKILLS[k] > 0).length}</b></span>`; pfRadar();
+    $('pfLine').innerHTML = `<span><img class="pfCoinIco" src="assets/ui/icon_gold.png" alt="">코인<b>${MY_PCOIN.toLocaleString()}</b></span><span>배운 마법<b>${Object.keys(MY_SKILLS).filter((k) => MY_SKILLS[k] > 0).length}</b></span>`; pfRadar();
     const body = $('pfBody'); let h = '';
     if (PF.tab === 'bag') { const list = myTradables().filter((q) => !q.k.startsWith('hat:')); const tools = Object.keys(MY_TOOLS).filter((k) => MY_TOOLS[k]);
       h += `<div class="pfSec">주머니 <small>${list.length}칸</small></div><div class="pfGrid">${list.map((q) => `<div class="pfSlot" title="${esc(persName(q.k))}"><canvas data-pk="${q.k}" width="56" height="56"></canvas>${q.n > 1 ? `<i>${q.n}</i>` : ''}</div>`).join('')}${Array.from({ length: Math.max(0, 15 - list.length) }, () => '<div class="pfSlot empty"></div>').join('')}</div>`;
@@ -1929,6 +1931,17 @@
     for (const b of $('craftBody').querySelectorAll('[data-craft]')) b.onclick = () => { const r = MPRules.RECIPE_BY[b.dataset.craft]; if (!netOn) return; if (r.quiz) { $('craftBox').hidden = true; showQuiz(`✨ ${r.name} 만들기 · 맞히면 만들어져요`, r.quiz === 'hard' ? 5000 : 8000, (gr) => { if (gr !== 'miss') ws.send(JSON.stringify({ t: 'craft', id: r.id, n: 1, quiz: 'ok' })); else toast('문제를 틀려서 못 만들었어요 · 재료는 그대로예요'); setTimeout(openCraft, 900); }); return; } ws.send(JSON.stringify({ t: 'craft', id: b.dataset.craft, n: 1 })); };
     $('craftBox').hidden = false;
   }
+  // 마법석 그림: 사용자 보석 그림(assets/ui/stone_1~3: Ⅰ 원석 · Ⅱ 결정 · Ⅲ 보석)을 속성 색으로 칠함
+  const UIIMG = {}; for (const n of ['stone_1', 'stone_2', 'stone_3', 'mat_stone', 'mat_ore']) { const im = new Image(); im.src = 'assets/ui/' + n + '.png'; UIIMG[n] = im; }
+  const stoneCache = {};
+  function stoneSprite(el, n) { const key = el + n; if (stoneCache[key]) return stoneCache[key]; const im = UIIMG['stone_' + n]; if (!im || !im.complete || !im.naturalWidth) return null;
+    const E = MPRules.magicEl(el), hex = el === 'dark' ? '#5a3f86' : E.hex, c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height), px = d.data, R0 = parseInt(hex.slice(1, 3), 16), G0 = parseInt(hex.slice(3, 5), 16), B0 = parseInt(hex.slice(5, 7), 16);
+    for (let i = 0; i < px.length; i += 4) { if (!px[i + 3]) continue; const L = px[i] / 255; // 어두운 곳 → 속성 색의 그림자, 밝은 곳 → 흰빛
+      const t = L < 0.55 ? L / 0.55 : 1, w = L < 0.55 ? 0 : (L - 0.55) / 0.45, dk = 0.18 + 0.82 * t;
+      px[i] = Math.round((R0 * dk) * (1 - w) + 255 * w * 0.92 + R0 * w * 0.08); px[i + 1] = Math.round((G0 * dk) * (1 - w) + 255 * w * 0.92 + G0 * w * 0.08); px[i + 2] = Math.round((B0 * dk) * (1 - w) + 255 * w * 0.92 + B0 * w * 0.08);
+      if (L < 0.12) { px[i] = px[i] * 0.4 + 6; px[i + 1] = px[i + 1] * 0.4 + 6; px[i + 2] = px[i + 2] * 0.4 + 10; } }
+    g.putImageData(d, 0, 0); return (stoneCache[key] = c); }
   function craftIcon(g, id) { // 만든 물건 임시 그림 (도트, 그림 받으면 교체)
     const R = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(32 + x * 3, 32 + y * 3, w * 3, h * 3); }, O = '#2b2340';
     if (id === 'f_torch') { R(O, -1, -2, 3, 10); R('#8a5a2b', 0, -1, 1, 8); R('#ff8a2a', -2, -7, 5, 5); R('#ffd35a', -1, -6, 3, 3); }
@@ -1940,6 +1953,7 @@
     else if (id === 'f_fence') { for (const x of [-6, -1, 4]) R('#c98c4a', x, -6, 2, 12); R('#9a6a35', -7, -3, 14, 2); R('#9a6a35', -7, 2, 14, 2); }
     else if (id === 'f_sign') { R(O, -7, -7, 14, 9); R('#c98c4a', -6, -6, 12, 7); R('#7a4e24', -1, 2, 2, 6); R('#7a4e24', -4, -4, 8, 1); }
     else if (id === 'f_pot') { R('#3f8f3a', -1, -6, 2, 5); R('#ff7aa8', -3, -9, 6, 4); R(O, -5, -1, 10, 8); R('#c0654a', -4, 0, 8, 6); }
+    else if (id.startsWith('ms_') && stoneSprite(MPRules.RECIPE_BY[id].el, MPRules.RECIPE_BY[id].sn)) { const r = MPRules.RECIPE_BY[id], sp = stoneSprite(r.el, r.sn), k = 52 / Math.max(sp.width, sp.height); g.imageSmoothingEnabled = false; g.drawImage(sp, 32 - sp.width * k / 2, 32 - sp.height * k / 2, sp.width * k, sp.height * k); }
     else if (id.startsWith('ms_')) { const r = MPRules.RECIPE_BY[id], col = MPRules.magicEl(r.el).hex, n = r.sn; R('#2b2340', -6, -8, 12, 16); R(col, -5, -7, 10, 14); R('rgba(255,255,255,.65)', -4, -6, 3, 6); R('#2b2340', -6 + n * 0, 9, 12, 0); for (let i = 0; i < n; i++) R('#fff', -5 + i * 4, 8, 2, 2); }
     else if (id === 'f_rug') { R(O, -9, -5, 18, 10); R('#b04a6a', -8, -4, 16, 8); R('#ffd35a', -6, -2, 12, 4); R('#b04a6a', -4, -1, 8, 2); }
   }
@@ -4136,7 +4150,7 @@
       $('skyTimer').hidden = !(sky && player.room.id === 'jail' && jailUntil > Date.now()) || EDIT.on; // 감옥 남은 시간만
       if (sky && player.room.id === 'jail' && jailUntil > Date.now()) { const l = Math.max(0, Math.ceil((jailUntil - Date.now()) / 1000)); $('skyTimer').firstChild.textContent = '감옥 '; $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.remove('warn'); }
       else if (sky) { $('skyTimer').firstChild.textContent = '하늘 체류 '; const l = Math.max(0, Math.ceil(player.skyLeft)); $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.toggle('warn', l <= 60); }
-      $('miniCap').textContent = player.scene === 'sky' ? (canTp() ? 'Shift+클릭 순간이동' : '하늘 지도') : '누르면 큰 지도 (M)';
+      $('miniCapT').textContent = player.scene === 'sky' ? (canTp() ? 'Shift+클릭 순간이동' : '하늘 지도') : '누르면 큰 지도 (M)';
       updateWhere(); updatePrompt(); drawMini(); if (!$('bigmap').hidden) drawBig();
       { const hp = Math.max(0, PV.hp | 0), mp = manaNow(); $('hpFill').style.width = (hp / HPMAX * 100) + '%'; $('hpTxt').textContent = `${hp} / ${HPMAX}`; $('mpFill').style.width = (mp / MANA.max * 100) + '%'; $('mpTxt').textContent = `${Math.floor(mp)} / ${MANA.max}`; $('vitals').hidden = TITLE.on; } // 왼쪽 위 하트·마나
     }
