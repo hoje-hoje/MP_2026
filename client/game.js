@@ -858,7 +858,9 @@
     g2.fillStyle = '#3a2210'; g2.fillText(text, tx, ty + S); g2.fillStyle = '#fff3d6'; g2.fillText(text, tx, ty);
     c = { cv, w: W / S, h: H / S }; if (plateCache.size > 400) plateCache.clear(); plateCache.set(key, c); return c; }
   function nameTag(g, x, y, text, color) {
-    const P = plateTag(text, color); if (P) { const sm = g.imageSmoothingEnabled; g.imageSmoothingEnabled = true; g.drawImage(P.cv, Math.round(x - P.w / 2), Math.round(y - P.h / 2 + 1), P.w, P.h); g.imageSmoothingEnabled = sm; return; }
+    const P = plateTag(text, color); if (P) { // 화면 좌표로 바꿔서 그림: 확대해도 캐릭터와 같이 부드럽게 움직임 (월드 1칸 단위로 끊기지 않게)
+      const m = g.getTransform(), sx = m.a * x + m.e, sy = m.d * (y + 1) + m.f, w = P.w * m.a, h = P.h * m.d;
+      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(P.cv, Math.round(sx - w / 2), Math.round(sy - h / 2), Math.round(w), Math.round(h)); g.restore(); return; }
     g.font = `11px ${PFONT}`;
     let w = tagW.get(text);
     if (!w) { w = Math.ceil(g.measureText(text).width) + 10; tagW.set(text, w); }
