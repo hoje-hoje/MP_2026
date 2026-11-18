@@ -599,6 +599,45 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .trPick { display: flex; flex-direction: column; align-items: center; width: 64px; min-height: 0; padding: 2px; background: #fff !important; color: #2b2340 !important; border: 2px solid #c9cfdc !important; border-image: none !important; box-shadow: none !important; text-shadow: none !important; } .trPick canvas { width: 36px; height: 36px; image-rendering: pixelated; } .trPick small { font-size: 10px; line-height: 1.1; text-align: center; } .trPick:disabled { opacity: 0.35; }
 #pmenu { position: fixed; z-index: 29; min-width: 170px; background: #fffaf0; border: 3px solid #b8862b; box-shadow: 0 0 0 2px #2b2340, 0 6px 16px rgba(0,0,0,0.3); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; color: #2b2340; } #pmenu[hidden] { display: none; } #pmenu b { font-size: 13px; } #pmenu small { font-size: 11px; } #pmenu button { min-height: 32px; font-size: 13px; } #pmenu button:disabled { opacity: 0.55; }
 .bagJob { font-size: 12px; color: #6b4fb3; margin-right: 10px; }
+/* ===== 프로필: 펼친 책 (양피지 + 금색 장식선, 오른쪽 페이지 위 책갈피 탭) ===== */
+#profile .book { position: relative; width: min(980px, 96vw); height: min(620px, 90vh); display: grid; grid-template-columns: 0.85fr 1.15fr; background: #6b4a2b; padding: 14px; border-radius: 6px; box-shadow: 0 0 0 3px #3a2616, 0 18px 40px rgba(0,0,0,.5); animation: bookIn .28s ease-out; }
+@keyframes bookIn { from { transform: scale(.9) rotateX(10deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #profile .book { animation: none; } }
+@media (max-width: 760px) { #profile .book { grid-template-columns: 1fr; height: 92vh; overflow-y: auto; } }
+#profile .page { position: relative; background: radial-gradient(ellipse at 50% 45%, #f6ead0 0%, #ead8b0 70%, #d9bf8c 100%); padding: 22px 22px 18px; min-width: 0; overflow: hidden; box-shadow: inset 0 0 0 2px #c9a56a, inset 0 0 0 6px #f3e6c8, inset 0 0 0 7px #b8904f; color: #3a2616; }
+#profile .page.left { border-radius: 4px 0 0 4px; box-shadow: inset 0 0 0 2px #c9a56a, inset 0 0 0 6px #f3e6c8, inset 0 0 0 7px #b8904f, inset -18px 0 22px -14px rgba(90,60,30,.45); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+#profile .page.right { border-radius: 0 4px 4px 0; box-shadow: inset 0 0 0 2px #c9a56a, inset 0 0 0 6px #f3e6c8, inset 0 0 0 7px #b8904f, inset 18px 0 22px -14px rgba(90,60,30,.45); display: flex; flex-direction: column; }
+#profile .page::before, #profile .page::after { content: '❦'; position: absolute; color: #a77b3c; font-size: 22px; line-height: 1; opacity: .8; }
+#profile .page::before { left: 12px; top: 10px; } #profile .page::after { right: 12px; bottom: 8px; transform: rotate(180deg); }
+.pfTitle { font-family: var(--font-display); font-size: 20px; letter-spacing: 3px; color: #6b4a2b; border-bottom: 2px solid #b8904f; padding: 0 18px 4px; margin-top: 2px; }
+#pfChar { width: 200px; height: 200px; image-rendering: pixelated; background: radial-gradient(circle at 50% 70%, rgba(184,144,79,.25), transparent 65%); }
+.pfName { font-family: var(--font-display); font-size: 22px; } .pfSub { font-size: 13px; color: #6b4a2b; text-align: center; }
+.pfStatline { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; width: 100%; max-width: 260px; margin-top: 6px; } .pfStatline b { color: #8a6a3a; }
+.bmarks { display: flex; gap: 4px; margin: -8px 0 10px; flex-wrap: wrap; }
+.bmarks button { min-height: 36px; font-size: 14px; padding: 0 12px; border-image: none !important; border: 2px solid #8a6a3a; background: #e7d3a8; color: #5a3d22; text-shadow: none; border-radius: 0 0 8px 8px; }
+.bmarks button[aria-pressed="true"] { background: #6b4a2b; color: #fff3d6; border-color: #3a2616; }
+.pfBody { flex: 1; overflow-y: auto; min-height: 0; padding-right: 4px; }
+.pfGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.pfSlot { position: relative; aspect-ratio: 1; background: #c9ab78; border: 3px solid #8a6a3a; box-shadow: inset 0 0 0 2px #e8d4a4, inset 3px 3px 0 2px rgba(90,60,30,.25); display: grid; place-items: center; }
+.pfSlot canvas { width: 70%; height: 70%; image-rendering: pixelated; } .pfSlot i { position: absolute; right: 4px; bottom: 2px; font-style: normal; font-weight: 700; color: #fff; text-shadow: 0 1px 0 #3a2616, 1px 0 0 #3a2616, -1px 0 0 #3a2616, 0 -1px 0 #3a2616; font-size: 13px; }
+.pfSlot.empty { opacity: .55; } .pfSlot span { position: absolute; left: 0; right: 0; bottom: -18px; text-align: center; font-size: 11px; color: #5a3d22; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pfSec { font-weight: 700; color: #6b4a2b; margin: 14px 0 8px; border-bottom: 1px dashed #b8904f; padding-bottom: 2px; }
+.pfRow { display: flex; justify-content: space-between; padding: 6px 4px; border-bottom: 1px dotted #c9a56a; font-size: 14px; } .pfRow b { font-variant-numeric: tabular-nums; }
+.pfBtn { border-image: none !important; border: 2px solid #3a2616; background: #6b4a2b; color: #fff3d6; text-shadow: none; min-height: 38px; padding: 0 14px; font-size: 14px; margin: 4px 6px 4px 0; }
+.bookX { position: absolute; right: -10px; top: -10px; z-index: 3; width: 36px; height: 36px; min-height: 0; padding: 0; border-image: none !important; border: 3px solid #3a2616; background: #e7d3a8; color: #3a2616; text-shadow: none; border-radius: 50%; font-size: 16px; }
+/* ===== 설정 창 (나무 틀) ===== */
+.gearBtn { min-width: 44px; padding: 0 8px !important; display: grid; place-items: center; }
+#setBox .setPanel { position: relative; width: min(420px, 94vw); background: #f3e6c8; border: 4px solid #3a2616; box-shadow: 0 0 0 4px #8a6a3a, 0 12px 30px rgba(0,0,0,.45); padding: 16px 18px; color: #3a2616; display: flex; flex-direction: column; gap: 10px; animation: bookIn .22s ease-out; }
+.setHead { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-display); font-size: 20px; } .setHead .bookX { position: static; }
+.setRow { display: flex; align-items: center; gap: 10px; font-size: 14px; flex-wrap: wrap; } .setRow input[type=range] { flex: 1; min-width: 120px; accent-color: #6b4a2b; }
+.setSec { font-weight: 700; color: #6b4a2b; border-bottom: 1px dashed #b8904f; margin-top: 6px; padding-bottom: 2px; }
+.setNote { margin: 0; font-size: 12px; color: #6b4a2b; }
+body.padEdit #skillPad { outline: 3px dashed #ffd34d; outline-offset: 8px; cursor: move; z-index: 40; } body.padEdit #setBox { background: transparent; pointer-events: none; } body.padEdit #setBox .setPanel { pointer-events: auto; opacity: .92; }
+/* ===== 나라 창: 크게 + 폰처럼 아래에서 올라오며 열림 ===== */
+#war .panel { width: min(860px, 100%) !important; height: min(760px, calc(100vh - 32px)); max-height: none !important; border-radius: 22px; animation: phoneUp .32s cubic-bezier(.2, .9, .3, 1.15); }
+#war .warbody { flex: 1; min-height: 0; overflow-y: auto; }
+@keyframes phoneUp { from { transform: translateY(70vh) scale(.6); opacity: .2; } 70% { opacity: 1; } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { #war .panel { animation: none; } }
 /* ===== HUD 개편 (2026-11): 왼쪽 위 체력·마나·자원, 오른쪽 위 미니맵+버튼, 아래 가운데 회색 채팅 ===== */
 #where { display: none !important; }
 #vitals { left: max(12px, env(safe-area-inset-left, 0px)); top: calc(12px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 5px; z-index: 6; }
@@ -657,8 +696,9 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <button id="btnWar" type="button">나라 (B)</button><button id="btnCast" type="button">⚔ 영역전</button>
   <button id="btnHome" type="button">수도 (T)</button>
   <button id="btnCoupon" type="button">쿠폰</button>
-  <button id="btnBag" type="button">가방 (I)</button>
-  <button id="btnSkill" type="button">마법 (K)</button>
+  <button id="btnBag" type="button">프로필 (I)</button>
+  <button id="btnSet" type="button" class="gearBtn" title="설정" aria-label="설정"><svg viewBox="0 0 16 16" width="22" height="22" shape-rendering="crispEdges" aria-hidden="true"><path fill="#3a2616" d="M6 0h4v2h2v2h2v2h2v4h-2v2h-2v2h-2v2H6v-2H4v-2H2v-2H0V6h2V4h2V2h2z"/><path fill="#e7d3a8" d="M7 1h2v2h2v1h1v1h1v2h2v2h-2v2h-1v1h-1v1H9v2H7v-2H5v-1H4v-1H3V9H1V7h2V5h1V4h1V3h2z"/><path fill="#6b4a2b" d="M6 6h4v4H6z"/><path fill="#3a2616" d="M7 7h2v2H7z"/></svg></button>
+  <button id="btnSkill" type="button" hidden>마법 (K)</button>
   <button id="btnCloset" type="button" hidden>꾸미기</button>
 </div>
 
@@ -808,6 +848,22 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <button id="bagFrag" type="button" class="bagFrag" hidden>📜 멸망 조각</button>
   <button id="bagCloset" type="button" class="bagFrag">👕 꾸미기 · 이름 바꾸기</button>
   <div class="stFoot" id="bagDonate"><span class="msg">💝 내 코인을 나라 저장소에 기부 (나라 돈 → 내 돈은 안 돼요)</span><input id="bagGiveN" type="number" min="1" value="50" style="width:80px"><button id="bagGive" type="button">기부</button></div>
+</div></div>
+<div id="profile" class="modalbox" hidden><div class="book">
+  <button id="pfClose" class="bookX" type="button" aria-label="닫기">✕</button>
+  <div class="page left"><div class="pfTitle">모험가 기록</div><canvas id="pfChar" width="160" height="160" aria-label="내 캐릭터"></canvas><div class="pfName" id="pfName"></div><div class="pfSub" id="pfSub"></div><div class="pfStatline" id="pfLine"></div></div>
+  <div class="page right"><div class="bmarks" id="pfTabs"><button type="button" data-pf="bag">🎒 주머니</button><button type="button" data-pf="magic">✨ 마법</button><button type="button" data-pf="look">👕 꾸미기</button><button type="button" data-pf="stats">📊 통계</button></div><div class="pfBody" id="pfBody"></div></div>
+</div></div>
+<div id="setBox" class="modalbox" hidden><div class="setPanel">
+  <div class="setHead"><b>⚙ 설정</b><button id="setClose" class="bookX" type="button" aria-label="닫기">✕</button></div>
+  <label class="setRow">🎵 배경음악 <input id="sBgm" type="range" min="0" max="100" value="60"> <span id="sBgmV">60%</span></label>
+  <label class="setRow">🔔 효과음 <input id="sSfx" type="range" min="0" max="100" value="70"> <span id="sSfxV">70%</span></label>
+  <div class="setSec">🎮 마법 버튼 (패드·폰)</div>
+  <label class="setRow">크기 <input id="sPad" type="range" min="70" max="160" value="100"> <span id="sPadV">100%</span></label>
+  <div class="setRow"><button id="sPadMove" class="pfBtn" type="button">✋ 위치 옮기기</button><button id="sPadReset" class="pfBtn" type="button">처음 자리로</button></div>
+  <p class="setNote" id="sPadNote">위치 옮기기를 누르고 화면의 마법 버튼을 끌어다 놓으세요. 다 놓으면 다시 눌러 끝내요.</p>
+  <div class="setSec">🎬 기타</div>
+  <div class="setRow"><button id="sReplay" class="pfBtn" type="button">오프닝 다시 보기</button></div>
 </div></div>
 <div id="craftBox" class="modalbox" hidden><div class="hv bagHv"><div class="hvClouds"></div>
   <div class="hvTop"><h2>🔨 작업대</h2><span class="bagCoin" id="craftMats"></span><button id="craftClose" class="hvX" type="button" aria-label="닫기">✕</button></div>

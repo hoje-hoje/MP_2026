@@ -1820,7 +1820,7 @@
   function openSkills() { const f = $('skillFrame'); if (!f.src) f.src = '/skilltree?game=1'; else try { f.contentWindow.MP_REFRESH && f.contentWindow.MP_REFRESH(); } catch (e) { /* 아직 로딩 */ } $('skillBox').hidden = false; }
   function closeSkills() { $('skillBox').hidden = true; try { $('skillFrame').blur(); document.activeElement && document.activeElement.blur && document.activeElement.blur(); window.focus(); } catch (e) { /* 무시 */ } } // 창을 닫으면 키보드가 다시 게임으로
   window.MP_SKILL_CLOSE = () => closeSkills();
-  function castSkill(slot) { if (!netOn || player.scene !== 'ground' || amDead() || TITLE.on) return; const key = MY_SLOTS[slot]; if (!key) { toast('마법 칸이 비었어요 · 마법(K)에서 배운 마법을 넣어요'); return; } if (performance.now() < SKCD[slot]) return; { const need = MPRules.MAGIC_TIER[MPRules.MAGIC[key].tier].mp; if (manaNow() < need) { toast(`마나가 모자라요 (${need} 필요)`); return; } } ws.send(JSON.stringify({ t: 'cast', slot, face: player.face | 0 })); }
+  function castSkill(slot) { if (document.body.classList.contains('padEdit')) return; if (!netOn || player.scene !== 'ground' || amDead() || TITLE.on) return; const key = MY_SLOTS[slot]; if (!key) { toast('마법 칸이 비었어요 · 마법(K)에서 배운 마법을 넣어요'); return; } if (performance.now() < SKCD[slot]) return; { const need = MPRules.MAGIC_TIER[MPRules.MAGIC[key].tier].mp; if (manaNow() < need) { toast(`마나가 모자라요 (${need} 필요)`); return; } } ws.send(JSON.stringify({ t: 'cast', slot, face: player.face | 0 })); }
   const skIcoCache = {};
   async function skillIcon(cv, key) { const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); if (!key) return; const M = MPRules.MAGIC[key]; await loadPfxW(); if (!PFXW) return; const mod = await fxMod(M.fx); if (!mod) return;
     if (!skIcoCache[key]) { const m = mod.meta || {}, sz = m.size || [64, 64], o = m.origin || [sz[0] / 2, sz[1] / 2], fr = PFXW.core.createFrame(sz[0], sz[1]), f = PFXW.core.createFx(mod, Object.assign({ x: o[0], y: o[1] }, M.pal ? { palette: M.pal } : {})); f.update(Math.min(0.7, (m.duration || 1) * 0.5)); f.draw(fr); const im = new ImageData(sz[0], sz[1]); PFXW.core.composite(fr, im.data, null); const t = document.createElement('canvas'); t.width = sz[0]; t.height = sz[1]; t.getContext('2d').putImageData(im, 0, 0); skIcoCache[key] = t; }
@@ -1838,6 +1838,36 @@
     if (m.id === myId) { if (m.speed) BUFF.speed = performance.now() + m.speed * 1000; if (m.light) BUFF.light = performance.now() + m.light * 1000; if (m.heal) { DROWN.t = 0; player._sk = 0; } }
   }
   const frozenAt = (i) => { const t = FROZEN.get(i); if (t == null) return false; if (t < Date.now()) { FROZEN.delete(i); return false; } return true; };
+  // ---------------------------------------------------------- 프로필 (책): 주머니 · 마법 · 꾸미기 · 통계
+  const PF = { tab: 'bag', raf: 0, stats: {} };
+  const STAT_NAME = [['fish', '🎣 낚시'], ['plant', '🌱 씨앗 심기'], ['harvest', '🧺 수확'], ['chop', '🪓 나무 베기'], ['gather', '🌿 풀·꽃 채집'], ['craft', '🔨 마법석 만들기'], ['magic', '✨ 마법 쓰기'], ['chat', '💬 채팅'], ['deaths', '💫 쓰러짐'], ['puzzles', '🧩 퍼즐'], ['steals', '💰 훔치기']];
+  function openProfile(tab) { PF.tab = tab || PF.tab; $('profile').hidden = false; if (PF.tab === 'stats' && netOn) ws.send(JSON.stringify({ t: 'stats' })); renderProfile(); if (!PF.raf) PF.raf = requestAnimationFrame(pfLoop); }
+  function closeProfile() { $('profile').hidden = true; cancelAnimationFrame(PF.raf); PF.raf = 0; }
+  function pfLoop(now) { if ($('profile').hidden) { PF.raf = 0; return; } const cv = $('pfChar'), g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); g.imageSmoothingEnabled = false;
+    const face = [0, 3, 1, 2][Math.floor(now / 1400) % 4]; g.save(); g.translate(80, 128); g.scale(2, 2); drawSprite(g, 0, 0, Object.assign({}, player.look, { me: false }), now / 1000, true, face, false); g.restore(); // 제자리에서 빙글 돌며 걷기
+    PF.raf = requestAnimationFrame(pfLoop); }
+  function renderProfile() {
+    for (const b of document.querySelectorAll('#pfTabs [data-pf]')) b.setAttribute('aria-pressed', String(b.dataset.pf === PF.tab));
+    const me = myView && myView.me; $('pfName').textContent = player.name; $('pfSub').textContent = `${me ? me.name + (me.isKing ? ' · 👑 왕' : ' · 국민') : '유랑민'}${MY_JOB ? ' · ' + jobIcon(MY_JOB) + MPRules.JOBS[MY_JOB].name : ''}`;
+    $('pfLine').innerHTML = `<b>내 코인</b><span>${MY_PCOIN.toLocaleString()}</span><b>마법</b><span>${MY_SLOTS.map((k, i) => `${i ? 'F' : 'R'}: ${k ? MPRules.MAGIC[k].name : '-'}`).join(' · ')}</span><b>멸망 조각</b><span>${MY_FRAGS.size}/${FRAG_N}</span>`;
+    const body = $('pfBody'); let h = '';
+    if (PF.tab === 'bag') { const list = myTradables().filter((q) => !q.k.startsWith('hat:')); const tools = Object.keys(MY_TOOLS).filter((k) => MY_TOOLS[k]);
+      h += `<div class="pfSec">🎒 주머니 (${list.length}칸)</div><div class="pfGrid">${list.map((q) => `<div class="pfSlot" title="${esc(persName(q.k))}"><canvas data-pk="${q.k}" width="56" height="56"></canvas>${q.n > 1 ? `<i>${q.n}</i>` : ''}</div>`).join('')}${Array.from({ length: Math.max(0, 15 - list.length) }, () => '<div class="pfSlot empty"></div>').join('')}</div>`;
+      h += `<div class="pfSec">🪓 도구</div>` + (tools.length ? `<div class="pfGrid">${tools.map((k) => `<div class="pfSlot" title="${esc(MPRules.TOOLS[k].name)}"><canvas data-pk="tool:${k}" width="56" height="56"></canvas></div>`).join('')}</div>` : '<p class="msg">아직 도구가 없어요 · 작업대에서 만들어요</p>');
+      h += DOOM ? `<button class="pfBtn" id="pfFrag" type="button">📜 멸망 조각 ${MY_FRAGS.size}/${FRAG_N}</button>` : ''; }
+    else if (PF.tab === 'magic') { h += `<div class="pfSec">✨ 내 마법 2칸</div><div class="pfGrid" style="grid-template-columns:repeat(2,1fr);max-width:220px">${MY_SLOTS.map((k, i) => `<div class="pfSlot" title="${k ? esc(MPRules.MAGIC[k].name) : '빈 칸'}"><canvas data-sk="${k || ''}" width="56" height="56"></canvas><i>${i ? 'F' : 'R'}</i></div>`).join('')}</div>`;
+      const learned = Object.keys(MY_SKILLS).filter((k) => MY_SKILLS[k] > 0 && MPRules.MAGIC[k]); h += `<div class="pfSec">배운 마법 (${learned.length})</div>` + (learned.length ? learned.map((k) => `<div class="pfRow"><span>${MPRules.magicEl(MPRules.MAGIC[k].el).name} · ${MPRules.MAGIC[k].name}</span><b>${MY_SKILLS[k]}/${MPRules.MAGIC_TIER[MPRules.MAGIC[k].tier].max}</b></div>`).join('') : '<p class="msg">아직 배운 마법이 없어요 · 작업대에서 마법석을 만들어요</p>');
+      h += `<button class="pfBtn" id="pfTree" type="button">✨ 스킬 트리 열기 (K)</button>`; }
+    else if (PF.tab === 'look') { h += `<div class="pfSec">👕 꾸미기</div><p class="msg">캐릭터 모습과 이름을 바꿔요.</p><button class="pfBtn" id="pfCloset" type="button">🧍 캐릭터 고르기 · 이름 바꾸기</button>`;
+      const hats = Object.keys(MY_HATS); h += `<div class="pfSec">🎩 내 모자</div>` + (hats.length ? `<div class="pfGrid">${hats.map((k) => `<button class="pfSlot" type="button" data-hat="${k}" title="${esc(HATS[k].name)}" style="${player.look.hat === k ? 'outline:3px solid #6b4a2b' : ''}"><canvas data-pk="hat:${k}" width="56" height="56"></canvas></button>`).join('')}<button class="pfSlot" type="button" data-hat="" title="모자 벗기">✕</button></div>` : '<p class="msg">하늘 꾸미기 상점에서 모자를 살 수 있어요</p>'); }
+    else { h += `<div class="pfSec">📊 지금까지 한 일</div>` + STAT_NAME.map(([k, l]) => `<div class="pfRow"><span>${l}</span><b>${(PF.stats[k] | 0).toLocaleString()}번</b></div>`).join(''); }
+    body.innerHTML = h;
+    for (const c of body.querySelectorAll('[data-pk]')) persIcon(c, c.dataset.pk);
+    for (const c of body.querySelectorAll('[data-sk]')) skillIcon(c, c.dataset.sk || null);
+    const on = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+    on('pfTree', () => { closeProfile(); openSkills(); }); on('pfCloset', () => { closeProfile(); $('btnCloset').click(); }); on('pfFrag', () => { closeProfile(); $('bagFrag').click(); });
+    for (const b of body.querySelectorAll('[data-hat]')) b.onclick = () => { player.look.hat = b.dataset.hat; saveLook(); renderProfile(); };
+  }
   const CRAFT = { tab: 'tool' };
   function openCraft() {
     const tabs = [['tool', '🪓 도구'], ['light', '🔥 빛'], ['furniture', '🪑 가구'], ['magic', '✨ 마법석']];
@@ -2433,7 +2463,7 @@
     if (k === 'm') toggleMap();
     if ((k === 'r' || k === 'f') && !e.repeat && !TITLE.on && !document.querySelector('.modalbox:not([hidden])')) castSkill(k === 'r' ? 0 : 1);
     if (k === 'k' && !TITLE.on) { if ($('skillBox').hidden) openSkills(); else closeSkills(); }
-    if (k === 'i' && !TITLE.on) { if ($('bagBox').hidden) openBag(); else $('bagBox').hidden = true; }
+    if (k === 'i' && !TITLE.on) { if ($('profile').hidden) openProfile('bag'); else closeProfile(); }
     if (k === 'b') toggleWar();
     if (k === 't') { if (player.carry) toast('훔친 걸 들고 있으면 순간이동할 수 없어요'); else goHome(); }
     if ((k === 'e' || k === ' ') && !$('talk').hidden) { e.preventDefault(); if (!e.repeat) talkNext(); return; }
@@ -2760,7 +2790,7 @@
   if (store('mp2026.chatTuck')) setTimeout(() => setChatTuck(true), 0);
   $('ruleClose').addEventListener('click', () => { $('rulebook').hidden = true; });
   contractPad();
-  $('btnBag').addEventListener('click', () => openBag()); $('bagClose').addEventListener('click', () => { $('bagBox').hidden = true; });
+  $('btnBag').addEventListener('click', () => openProfile('bag')); $('pfClose').addEventListener('click', () => closeProfile()); for (const b of document.querySelectorAll('#pfTabs [data-pf]')) b.addEventListener('click', () => openProfile(b.dataset.pf)); $('bagClose').addEventListener('click', () => { $('bagBox').hidden = true; });
   $('bagGive').addEventListener('click', () => { const n = parseInt($('bagGiveN').value, 10) || 0; if (n > 0 && confirm(`내 코인 ${n}을(를) 나라에 기부할까요? (돌려받을 수 없어요)`)) ws.send(JSON.stringify({ t: 'donate', n })); });
   $('trqYes').addEventListener('click', () => { ws.send(JSON.stringify({ t: 'tradeAnswer', from: +$('tradeReq').dataset.from, yes: true })); $('tradeReq').hidden = true; });
   $('trqNo').addEventListener('click', () => { ws.send(JSON.stringify({ t: 'tradeAnswer', from: +$('tradeReq').dataset.from, yes: false })); $('tradeReq').hidden = true; });
@@ -3157,8 +3187,9 @@
       case 'hats': MY_HATS = m.hats || {}; MY_PCOIN = m.pcoin | 0; renderInv(); player.look.hat = m.id; saveLook(); toast(`🎩 ${HATS[m.id].name}을(를) 샀어요! 바로 썼어요 (꾸미기에서 바꿀 수 있어요)`); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'skills': MY_SKILLS = m.skills || {}; MY_SLOTS = m.slots || [null, null]; renderSkillPad(); if (m.text) { toast(m.text); SND.play('chargeFull'); } try { const f = $('skillFrame').contentWindow; if (f && f.MP_REFRESH) f.MP_REFRESH(); } catch (e) { /* 창이 아직 없음 */ } break;
       case 'cast': playCast(m); break;
+      case 'stats': PF.stats = m.stats || {}; if (!$('profile').hidden) renderProfile(); break;
       case 'castOk': { if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); } if (m.cd) { SKCD[m.slot] = performance.now() + m.cd * 1000; SKCDLEN[m.slot] = m.cd * 1000; } if (m.text) toast(m.text); break; }
-      case 'bag': MY_BAG = m.bag || {}; if (!$('bagBox').hidden) openBag(); if (!$('shopBox').hidden) renderShop(); if (!$('craftBox').hidden) openCraft(); break;
+      case 'bag': MY_BAG = m.bag || {}; if (!$('profile').hidden) renderProfile(); if (!$('bagBox').hidden) openBag(); if (!$('shopBox').hidden) renderShop(); if (!$('craftBox').hidden) openCraft(); break;
       case 'tradeReq': $('trqText').textContent = `${m.name}님이 거래를 신청했어요`; $('tradeReq').hidden = false; $('tradeReq').dataset.from = m.from; SND.play('ok'); clearTimeout(window.__trq); window.__trq = setTimeout(() => { $('tradeReq').hidden = true; }, 25000); break;
       case 'tradeOpen': $('tradeReq').hidden = true; openTrade(m); break;
       case 'tradeState': if (m.tid === TRADE.tid) { TRADE.offer = m.offer; TRADE.ready = m.ready; TRADE.go = m.go; renderTrade(); } break;
@@ -3361,6 +3392,7 @@
     } catch (e) { $('gErr').textContent = '서버에 연결하지 못했어요. 다시 해 주세요.'; }
   }
   $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { sendChat(); } if (e.key === 'Escape') e.target.blur(); if (e.key === 'Tab') { e.preventDefault(); chatCh = chatCh === 'team' ? 'all' : 'team'; renderChatTabs(); } });
+  renderChatTabs();
   $('chatChBtn').addEventListener('click', () => { chatCh = chatCh === 'team' ? 'all' : 'team'; renderChatTabs(); $('chatIn').focus(); });
   $('chatIn').addEventListener('focus', renderChatTabs);
   $('chatIn').addEventListener('focus', () => keys.clear());
@@ -4039,7 +4071,7 @@
       if (deep) DROWN.msg = `⚠ ${Math.max(1, Math.ceil(3 - DROWN.t))}!`; else if (dp >= 3.4 && !isLand(Math.floor(player.x / TILE), Math.floor(player.y / TILE))) DROWN.msg = '🌊 깊어요';
       if (DROWN.t > 3 && performance.now() - DROWN.sent > 4000) { DROWN.sent = performance.now(); if (netOn) ws.send(JSON.stringify({ t: 'drown' })); } }
     tickBoard(); tickQuiz(); tickWelcome(); tickWar3();
-    { const sp = ONLINE && netOn && player.scene === 'ground' && !TITLE.on && !OP.on && !document.querySelector('.modalbox:not([hidden])'); if ($('skillPad').hidden === sp) $('skillPad').hidden = !sp; if (sp) for (const i of [0, 1]) { const left = SKCD[i] - performance.now(); $('sk' + i).querySelector('.cd').style.setProperty('--p', left > 0 ? (left / SKCDLEN[i] * 100).toFixed(1) + '%' : '0%'); } } // 마법 2칸 버튼 + 쿨타임
+    { const sp = document.body.classList.contains('padEdit') || (ONLINE && netOn && player.scene === 'ground' && !TITLE.on && !OP.on && !document.querySelector('.modalbox:not([hidden])')); if ($('skillPad').hidden === sp) $('skillPad').hidden = !sp; if (sp) for (const i of [0, 1]) { const left = SKCD[i] - performance.now(); $('sk' + i).querySelector('.cd').style.setProperty('--p', left > 0 ? (left / SKCDLEN[i] * 100).toFixed(1) + '%' : '0%'); } } // 마법 2칸 버튼 + 쿨타임
     { const show = MPRules.NUM.pvp.on && ONLINE && player.scene === 'ground' && (matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0) && !TITLE.on; if ($('atkBtn').hidden === show) { $('atkBtn').hidden = !show; $('swapBtn').hidden = !show; } if (show && swapIcon.w !== myWeapon()) { swapIcon.w = myWeapon(); swapIcon(); } } // 패드·폰: 동그라미 공격·무기 교체 버튼
     { const a = curAct(); if (a !== lastAct) { lastAct = a; if (netOn) ws.send(JSON.stringify({ t: 'act', a, fx: FISHING.x | 0, fy: FISHING.y | 0 })); } } // 도구를 주변에 알림
     if (player.scene === 'sky' && !(player.room.id === 'jail' && jailUntil > Date.now()) && !EDIT.on) {
@@ -4791,6 +4823,22 @@
   });
   $('tBgm').addEventListener('input', () => { SND.setVol('bgm', +$('tBgm').value); $('tBgmV').textContent = $('tBgm').value + '%'; });
   $('tSfx').addEventListener('input', () => { SND.setVol('sfx', +$('tSfx').value); $('tSfxV').textContent = $('tSfx').value + '%'; SND.play('coin'); });
+  // ⚙ 설정 창: 음악·효과음 · 패드 마법 버튼 크기/위치
+  const PAD = Object.assign({ r: null, b: null, s: 100 }, store('mp2026.pad') || {});
+  function applyPad() { const el = $('skillPad'); el.style.right = PAD.r != null ? PAD.r + 'px' : ''; el.style.bottom = PAD.b != null ? PAD.b + 'px' : ''; el.style.setProperty('right', PAD.r != null ? PAD.r + 'px' : '', PAD.r != null ? 'important' : ''); el.style.setProperty('bottom', PAD.b != null ? PAD.b + 'px' : '', PAD.b != null ? 'important' : ''); el.style.transform = `scale(${PAD.s / 100})`; el.style.transformOrigin = 'bottom right'; }
+  applyPad();
+  function openSettings() { const vb = store('mp2026.bgm') ?? 60, vs = store('mp2026.sfx') ?? 70; $('sBgm').value = vb; $('sBgmV').textContent = vb + '%'; $('sSfx').value = vs; $('sSfxV').textContent = vs + '%'; $('sPad').value = PAD.s; $('sPadV').textContent = PAD.s + '%'; $('setBox').hidden = false; }
+  $('btnSet').addEventListener('click', openSettings); $('setClose').addEventListener('click', () => { document.body.classList.remove('padEdit'); $('sPadMove').textContent = '✋ 위치 옮기기'; $('setBox').hidden = true; });
+  $('sBgm').addEventListener('input', () => { SND.setVol('bgm', +$('sBgm').value); $('sBgmV').textContent = $('sBgm').value + '%'; $('tBgm').value = $('sBgm').value; });
+  $('sSfx').addEventListener('input', () => { SND.setVol('sfx', +$('sSfx').value); $('sSfxV').textContent = $('sSfx').value + '%'; $('tSfx').value = $('sSfx').value; SND.play('coin'); });
+  $('sPad').addEventListener('input', () => { PAD.s = +$('sPad').value; $('sPadV').textContent = PAD.s + '%'; applyPad(); store('mp2026.pad', PAD); });
+  $('sPadMove').addEventListener('click', () => { const on = !document.body.classList.contains('padEdit'); document.body.classList.toggle('padEdit', on); $('sPadMove').textContent = on ? '✔ 다 옮겼어요' : '✋ 위치 옮기기'; $('skillPad').hidden = false; });
+  $('sPadReset').addEventListener('click', () => { PAD.r = null; PAD.b = null; PAD.s = 100; $('sPad').value = 100; $('sPadV').textContent = '100%'; applyPad(); store('mp2026.pad', PAD); });
+  $('sReplay').addEventListener('click', () => { $('setBox').hidden = true; $('tReplay').click(); });
+  { let drag = null; const pad = $('skillPad'); // 위치 옮기기: 끌어다 놓기
+    pad.addEventListener('pointerdown', (e) => { if (!document.body.classList.contains('padEdit')) return; e.preventDefault(); e.stopPropagation(); const r = pad.getBoundingClientRect(); drag = { dx: innerWidth - e.clientX - (innerWidth - r.right), dy: innerHeight - e.clientY - (innerHeight - r.bottom) }; pad.setPointerCapture(e.pointerId); }, true);
+    pad.addEventListener('pointermove', (e) => { if (!drag) return; PAD.r = Math.max(0, Math.min(innerWidth - 60, Math.round(innerWidth - e.clientX - drag.dx))); PAD.b = Math.max(0, Math.min(innerHeight - 60, Math.round(innerHeight - e.clientY - drag.dy))); applyPad(); });
+    pad.addEventListener('pointerup', () => { if (drag) { drag = null; store('mp2026.pad', PAD); } }); }
   $('tCoupon').addEventListener('click', () => { $('coupon').hidden = false; $('coupon').style.zIndex = 60; setTimeout(() => $('couponIn').focus(), 50); });
 
   // 여신 대사: dim = 화면 밝기(처음엔 어둡다가 밝아짐), input = 이름 적기

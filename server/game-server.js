@@ -196,7 +196,7 @@ function hurt(att, t, dmg, crit, howO) {
   t.acc.hp = Math.max(0, (t.acc.hp ?? NUM.pvp.hp) - dmg); t.lastHurt = now(); dirty = true;
   if (t.acc.hp > 0) return { id: t.id, dmg, hp: t.acc.hp, crit };
   // 쓰러짐: 훔친 것은 원래 나라로, 내 가방 물고기 30%를 그 자리에 떨어뜨림
-  t.deadUntil = now() + NUM.pvp.respawnSec * 1000; t.acc.hp = 0;
+  t.deadUntil = now() + NUM.pvp.respawnSec * 1000; t.acc.hp = 0; stat(t.acc, 'deaths');
   if (t.acc.carry) { const c = t.acc.carry, V = world.nation(c.from); if (V && !V.dead) { giveLoot(V, c); sendViews([V.id]); } t.acc.carry = null; sendMeta(t); }
   const drops = []; for (const [k, v] of Object.entries(t.acc.bag || {})) { const d = Math.ceil(v * NUM.pvp.dropPct); if (d > 0 && v > 0) { t.acc.bag[k] -= d; if (!t.acc.bag[k]) delete t.acc.bag[k]; drops.push({ k, n: d }); } }
   if (drops.length) send(t.ws, { t: 'bag', bag: t.acc.bag });
@@ -486,7 +486,7 @@ wss.on('connection', (ws) => {
         s.chatTimes = (s.chatTimes || []).filter((x) => t0 - x < 10000); s.chatTimes.push(t0);
         s.sameN = text === s.lastText ? (s.sameN || 1) + 1 : 1; s.lastText = text;
         if (s.chatTimes.length > 5 || s.sameN >= 3) { s.muteUntil = t0 + 30000; s.chatTimes = []; s.sameN = 0; return send(ws, { t: 'chatErr', text: '도배 방지: 30초 동안 채팅할 수 없어요' }); }
-        s.lastChat = t0;
+        s.lastChat = t0; stat(s.acc, 'chat');
         const myNat = world.nationOfPlayer(s.token);
         let ch = ['all', 'team', 'near', 'sky'].includes(m.ch) ? m.ch : 'all';
         if (jailed(s.acc) && ch !== 'team') ch = 'jail';
@@ -751,7 +751,7 @@ wss.on('connection', (ws) => {
         const axe = needTool(s, 'axe'); // 누구나 어디서든 · 맨손은 느리고 조금, 도끼는 빠르고 많이
         if (now() - (s.lastChop || 0) < (axe ? NUM.chopSec : NUM.chopHandSec) * 900) return;
         if (!nextTo(s, x, y) || !treeHere(x, y) || world.s.chopped[i]) return send(ws, { t: 'err', text: '벨 수 있는 나무가 없어요' });
-        s.lastChop = now(); world.s.chopped[i] = 1; dirty = true;
+        s.lastChop = now(); world.s.chopped[i] = 1; stat(s.acc, 'chop'); dirty = true;
         const got = axe ? NUM.woodPerTree : 1; addMat(s, 'm_wood', got);
         const msg = JSON.stringify({ t: 'chopped', i }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
         send(ws, { t: 'ok', text: `🪵 목재 +${got} (내 가방)${axe ? '' : ' · 도끼가 있으면 더 빠르고 많이 얻어요'}` });
@@ -894,7 +894,7 @@ wss.on('connection', (ws) => {
         if (m.grade !== 'perfect' && m.grade !== 'good') return send(ws, { t: 'fished', fish: null, text: '아깝다! 놓쳤어요' });
         const list = Object.entries(FISH).map(([k, f]) => [k, f.w * (f.rare ? (F.rain ? 1.5 : 1) * (m.grade === 'perfect' ? 1.6 : 1) : 1)]);
         let r = Math.random() * list.reduce((a, [, w]) => a + w, 0), pick = list[0][0]; for (const [k, w] of list) { if ((r -= w) <= 0) { pick = k; break; } }
-        s.acc.bag = s.acc.bag || {}; s.acc.bag['fi_' + pick] = (s.acc.bag['fi_' + pick] || 0) + 1; s.acc.fished.n++; dirty = true; send(ws, { t: 'bag', bag: s.acc.bag }); // 물고기는 내 가방
+        s.acc.bag = s.acc.bag || {}; s.acc.bag['fi_' + pick] = (s.acc.bag['fi_' + pick] || 0) + 1; s.acc.fished.n++; stat(s.acc, 'fish'); dirty = true; send(ws, { t: 'bag', bag: s.acc.bag }); // 물고기는 내 가방
         send(ws, { t: 'fished', fish: pick, rare: !!FISH[pick].rare, text: `${FISH[pick].rare ? '✨ ' : ''}${FISH[pick].name}을(를) 낚았어요! (오늘 ${s.acc.fished.n}/${NUM.fishPerDay * (jobOf(s) === 'fisher' ? 2 : 1)}) → 내 가방` });
         if (pick === 'legend' || pick === 'goldcarp') notifyNation(n.id, `🎣 ${s.acc.name}님이 ${FISH[pick].name}을(를) 낚았어요!`);
         break;
@@ -933,7 +933,7 @@ wss.on('connection', (ws) => {
             const c = e.crop.c, k2 = 'p_' + c; n.items[k2] = (n.items[k2] || 0) + CROPS[c].yield; got[c] = (got[c] || 0) + CROPS[c].yield; delete e.crop; done++; sendTile(i);
           }
         }
-        if (done) { dirty = true; sendViews([n.id]); }
+        if (done) { dirty = true; sendViews([n.id]); stat(s.acc, m.t === 'harvest' ? 'harvest' : m.t === 'plant' ? 'plant' : 'fert', done); }
         if (done && m.t === 'harvest') send(ws, { t: 'ok', text: '수확! ' + Object.entries(got).map(([c, v]) => `${CROPS[c].name} ${v}개`).join(', ') + ' → 우리 저장소' });
         else if (done && m.t === 'fert') send(ws, { t: 'ok', text: '비료를 줬어요 · 남은 시간이 절반으로!' });
         else if (!done && why) send(ws, { t: 'err', text: why });
@@ -972,11 +972,12 @@ wss.on('connection', (ws) => {
         else if (M.eff === 'speed') extra = { speed: 5 + lv - 1 };
         else if (M.eff === 'light') extra = { light: 30 };
         else if (M.eff === 'heal') extra = { heal: 1 };
-        s.acc.mana = manaNow() - T.mp; s.acc.manaAt = now(); dirty = true;
+        s.acc.mana = manaNow() - T.mp; s.acc.manaAt = now(); stat(s.acc, 'magic'); dirty = true;
         areaSend(s, Object.assign({ t: 'cast', id: s.id, key, x: s.x, y: s.y, face }, extra));
         send(ws, { t: 'castOk', key, slot: m.slot === 1 ? 1 : 0, cd: T.cd, text, mana: s.acc.mana });
         break;
       }
+      case 'stats': { send(ws, { t: 'stats', stats: s.acc.stats || {} }); break; } // 프로필 통계
       case 'craft': { // 작업대: 내 가방 재료로 도구·횃불·가구 만들기 (하늘 상점가 작업대, 또는 우리 저장소 옆)
         const R = MPRules.RECIPE_BY[String(m.id || '')], cnt = Math.max(1, Math.min(20, m.n | 0)); if (!R) return;
         const n = world.nationOfPlayer(s.token), here = (s.scene === 'sky' && s.room === 'market') || (s.scene === 'ground' && n && nearStore(s, n, 3));
@@ -991,7 +992,7 @@ wss.on('connection', (ws) => {
         const lack = Object.entries(R.mats).filter(([k, v]) => (k === 'fish' ? fishHave() : s.acc.bag[k] | 0) < v * k2).map(([k, v]) => `${matName(k)} ${v * k2 - (k === 'fish' ? fishHave() : s.acc.bag[k] | 0)}`);
         if (lack.length) return send(ws, { t: 'err', text: `재료가 모자라요: ${lack.join(', ')}` });
         for (const [k, v] of Object.entries(R.mats)) { if (k === 'fish') { let left = v * k2; for (const fk of Object.keys(s.acc.bag)) { if (!fk.startsWith('fi_') || left <= 0) continue; const t2 = Math.min(left, s.acc.bag[fk]); s.acc.bag[fk] -= t2; left -= t2; if (!s.acc.bag[fk]) delete s.acc.bag[fk]; } continue; } s.acc.bag[k] -= v * k2; if (!s.acc.bag[k]) delete s.acc.bag[k]; }
-        if (R.daily) s.acc.ms3Day = gameDayKey();
+        if (R.daily) s.acc.ms3Day = gameDayKey(); stat(s.acc, 'craft');
         if (R.tool) { s.acc.tools = s.acc.tools || {}; s.acc.tools[R.tool] = 1; send(ws, { t: 'tools', tools: s.acc.tools, text: `🔨 ${R.name}을(를) 만들었어요!` }); }
         else { const g = (R.give || 1) * k2; s.acc.bag[R.id] = (s.acc.bag[R.id] || 0) + g; send(ws, { t: 'ok', text: `🔨 ${R.name} ${g}개를 만들었어요 (내 가방)` }); }
         dirty = true; send(ws, { t: 'bag', bag: s.acc.bag }); break;
@@ -1000,7 +1001,7 @@ wss.on('connection', (ws) => {
         const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y), P = MPRules.plantKind(tileAt(x, y), x, y);
         if (!P || !nextTo(s, x, y) || treeHere(x, y) || now() - (s.lastGather || 0) < NUM.gatherSec * 800) return;
         world.s.picked = world.s.picked || {}; if (now() - (world.s.picked[i] || 0) < NUM.regrowMin * 60e3) return send(ws, { t: 'err', text: '아직 다시 자라는 중이에요' });
-        s.lastGather = now(); world.s.picked[i] = now(); addMat(s, P.mat, P.n); dirty = true;
+        s.lastGather = now(); world.s.picked[i] = now(); addMat(s, P.mat, P.n); stat(s.acc, 'gather'); dirty = true;
         const msg = JSON.stringify({ t: 'picked', i }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
         send(ws, { t: 'ok', text: `${P.mat === 'm_flower' ? '🌸' : '🌿'} ${MPRules.MATS[P.mat].name} +${P.n} (내 가방)` }); break;
       }
