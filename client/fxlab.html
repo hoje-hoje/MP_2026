@@ -47,7 +47,7 @@ async function play(key, btn, at) {
 cv.addEventListener('click', (e) => { if (!cur) return; const r = cv.getBoundingClientRect(); play(cur, null, { x: Math.round((e.clientX - r.left) / r.width * VW), y: Math.round((e.clientY - r.top) / r.height * VH) }); });
 function person(x, y, col) { g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x - 6, y - 1, 12, 3); g.fillStyle = '#2b2340'; g.fillRect(x - 5, y - 22, 10, 21); g.fillStyle = col; g.fillRect(x - 4, y - 12, 8, 10); g.fillStyle = '#ffe1cc'; g.fillRect(x - 4, y - 21, 8, 8); g.fillStyle = '#2b2340'; g.fillRect(x - 2, y - 18, 1, 2); g.fillRect(x + 1, y - 18, 1, 2); }
 let last = performance.now();
-function loop(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now;
+function loop(now) { if (location.search.includes('grid=')) return; const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (grass.complete && grass.width) { const pat = g.createPattern(grass, 'repeat'); g.save(); g.scale(1, 1); g.fillStyle = pat; g.fillRect(0, 0, VW, VH); g.restore(); } else { g.fillStyle = '#3f7a44'; g.fillRect(0, 0, VW, VH); }
   person(caster.x, caster.y, '#6b4fb3'); g.fillStyle = '#8a5a2b'; g.fillRect(target.x - 1, target.y - 26, 2, 26); g.fillStyle = '#d9b26a'; g.fillRect(target.x - 7, target.y - 22, 14, 12); g.fillStyle = '#2b2340'; g.fillRect(target.x - 3, target.y - 18, 1, 2); g.fillRect(target.x + 2, target.y - 18, 1, 2);
   for (const mv of movers) { mv.t += dt; const k = Math.min(1, mv.t / 0.7); mv.f.options.x = caster.x + 10 + (target.x - caster.x - 16) * k; if (k >= 1 && !mv.hit) { mv.hit = true; mv.f.stop(); load('impacts/hit-spark').then((m) => fx.push(core.createFx(m, { x: target.x, y: target.y - 12 }))); } }
@@ -57,4 +57,25 @@ function loop(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now;
   requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 window.FXLAB = { play, count: () => fx.length };
+// 모아보기: ?grid=fire/fireball,fire/meteor,... → 칸마다 하나씩 계속 반복 (속성별 비교용)
+const GQ = new URLSearchParams(location.search).get('grid');
+if (GQ) {
+  document.querySelector('.side').hidden = true; document.querySelector('.wrap').style.gridTemplateColumns = '1fr';
+  const keys = GQ.split(','), n = keys.length, cols = Math.min(4, n), rows = Math.ceil(n / cols), CW = 160, CH = 120;
+  cv.width = cols * CW; cv.height = rows * CH; const fr2 = core.createFrame(cv.width, cv.height), im2 = new ImageData(cv.width, cv.height), of2 = document.createElement('canvas'); of2.width = cv.width; of2.height = cv.height;
+  const mods = await Promise.all(keys.map(load)); const cells = keys.map((k, i) => ({ k, m: mods[i], x: (i % cols) * CW, y: Math.floor(i / cols) * CH, f: null, t: 0 }));
+  const spawn = (c) => { const m = c.m.meta || {}, sz = m.size || [80, 80], o = m.origin || [sz[0] / 2, sz[1] / 2], sc = Math.min(1, (CW - 16) / sz[0], (CH - 30) / sz[1]);
+    c.f = core.createFx(c.m, { x: c.x + CW / 2 - (sz[0] / 2 - o[0]), y: c.y + 14 + (CH - 30) / 2 - (sz[1] / 2 - o[1]) }); c.t = 0; c.len = Math.max(1.2, (m.duration || 1) + 0.4); };
+  cells.forEach(spawn);
+  let l2 = performance.now();
+  (function gl(now) { const dt = Math.min(0.05, (now - l2) / 1000); l2 = now;
+    g.fillStyle = '#1e2a20'; g.fillRect(0, 0, cv.width, cv.height);
+    if (grass.complete && grass.width) { g.globalAlpha = 0.55; g.fillStyle = g.createPattern(grass, 'repeat'); g.fillRect(0, 0, cv.width, cv.height); g.globalAlpha = 1; }
+    core.clearFrame(fr2);
+    for (const c of cells) { c.t += dt; if (c.t > c.len) spawn(c); c.f.update(dt); c.f.draw(fr2); }
+    core.composite(fr2, im2.data, null); of2.getContext('2d').putImageData(im2, 0, 0); g.drawImage(of2, 0, 0);
+    g.font = '10px Galmuri11, sans-serif'; g.textBaseline = 'top';
+    for (const c of cells) { g.strokeStyle = 'rgba(0,0,0,.35)'; g.strokeRect(c.x + 0.5, c.y + 0.5, CW - 1, CH - 1); g.fillStyle = 'rgba(27,20,48,.75)'; g.fillRect(c.x, c.y, CW, 13); g.fillStyle = '#fff'; g.fillText((c.m.meta && c.m.meta.name) || c.k, c.x + 4, c.y + 2); }
+    requestAnimationFrame(gl); })(l2);
+}
 </script>

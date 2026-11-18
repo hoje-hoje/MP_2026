@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>마법석 스킬 트리 (시안)</title>
+<style>
+@font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11.woff2) format('woff2'); font-display: swap; }
+@font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11-Bold.woff2) format('woff2'); font-weight: 700; font-display: swap; }
+/* 게임 창과 같은 말투: 두꺼운 남색 테두리 + 크림색 종이 + 주황 띠. 속성마다 보석 색 */
+:root {
+  --ink: #2b2340; --paper: #fffdf8; --cream: #fff3d6; --muted: #6a6280; --frame: #ff6a2a; --void: #1b1430;
+  --fire: #ff6a2a; --ice: #5fc8ff; --bolt: #ffd23d; --holy: #fff1a8; --nature: #5fbf5a; --arcane: #b07cff;
+  --font: 'Galmuri11', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: radial-gradient(ellipse at 50% 30%, #3a2f63 0%, var(--void) 70%); color: var(--ink); font-family: var(--font); min-height: 100vh; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
+.win { max-width: 1180px; margin: 0 auto; background: var(--paper); border: 4px solid var(--ink); box-shadow: 0 0 0 4px var(--frame), 0 0 0 8px var(--ink), 0 18px 0 8px rgba(0,0,0,.35); }
+.top { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: linear-gradient(#ffe7b8, #ffd27a); border-bottom: 4px solid var(--ink); flex-wrap: wrap; }
+.top h1 { margin: 0; font-size: 22px; letter-spacing: .5px; }
+.stones { margin-left: auto; display: flex; align-items: center; gap: 8px; background: var(--ink); color: #fff; padding: 6px 12px; font-weight: 700; }
+.gem { width: 14px; height: 14px; transform: rotate(45deg); background: linear-gradient(135deg, #e8d7ff, #8a5cff); border: 2px solid #fff; }
+.reset { background: var(--paper); border: 3px solid var(--ink); font: inherit; font-weight: 700; padding: 6px 10px; cursor: pointer; }
+.body { display: grid; grid-template-columns: 1fr 300px; min-height: 560px; }
+@media (max-width: 900px) { .body { grid-template-columns: 1fr; } }
+.tree { position: relative; padding: 14px 10px 18px; overflow-x: auto; background: repeating-linear-gradient(0deg, transparent 0 31px, rgba(43,35,64,.04) 31px 32px), repeating-linear-gradient(90deg, transparent 0 31px, rgba(43,35,64,.04) 31px 32px); }
+.grid { position: relative; min-width: 720px; display: grid; grid-template-columns: repeat(6, 1fr); row-gap: 26px; }
+svg.lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+.grid > :not(svg) { position: relative; z-index: 1; } /* 선은 칸 뒤로 */
+.root { grid-column: 1 / -1; display: flex; justify-content: center; }
+.col-h { text-align: center; font-weight: 700; font-size: 13px; padding: 3px 0; }
+.row2 { display: flex; justify-content: center; gap: 4px; }
+.row2 .node { width: 54px; height: 54px; } .row2 .node .in canvas { width: 34px; height: 34px; } .row2 .lbl { font-size: 10px; max-width: 60px; }
+.cell { display: flex; justify-content: center; }
+.node { position: relative; width: 64px; height: 64px; border: none; padding: 0; background: none; cursor: pointer; font: inherit; }
+.node .hex { position: absolute; inset: 0; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: var(--ink); }
+.node .in { position: absolute; inset: 4px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: var(--c); display: grid; place-items: center; }
+.node .in canvas { width: 40px; height: 40px; image-rendering: pixelated; }
+.node.locked .in { background: #c9c3d6; filter: grayscale(1); }
+.node.locked .in canvas { opacity: .35; }
+.node.open .hex { background: var(--c); animation: pulse 1.4s ease-in-out infinite; }
+.node.learned .in { box-shadow: inset 0 0 0 3px #fff; }
+.node.learned::after { content: '✔'; position: absolute; right: -4px; bottom: -2px; background: #2f8a4a; color: #fff; font-size: 11px; width: 18px; height: 18px; display: grid; place-items: center; border: 2px solid var(--ink); }
+.node.sel .hex { background: #fff; box-shadow: none; }
+.node.ult { width: 76px; height: 76px; }
+.node .cost { position: absolute; left: 50%; top: -9px; transform: translateX(-50%); background: var(--ink); color: #fff; font-size: 10px; padding: 1px 5px; white-space: nowrap; }
+.node.learned .cost { display: none; }
+.lbl { text-align: center; font-size: 11px; font-weight: 700; margin-top: 4px; min-height: 14px; background: var(--paper); padding: 0 3px; }
+.nwrap { display: flex; flex-direction: column; align-items: center; }
+@keyframes pulse { 50% { filter: brightness(1.35); } }
+@media (prefers-reduced-motion: reduce) { .node.open .hex { animation: none; } }
+.combo { grid-column: 1 / -1; display: flex; justify-content: center; gap: 28px; padding-top: 8px; border-top: 3px dashed rgba(43,35,64,.25); margin-top: 6px; flex-wrap: wrap; }
+.combo .t { width: 100%; text-align: center; font-weight: 700; font-size: 13px; color: var(--muted); }
+.side { border-left: 4px solid var(--ink); background: var(--cream); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+@media (max-width: 900px) { .side { border-left: none; border-top: 4px solid var(--ink); } }
+.side h2 { margin: 0; font-size: 18px; }
+.chip { display: inline-block; padding: 2px 8px; border: 2px solid var(--ink); font-size: 11px; font-weight: 700; background: var(--c, #fff); }
+.prev { width: 100%; aspect-ratio: 4 / 3; border: 3px solid var(--ink); background: #2c4a30; image-rendering: pixelated; }
+.side p { margin: 0; font-size: 13px; line-height: 1.55; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12px; }
+.kv b { color: var(--muted); font-weight: 700; }
+.learn { margin-top: auto; background: var(--frame); color: #fff; border: 3px solid var(--ink); font: inherit; font-weight: 700; font-size: 15px; padding: 10px; cursor: pointer; box-shadow: 0 4px 0 var(--ink); }
+.learn:disabled { background: #b9b3c6; cursor: default; }
+.learn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); padding: 8px 16px; border-top: 4px solid var(--ink); background: var(--paper); }
+.legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; border: 2px solid var(--ink); }
+.note { max-width: 1180px; margin: 22px auto 0; color: #d9d0f2; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="top"><h1>✨ 마법석 스킬 트리</h1><button class="reset" type="button" id="reset">다시 찍기</button><div class="stones"><span class="gem" aria-hidden="true"></span>마법석 <span id="st">3</span>개</div></div>
+  <div class="body">
+    <div class="tree"><div class="grid" id="grid"><svg class="lines" id="lines" aria-hidden="true"></svg></div></div>
+    <div class="side" id="side"></div>
+  </div>
+  <div class="legend"><span><i style="background:#fff"></i>배움</span><span><i style="background:#ffd27a"></i>지금 배울 수 있음 (반짝)</span><span><i style="background:#c9c3d6"></i>잠김 (앞 칸을 먼저)</span><span>2단계는 둘 중 하나를 골라요 · 궁극기는 2단계 하나만 배워도 열려요</span></div>
+</div>
+<p class="note">시안 화면이에요. 칸을 누르면 오른쪽에서 마법이 실제로 터지고, "배우기"로 마법석을 써 볼 수 있어요.</p>
+<script type="module">
+const P = '/assets/pixelfx/';
+const core = await import(P + 'core/index.js');
+const cache = {}; const load = async (k) => (cache[k] = cache[k] || await import(P + 'fx/' + k + '.js'));
+const EL = [
+  { id: 'fire', name: '불', c: 'var(--fire)', n: [['spark', '불씨', 'fire/torch', '손끝에 작은 불을 켜요 · 밤에 주변이 밝아져요'], ['ball', '파이어볼', 'fire/fireball', '불덩이를 날려요'], ['ring', '화염 고리', 'fire/fire-ring', '내 둘레를 불꽃이 감싸요'], ['ult', '메테오', 'fire/meteor', '하늘에서 운석이 떨어져요']] },
+  { id: 'ice', name: '얼음', c: 'var(--ice)', n: [['spark', '서리', 'ice/snowflake-burst', '눈송이가 흩날려요 · 물 위를 잠깐 얼려 건너요'], ['ball', '얼음창', 'ice/ice-lance', '얼음 창을 날려요'], ['ring', '얼음 가시', 'ice/ice-spikes', '땅에서 얼음 가시가 솟아요'], ['ult', '눈보라', 'ice/blizzard-vortex', '큰 눈보라가 몰아쳐요']] },
+  { id: 'bolt', name: '번개', c: 'var(--bolt)', n: [['spark', '정전기', 'lightning/spark-arc', '찌릿! 작은 전기 · 잠깐 빨라져요'], ['ball', '연쇄 번개', 'lightning/chain-lightning', '번개가 여러 명에게 튀어요'], ['ring', '전기 공', 'lightning/ball-lightning', '떠다니는 번개 공'], ['ult', '번개구름', 'lightning/storm-cloud', '먹구름에서 번개가 쏟아져요']] },
+  { id: 'holy', name: '빛', c: 'var(--holy)', n: [['spark', '회복', 'holy/heal', '나를 치료해요'], ['ball', '보호막', 'holy/divine-shield', '잠깐 아무것도 못 맞아요'], ['ring', '광역 회복', 'holy/heal-aoe', '주변 모두를 치료해요'], ['ult', '부활', 'holy/resurrection', '쓰러진 친구를 일으켜요']] },
+  { id: 'nature', name: '자연', c: 'var(--nature)', n: [['spark', '꽃 피우기', 'nature/healing-bloom', '작물이 빨리 자라요'], ['ball', '덩굴 묶기', 'nature/root-snare', '덩굴로 발을 묶어요'], ['ring', '바위 던지기', 'nature/boulder', '큰 바위를 굴려요'], ['ult', '지진', 'nature/quake', '땅이 흔들려요']] },
+  { id: 'arcane', name: '비전', c: 'var(--arcane)', n: [['spark', '마법진', 'arcane/magic-circle-cast', '수학 마법진을 그려요 · 마법이 강해져요'], ['ball', '순간이동', 'arcane/blink-in', '앞으로 휙 이동해요'], ['ring', '비전 광선', 'arcane/arcane-beam', '마력 광선을 쏴요'], ['ult', '시간 정지', 'arcane/time-stop', '잠깐 시간이 멈춰요']] },
+];
+const ROOT = { key: 'root', name: '마력 깨우기', fx: 'arcane/mana-burst', c: 'var(--arcane)', desc: '모두 처음부터 배워요. 작은 빛을 켤 수 있어요.', cost: 0 };
+const COMBO = [
+  { key: 'c1', name: '불꽃 회오리', fx: 'fire/fire-tornado', c: 'var(--fire)', need: ['fire.ball', 'nature.ring'], desc: '불 2단계 + 자연 2단계 · 합체 마법' },
+  { key: 'c2', name: '플라즈마', fx: 'lightning/plasma-ball', c: 'var(--bolt)', need: ['bolt.ball', 'arcane.ring'], desc: '번개 2단계 + 비전 2단계 · 합체 마법' },
+  { key: 'c3', name: '성스러운 얼음', fx: 'ice/ice-crystal', c: 'var(--ice)', need: ['ice.ring', 'holy.ball'], desc: '얼음 2단계 + 빛 2단계 · 합체 마법' },
+];
+const COST = { spark: 1, ball: 2, ring: 2, ult: 4 };
+const N = {}; N.root = ROOT;
+for (const e of EL) for (const [k, name, fx, desc] of e.n) N[e.id + '.' + k] = { key: e.id + '.' + k, el: e, tier: k, name, fx, desc, c: e.c, cost: COST[k] };
+for (const c of COMBO) N[c.key] = Object.assign({ cost: 3 }, c);
+// 예시 상태: 불씨·파이어볼·회복을 배운 학생
+let learned = new Set(['root', 'fire.spark', 'fire.ball', 'holy.spark']), stones = 3, sel = 'fire.ult';
+function prereq(k) { const n = N[k]; if (k === 'root') return []; if (n.need) return n.need; if (n.tier === 'spark') return ['root']; if (n.tier === 'ult') return [n.el.id + '.ball', n.el.id + '.ring']; return [n.el.id + '.spark']; }
+function state(k) { if (learned.has(k)) return 'learned'; const n = N[k], pr = prereq(k);
+  if (n.tier === 'ball' || n.tier === 'ring') { const other = n.el.id + '.' + (n.tier === 'ball' ? 'ring' : 'ball'); if (learned.has(other)) return 'locked'; }
+  const ok = n.tier === 'ult' ? pr.some((p) => learned.has(p)) : pr.every((p) => learned.has(p)); return ok ? 'open' : 'locked'; }
+const grid = document.getElementById('grid'), svg = document.getElementById('lines');
+function nodeEl(k, ult) { const n = N[k], w = document.createElement('div'); w.className = 'nwrap';
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'node' + (ult ? ' ult' : ''); b.dataset.k = k; b.style.setProperty('--c', n.c); b.setAttribute('aria-label', n.name);
+  b.innerHTML = `<span class="hex"></span><span class="in"><canvas width="40" height="40" data-ico="${k}"></canvas></span><span class="cost">${n.cost ? '◆' + n.cost : ''}</span>`;
+  b.onclick = () => { sel = k; render(); }; const l = document.createElement('div'); l.className = 'lbl'; l.textContent = n.name; w.append(b, l); return w; }
+function build() {
+  const r = document.createElement('div'); r.className = 'root'; r.append(nodeEl('root')); grid.append(r);
+  for (const e of EL) { const h = document.createElement('div'); h.className = 'col-h'; h.style.color = 'var(--ink)'; h.innerHTML = `<span class="chip" style="--c:${e.c}">${e.name}</span>`; grid.append(h); }
+  for (const e of EL) { const c = document.createElement('div'); c.className = 'cell'; c.append(nodeEl(e.id + '.spark')); grid.append(c); }
+  for (const e of EL) { const c = document.createElement('div'); c.className = 'row2'; c.append(nodeEl(e.id + '.ball'), nodeEl(e.id + '.ring')); grid.append(c); }
+  for (const e of EL) { const c = document.createElement('div'); c.className = 'cell'; c.append(nodeEl(e.id + '.ult', true)); grid.append(c); }
+  const cb = document.createElement('div'); cb.className = 'combo'; cb.innerHTML = '<div class="t">합체 마법 (서로 다른 속성 2단계를 찍으면 열려요)</div>'; for (const c of COMBO) cb.append(nodeEl(c.key)); grid.append(cb);
+}
+function lines() { const gr = grid.getBoundingClientRect(); const pos = (k) => { const el = grid.querySelector(`[data-k="${k}"]`).getBoundingClientRect(); return [el.left - gr.left + el.width / 2, el.top - gr.top + el.height / 2]; };
+  let h = ''; for (const k of Object.keys(N)) for (const p of prereq(k)) { if (N[k].need) continue; const [x1, y1] = pos(p), [x2, y2] = pos(k), on = learned.has(k) && learned.has(p), my = (y1 + y2) / 2;
+    h += `<path d="M${x1} ${y1} V${my} H${x2} V${y2}" fill="none" stroke="${on ? '#2b2340' : 'rgba(43,35,64,.25)'}" stroke-width="${on ? 4 : 3}" ${on ? '' : 'stroke-dasharray="4 4"'}/>`; }
+  svg.innerHTML = h; }
+const icoFx = {};
+async function icons() { for (const c of grid.querySelectorAll('canvas[data-ico]')) { const n = N[c.dataset.ico], mod = await load(n.fx), m = mod.meta || {}, sz = m.size || [64, 64];
+  const fr = core.createFrame(sz[0], sz[1]), f = core.createFx(mod, { x: (m.origin || [sz[0] / 2])[0], y: (m.origin || [0, sz[1] / 2])[1] }); f.update(Math.min(0.6, (m.duration || 1) * 0.45)); f.draw(fr);
+  const im = new ImageData(sz[0], sz[1]); core.composite(fr, im.data, null); const tmp = document.createElement('canvas'); tmp.width = sz[0]; tmp.height = sz[1]; tmp.getContext('2d').putImageData(im, 0, 0);
+  const g = c.getContext('2d'), k = Math.min(40 / sz[0], 40 / sz[1]) * 1.6; g.imageSmoothingEnabled = false; g.drawImage(tmp, 20 - sz[0] * k / 2, 20 - sz[1] * k / 2, sz[0] * k, sz[1] * k); } }
+let pv = null;
+function side() { const n = N[sel], st = state(sel), s = document.getElementById('side'), pr = prereq(sel);
+  s.innerHTML = `<div><span class="chip" style="--c:${n.c}">${n.el ? n.el.name : n.need ? '합체' : '기본'}</span> <span class="chip">${{ spark: '1단계', ball: '2단계', ring: '2단계', ult: '궁극기' }[n.tier] || (n.need ? '합체 마법' : '시작')}</span></div>
+    <h2>${n.name}</h2><canvas class="prev" id="pv" width="160" height="120"></canvas><p>${n.desc}</p>
+    <div class="kv"><b>필요</b><span>${pr.length ? pr.map((p) => N[p].name).join(n.tier === 'ult' ? ' 또는 ' : ' + ') : '없음'}</span><b>마법석</b><span>${n.cost ? '◆ ' + n.cost + '개' : '무료'}</span><b>쿨타임</b><span>${{ spark: '5초', ball: '8초', ring: '10초', ult: '60초' }[n.tier] || '20초'}</span></div>
+    <button class="learn" id="learn" type="button" ${st === 'open' && stones >= n.cost ? '' : 'disabled'}>${st === 'learned' ? '✔ 배웠어요' : st === 'locked' ? (n.tier === 'ball' || n.tier === 'ring') && learned.has(n.el.id + '.' + (n.tier === 'ball' ? 'ring' : 'ball')) ? '다른 쪽을 골랐어요' : '🔒 앞 칸을 먼저 배워요' : stones < n.cost ? '마법석이 모자라요' : `◆${n.cost} 써서 배우기`}</button>`;
+  document.getElementById('learn').onclick = () => { if (state(sel) !== 'open' || stones < n.cost) return; learned.add(sel); stones -= n.cost; render(); };
+  preview(n); }
+let pvLoop = 0;
+async function preview(n) { const id = ++pvLoop, mod = await load(n.fx); if (id !== pvLoop) return; const cv = document.getElementById('pv'), g = cv.getContext('2d'), m = mod.meta || {}, sz = m.size || [80, 80], o = m.origin || [sz[0] / 2, sz[1] / 2];
+  const W = 160, H = 120, fr = core.createFrame(W, H), im = new ImageData(W, H), tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H;
+  let f = null, t = 0, last = performance.now(); const spawn = () => { f = core.createFx(mod, { x: W / 2 - (sz[0] / 2 - o[0]), y: H / 2 + 6 - (sz[1] / 2 - o[1]) }); t = 0; };
+  spawn(); (function step(now) { if (id !== pvLoop) return; const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt; if (t > (m.duration || 1) + 0.5) spawn();
+    core.clearFrame(fr); f.update(dt); f.draw(fr); core.composite(fr, im.data, null); tmp.getContext('2d').putImageData(im, 0, 0);
+    g.fillStyle = '#2c4a30'; g.fillRect(0, 0, W, H); g.fillStyle = 'rgba(0,0,0,.18)'; for (let y = 0; y < H; y += 8) for (let x = (y / 8) % 2 ? 4 : 0; x < W; x += 8) g.fillRect(x, y, 1, 1); g.drawImage(tmp, 0, 0); requestAnimationFrame(step); })(last); }
+function render() { for (const b of grid.querySelectorAll('.node')) { const k = b.dataset.k, st = state(k); b.classList.toggle('learned', st === 'learned'); b.classList.toggle('open', st === 'open'); b.classList.toggle('locked', st === 'locked'); b.classList.toggle('sel', k === sel); }
+  document.getElementById('st').textContent = stones; lines(); side(); }
+document.getElementById('reset').onclick = () => { learned = new Set(['root']); stones = 7; render(); };
+build(); render(); icons(); addEventListener('resize', lines);
+</script>
+</body>
+</html>
