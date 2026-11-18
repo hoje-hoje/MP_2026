@@ -44,7 +44,7 @@ svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
 .info button { margin-top: 8px; width: 100%; font: inherit; font-weight: 700; font-size: 13px; padding: 8px; background: var(--c, #fff); color: #061014; border: none; cursor: pointer; }
 .info button:disabled { background: #2a343b; color: var(--dim); cursor: default; }
 .points { position: absolute; left: 57.5%; bottom: 0; transform: translateX(-50%); text-align: center; }
-.points b { display: block; font-size: 30px; line-height: 1; }
+.points b { display: block; font-size: 20px; line-height: 1.2; letter-spacing: 1px; }
 .points span { font-size: 11px; color: var(--dim); letter-spacing: 2px; }
 .points .bar { width: 120px; height: 4px; background: #26323a; margin: 6px auto 0; } .points .bar i { display: block; height: 100%; background: #c98a4a; }
 .reset { position: absolute; right: 0; bottom: 1%; font: inherit; font-size: 12px; background: none; color: var(--dim); border: 2px solid #26323a; padding: 6px 10px; cursor: pointer; }
@@ -54,7 +54,7 @@ svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
 <body>
 <div class="stage" id="stage"><svg class="map" id="map" viewBox="0 0 1200 700" preserveAspectRatio="none" aria-hidden="true"></svg>
   <div class="info" id="info"></div>
-  <div class="points"><b id="pts">3</b><span>마법석</span><div class="bar"><i id="ptsBar" style="width:40%"></i></div></div>
+  <div class="points"><b id="pts"></b><span id="ptsLbl">내 마법석</span></div>
   <button class="reset" id="reset" type="button">다시 찍기</button>
 </div>
 <p class="note">시안 화면 · 동그라미를 누르면 왼쪽 위에서 마법이 실제로 터져요. 2단계는 둘 중 하나만 · 궁극기는 2단계 하나만 배워도 열려요 · 1단계는 3번까지 올릴 수 있어요.</p>
@@ -83,7 +83,12 @@ const N = { root: { key: 'root', name: '마력 깨우기', fx: 'arcane/mana-burs
 EL.forEach((e, i) => { const a = ANG[i]; for (const [k, name, fx, desc] of e.n) { const pos = k === 't1' ? pt(a, RAD.t1) : k === 'a' ? pt(a + 6, RAD.ab) : k === 'b' ? pt(a - 6, RAD.ab) : pt(a, RAD.ult);
   N[e.id + '.' + k] = { key: e.id + '.' + k, el: e, tier: k, name, fx, desc, hex: e.hex, max: MAX[k], cost: COST[k], pos, big: k === 'ult' }; } });
 for (const c of COMBO) N[c.key] = Object.assign({ max: 1, cost: 3, pos: pt((ANG[c.between[0]] + ANG[c.between[1]]) / 2, RAD.combo), small: true }, c);
-let lv = { root: 1, 'fire.t1': 3, 'fire.a': 1, 'holy.t1': 1 }, stones = 3, sel = 'fire.ult';
+let lv = { root: 1, 'fire.t1': 3, 'fire.a': 1, 'holy.t1': 1 }, sel = 'fire.ult';
+// 칸 하나 = 마법석 하나 (로마 숫자 = 단계). 내 가방의 마법석 (예시)
+const ROMAN = { t1: 'Ⅰ', a: 'Ⅱ', b: 'Ⅱ', ult: 'Ⅲ' };
+let INV = { 'fire.Ⅰ': 0, 'fire.Ⅱ': 1, 'fire.Ⅲ': 0, 'ice.Ⅰ': 2, 'holy.Ⅰ': 1, 'nature.Ⅰ': 1 };
+const needOf = (k) => { const n = N[k]; if (k === 'root') return []; if (n.need) return n.need.map((q) => [N[q].el.id, 'Ⅱ']); return [[n.el.id, ROMAN[n.tier]]]; };
+const elName = (id) => EL.find((e) => e.id === id).name, stoneName = ([id, r]) => `${elName(id)} 마법석 ${r}`, haveS = ([id, r]) => INV[id + '.' + r] | 0;
 const L = (k) => lv[k] | 0;
 function pre(k) { const n = N[k]; if (k === 'root') return []; if (n.need) return n.need; if (n.tier === 't1') return ['root']; if (n.tier === 'ult') return [n.el.id + '.a', n.el.id + '.b']; return [n.el.id + '.t1']; }
 function state(k) { const n = N[k]; if (L(k) >= n.max) return 'learned';
@@ -113,14 +118,14 @@ async function preview(n) { const id = ++pvId, mod = await load(n.fx); if (id !=
     g.fillStyle = '#0b1418'; g.fillRect(0, 0, W, H); g.fillStyle = '#16242b'; for (let y = 4; y < H; y += 10) for (let x = (y / 10) % 2 ? 9 : 4; x < W; x += 10) g.fillRect(x, y, 1, 1); g.drawImage(t2, 0, 0); requestAnimationFrame(step); })(last); }
 function info() { const n = N[sel], st = state(sel), box = document.getElementById('info'); box.style.setProperty('--c', n.hex);
   const tierName = { t1: '1단계', a: '2단계', b: '2단계', ult: '궁극기' }[n.tier] || (n.need ? '합체 마법' : '시작');
-  const can = (st === 'open' || st === 'learned-part') && stones >= n.cost;
-  box.innerHTML = `<h2>${n.name}</h2><div class="sub">${n.el ? n.el.name + ' 마법 · ' : ''}${tierName} · ${L(sel)}/${n.max}</div><canvas id="pv" width="160" height="120"></canvas><p>${n.desc}</p>
-    <div class="kv">필요: ${pre(sel).length ? pre(sel).map((p) => N[p].name).join(n.tier === 'ult' ? ' 또는 ' : ' + ') : '없음'}<br>마법석: ${n.cost ? n.cost + '개' + (n.max > 1 ? ' (한 번 올릴 때마다)' : '') : '무료'} · 쿨타임 ${CD[n.tier] || '20초'}</div>
-    <button id="learn" type="button" ${can ? '' : 'disabled'}>${st === 'learned' ? '다 배웠어요' : st === 'locked' ? ((n.tier === 'a' || n.tier === 'b') && L(n.el.id + '.' + (n.tier === 'a' ? 'b' : 'a')) ? '다른 쪽을 골랐어요' : '앞 마법을 먼저 배워요') : stones < n.cost ? '마법석이 모자라요' : `마법석 ${n.cost}개로 ${L(sel) ? '강화' : '배우기'}`}</button>`;
-  document.getElementById('learn').onclick = () => { if (!can) return; lv[sel] = L(sel) + 1; stones -= n.cost; render(); }; preview(n); }
+  const nd = needOf(sel), enough = nd.every((q) => haveS(q) >= 1), can = (st === 'open' || st === 'learned-part') && enough;
+  box.innerHTML = `<h2>${n.name}</h2><div class="sub">${n.el ? `${n.el.name} 마법석 ${ROMAN[n.tier]}` : n.need ? '합체 마법' : '시작'} · ${L(sel)}/${n.max}</div><canvas id="pv" width="160" height="120"></canvas><p>${n.desc}</p>
+    <div class="kv">${nd.length ? '끼울 마법석: <b style="color:var(--c)">' + nd.map(stoneName).join(' + ') + '</b>' + (n.max > 1 ? ' (한 번 올릴 때마다 1개)' : '') + '<br>' : ''}가진 것: ${nd.length ? nd.map((q) => `${stoneName(q)} ${haveS(q)}개`).join(', ') : '-'}<br>먼저 배울 것: ${pre(sel).length ? pre(sel).map((p) => N[p].name).join(n.tier === 'ult' ? ' 또는 ' : ' + ') : '없음'} · 쿨타임 ${CD[n.tier] || '20초'}</div>
+    <button id="learn" type="button" ${can ? '' : 'disabled'}>${st === 'learned' ? '다 배웠어요' : st === 'locked' ? ((n.tier === 'a' || n.tier === 'b') && L(n.el.id + '.' + (n.tier === 'a' ? 'b' : 'a')) ? '다른 쪽을 골랐어요' : '앞 마법을 먼저 배워요') : !enough ? `${nd.filter((q) => !haveS(q)).map(stoneName).join(', ')} 필요` : `${nd.map(stoneName).join(' + ')} 끼우기`}</button>`;
+  document.getElementById('learn').onclick = () => { if (!can) return; lv[sel] = L(sel) + 1; for (const q of nd) INV[q[0] + '.' + q[1]] -= 1; render(); }; preview(n); }
 function render() { for (const b of stage.querySelectorAll('.node')) { const k = b.dataset.k, st = state(k), n = N[k]; b.classList.toggle('learned', L(k) > 0); b.classList.toggle('open', st === 'open' || st === 'learned-part'); b.classList.toggle('sel', k === sel); b.querySelector('.pill').textContent = `${L(k)}/${n.max}`; }
-  document.getElementById('pts').textContent = stones; document.getElementById('ptsBar').style.width = Math.min(100, stones / 10 * 100) + '%'; drawMap(); info(); }
-document.getElementById('reset').onclick = () => { lv = { root: 1 }; stones = 10; render(); };
+  { const e = N[sel].el || EL[1]; document.getElementById('pts').innerHTML = ['Ⅰ', 'Ⅱ', 'Ⅲ'].map((r) => `<span style="color:${e.hex}">${r}</span>×${INV[e.id + '.' + r] | 0}`).join('  '); document.getElementById('ptsLbl').textContent = `내 ${e.name} 마법석`; } drawMap(); info(); }
+document.getElementById('reset').onclick = () => { lv = { root: 1 }; INV = {}; for (const e of EL) for (const r of ['Ⅰ', 'Ⅱ', 'Ⅲ']) INV[e.id + '.' + r] = r === 'Ⅰ' ? 3 : 1; render(); };
 render(); icons();
 </script>
 </body>
