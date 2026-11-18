@@ -163,6 +163,13 @@
     RECIPES.push({ id: stoneKey(e.id, 3), cat: 'magic', el: e.id, sn: 3, name: stoneName(e.id, 3), mats: { [stoneKey(e.id, 2)]: 2 }, quiz: 'hard', daily: true, desc: '어려운 문제 · 하루 1번', hidden: !!e.req });
   }
 
+  // 오각형 스탯 (0~10): 배운 마법석이 속성에 따라 올려 줌. 지금은 프로필에 보여 주기만 (게임 효과는 나중에)
+  const STATS = [['spd', '속도'], ['hp', '체력'], ['def', '방어'], ['mag', '마력'], ['luck', '행운']];
+  const EL_STAT = { wind: ['spd'], bolt: ['spd', 'mag'], holy: ['hp'], water: ['hp'], ice: ['def'], poison: ['def'], fire: ['mag'], dark: ['mag'], nature: ['luck', 'hp'], chrono: ['spd', 'hp', 'def', 'mag', 'luck'] };
+  function statsOf(skills) { const o = { spd: 3, hp: 3, def: 3, mag: 3, luck: 3 }; let n = 0;
+    for (const k in skills || {}) { const M = MAGIC[k], lv = skills[k] | 0; if (!M || lv <= 0) continue; const add = (M.tier === 't1' ? 0.5 * lv : M.tier === 'ult' ? 2 : 1); n += lv;
+      const st = EL_STAT[M.el] || []; for (const s of st) o[s] += add / Math.sqrt(st.length); }
+    o.mag += n * 0.15; for (const k in o) o[k] = Math.min(10, Math.round(o[k] * 10) / 10); return o; }
   const RECIPE_BY = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
   function plantKind(t, x, y) {
     if (t !== T.GRASS) return null; const h = hash(x, y, 7);
@@ -844,5 +851,5 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
