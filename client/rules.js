@@ -144,7 +144,7 @@
     { id: 'dark', name: '어둠', en: '검은 그림자', hex: '#1a1124', ring: '#8c78b0', req: ['holy', 'bolt', 'fire'], n: [['t1', '그림자', 'status/cursed', '그림자 (연출)', null, PAL.SHADOW], ['a', '영혼 흡수', 'spawn/soul-rise', '영혼 흡수 (연출)', null, PAL.SHADOW], ['b', '분해', 'spawn/disintegrate', '분해 (연출)', null, PAL.SHADOW], ['ult', '블랙홀', 'explosions/implosion', '블랙홀 (연출)', null, PAL.DARK]] },
     { id: 'chrono', name: '시공', en: '별·시간·공간', hex: '#ffffff', req: ['nature', 'fire', 'bolt', 'wind', 'holy', 'ice'], n: [['t1', '마법진', 'arcane/magic-circle-cast', '마법진 (연출)'], ['a', '순간이동', 'arcane/blink-in', '바라보는 쪽으로 4칸 순간이동', 'blink'], ['b', '별똥별', 'arcane/star-fall', '별똥별 (연출)'], ['ult', '시간 정지', 'arcane/time-stop', '바로 우리 수도로 돌아가요', 'recall']] },
   ];
-  const MAGIC_TIER = { t1: { roman: 'Ⅰ', n: 1, max: 3, cd: 20 }, a: { roman: 'Ⅱ', n: 2, max: 1, cd: 30 }, b: { roman: 'Ⅱ', n: 2, max: 1, cd: 30 }, ult: { roman: 'Ⅲ', n: 3, max: 1, cd: 0 } }; // ult: 게임 하루 1번
+  const MAGIC_TIER = { t1: { roman: 'Ⅰ', n: 1, max: 3, cd: 20, mp: 10 }, a: { roman: 'Ⅱ', n: 2, max: 1, cd: 30, mp: 20 }, b: { roman: 'Ⅱ', n: 2, max: 1, cd: 30, mp: 20 }, ult: { roman: 'Ⅲ', n: 3, max: 1, cd: 0, mp: 40 } }; const MANA = { max: 100, rate: 1.5 }; // 마나: 1초에 1.5씩 참 // ult: 게임 하루 1번
   const MAGIC_EL = [...MAGIC_BASE, ...MAGIC_HIDDEN], MAGIC = {};
   for (const e of MAGIC_EL) for (const [k, name, fx, desc, eff, pal, dir] of e.n) MAGIC[e.id + '.' + k] = { key: e.id + '.' + k, el: e.id, tier: k, name, fx, desc, eff: eff || null, pal: pal || null, dir: !!dir, hex: e.hex };
   const magicEl = (id) => MAGIC_EL.find((e) => e.id === id);
@@ -844,5 +844,5 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

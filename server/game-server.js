@@ -437,7 +437,7 @@ wss.on('connection', (ws) => {
         t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander.map(({ token, ...r }) => r), board: boardPub(),
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], picked: Object.entries(world.s.picked || {}).filter(([, t]) => now() - t < NUM.regrowMin * 60e3).map(([i]) => +i), job: acc.job || null, tools: acc.tools || {}, skills: acc.skills || {}, slots: acc.slots || [null, null], pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), dug: Object.keys(world.s.dug || {}).map(Number), weapons: acc.weapons || {}, weapon: acc.weapon || null, startDay: gameClock().day, traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], picked: Object.entries(world.s.picked || {}).filter(([, t]) => now() - t < NUM.regrowMin * 60e3).map(([i]) => +i), job: acc.job || null, tools: acc.tools || {}, skills: acc.skills || {}, slots: acc.slots || [null, null], mana: Math.min(MPRules.MANA.max, (acc.mana ?? MPRules.MANA.max) + (Date.now() - (acc.manaAt || 0)) / 1000 * MPRules.MANA.rate), pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), dug: Object.keys(world.s.dug || {}).map(Number), weapons: acc.weapons || {}, weapon: acc.weapon || null, startDay: gameClock().day, traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
       return;
@@ -488,14 +488,15 @@ wss.on('connection', (ws) => {
         if (s.chatTimes.length > 5 || s.sameN >= 3) { s.muteUntil = t0 + 30000; s.chatTimes = []; s.sameN = 0; return send(ws, { t: 'chatErr', text: '도배 방지: 30초 동안 채팅할 수 없어요' }); }
         s.lastChat = t0;
         const myNat = world.nationOfPlayer(s.token);
-        let ch = ['team', 'near', 'sky'].includes(m.ch) ? m.ch : (s.scene === 'sky' ? 'sky' : 'near');
+        let ch = ['all', 'team', 'near', 'sky'].includes(m.ch) ? m.ch : 'all';
         if (jailed(s.acc) && ch !== 'team') ch = 'jail';
         if (ch === 'team' && !myNat) return send(ws, { t: 'chatErr', text: '나라가 없어서 팀 채팅을 쓸 수 없어요' });
-        if (ch === 'sky' && s.scene !== 'sky') ch = 'near';
+        if (ch === 'sky' && s.scene !== 'sky') ch = 'all';
         if (ch === 'near' && s.scene === 'sky') ch = 'sky';
         const msg = { t: 'chat', ch, from: s.id, name: s.acc.name, nat: myNat ? myNat.name : null, text, ts: Date.now() };
         let to;
         if (ch === 'team') { to = (o) => myNat.members.includes(o.token); const key = 'nation:' + myNat.id; const list = state.chats[key] || (state.chats[key] = []); list.push(msg); if (list.length > CHAT_KEEP) list.splice(0, list.length - CHAT_KEEP); dirty = true; }
+        else if (ch === 'all') to = () => true; // 전체 채팅: 접속한 모두
         else if (ch === 'near') to = (o) => o === s || near(o, s);
         else if (ch === 'sky') to = (o) => o.scene === 'sky';
         else to = (o) => o.scene === 'sky' && o.room === 'jail';
@@ -956,6 +957,8 @@ wss.on('connection', (ws) => {
         if (s.scene !== 'ground' || s.x == null || (s.deadUntil || 0) > now() || jailed(s.acc)) return;
         const slots = s.acc.slots || [], key = slots[m.slot === 1 ? 1 : 0], M = key && MPRules.MAGIC[key]; if (!M) return;
         const lv = (s.acc.skills || {})[key] | 0; if (!lv) return; const T = MPRules.MAGIC_TIER[M.tier]; s.acc.cdAt = s.acc.cdAt || {};
+        const manaNow = () => Math.min(MPRules.MANA.max, (s.acc.mana ?? MPRules.MANA.max) + (now() - (s.acc.manaAt || 0)) / 1000 * MPRules.MANA.rate);
+        if (manaNow() < T.mp) return send(ws, { t: 'err', text: `마나가 모자라요 (${T.mp} 필요)` });
         if (T.cd) { if (now() - (s.acc.cdAt[key] || 0) < T.cd * 1000 - 300) return; s.acc.cdAt[key] = now(); }
         else { const day = gameDayKey(); s.acc.ultDay = s.acc.ultDay || {}; if (s.acc.ultDay[key] === day) return send(ws, { t: 'err', text: '궁극기는 하루에 1번만 써요' }); s.acc.ultDay[key] = day; }
         const face = m.face | 0, D = [[0, 1], [0, -1], [-1, 0], [1, 0]][face] || [0, 1], tx = Math.floor(s.x / 32), ty = Math.floor(s.y / 32);
@@ -969,8 +972,9 @@ wss.on('connection', (ws) => {
         else if (M.eff === 'speed') extra = { speed: 5 + lv - 1 };
         else if (M.eff === 'light') extra = { light: 30 };
         else if (M.eff === 'heal') extra = { heal: 1 };
+        s.acc.mana = manaNow() - T.mp; s.acc.manaAt = now(); dirty = true;
         areaSend(s, Object.assign({ t: 'cast', id: s.id, key, x: s.x, y: s.y, face }, extra));
-        send(ws, { t: 'castOk', key, slot: m.slot === 1 ? 1 : 0, cd: T.cd, text });
+        send(ws, { t: 'castOk', key, slot: m.slot === 1 ? 1 : 0, cd: T.cd, text, mana: s.acc.mana });
         break;
       }
       case 'craft': { // 작업대: 내 가방 재료로 도구·횃불·가구 만들기 (하늘 상점가 작업대, 또는 우리 저장소 옆)

@@ -1814,12 +1814,13 @@
   const persName = (k) => MPRules.RECIPE_BY[k] ? MPRules.RECIPE_BY[k].name : MPRules.MATS[k] ? MPRules.MATS[k].name : k.startsWith('hat:') ? (HATS[k.slice(4)] || {}).name || k : k.startsWith('tool:') ? (MPRules.TOOLS[k.slice(5)] || {}).name || k : (BUILD_BY[k] || {}).name || k;
   function myTradables() { const out = []; for (const [k, v] of Object.entries(MY_BAG)) if (v > 0) out.push({ k, n: v }); for (const k of Object.keys(MY_HATS)) out.push({ k: 'hat:' + k, n: 1 }); for (const k of Object.keys(MY_TOOLS)) out.push({ k: 'tool:' + k, n: 1 }); return out; }
   // ---------------------------------------------------------- 마법 (마법석 스킬 트리 · 2칸)
+  const MANA = { v: 100, at: Date.now(), max: 100, rate: 1.5 }; const manaNow = () => Math.min(MANA.max, MANA.v + (Date.now() - MANA.at) / 1000 * MANA.rate); // 마나: 서버와 같은 계산
   let MY_SKILLS = {}, MY_SLOTS = [null, null]; const SKCD = [0, 0], SKCDLEN = [1, 1], BUFF = { speed: 0, light: 0 }, FROZEN = new Map(); // FROZEN: 칸 → 녹는 시각
   window.MP_SKILL = { get: () => ({ skills: MY_SKILLS, slots: MY_SLOTS, bag: MY_BAG }), learn: (k) => netOn && ws.send(JSON.stringify({ t: 'learnSkill', key: k })), equip: (slot, k) => netOn && ws.send(JSON.stringify({ t: 'equipSkill', slot, key: k })) };
   function openSkills() { const f = $('skillFrame'); if (!f.src) f.src = '/skilltree?game=1'; else try { f.contentWindow.MP_REFRESH && f.contentWindow.MP_REFRESH(); } catch (e) { /* 아직 로딩 */ } $('skillBox').hidden = false; }
   function closeSkills() { $('skillBox').hidden = true; try { $('skillFrame').blur(); document.activeElement && document.activeElement.blur && document.activeElement.blur(); window.focus(); } catch (e) { /* 무시 */ } } // 창을 닫으면 키보드가 다시 게임으로
   window.MP_SKILL_CLOSE = () => closeSkills();
-  function castSkill(slot) { if (!netOn || player.scene !== 'ground' || amDead() || TITLE.on) return; const key = MY_SLOTS[slot]; if (!key) { toast('마법 칸이 비었어요 · 마법(K)에서 배운 마법을 넣어요'); return; } if (performance.now() < SKCD[slot]) return; ws.send(JSON.stringify({ t: 'cast', slot, face: player.face | 0 })); }
+  function castSkill(slot) { if (!netOn || player.scene !== 'ground' || amDead() || TITLE.on) return; const key = MY_SLOTS[slot]; if (!key) { toast('마법 칸이 비었어요 · 마법(K)에서 배운 마법을 넣어요'); return; } if (performance.now() < SKCD[slot]) return; { const need = MPRules.MAGIC_TIER[MPRules.MAGIC[key].tier].mp; if (manaNow() < need) { toast(`마나가 모자라요 (${need} 필요)`); return; } } ws.send(JSON.stringify({ t: 'cast', slot, face: player.face | 0 })); }
   const skIcoCache = {};
   async function skillIcon(cv, key) { const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); if (!key) return; const M = MPRules.MAGIC[key]; await loadPfxW(); if (!PFXW) return; const mod = await fxMod(M.fx); if (!mod) return;
     if (!skIcoCache[key]) { const m = mod.meta || {}, sz = m.size || [64, 64], o = m.origin || [sz[0] / 2, sz[1] / 2], fr = PFXW.core.createFrame(sz[0], sz[1]), f = PFXW.core.createFx(mod, Object.assign({ x: o[0], y: o[1] }, M.pal ? { palette: M.pal } : {})); f.update(Math.min(0.7, (m.duration || 1) * 0.5)); f.draw(fr); const im = new ImageData(sz[0], sz[1]); PFXW.core.composite(fr, im.data, null); const t = document.createElement('canvas'); t.width = sz[0]; t.height = sz[1]; t.getContext('2d').putImageData(im, 0, 0); skIcoCache[key] = t; }
@@ -2906,7 +2907,7 @@
   }
   const canTp = () => !ONLINE || testMode || EDIT.on; // 지도 눌러 순간이동: 미리보기·테스트 모드·맵 고치기에서만
   mini.addEventListener('click', (e) => {
-    if (!canTp()) return;
+    if (!(canTp() && e.shiftKey)) { if (player.scene === 'ground') toggleMap(true); return; } // 누르면 큰 지도 · 테스트 순간이동은 Shift+클릭
     const r = mini.getBoundingClientRect();
     if (player.scene === 'sky') {
       const mx = (e.clientX - r.left) / r.width * mini.width, my = (e.clientY - r.top) / r.height * mini.height;
@@ -2940,7 +2941,6 @@
     const r = big.getBoundingClientRect();
     if (canTp() && teleportTo((e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H)) toggleMap(false);
   });
-  $('btnMap').addEventListener('click', () => toggleMap());
   $('btnMapClose').addEventListener('click', () => toggleMap(false));
   $('btnHome').addEventListener('click', goHome);
   (function legend() {
@@ -3003,6 +3003,7 @@
     if (renamesLeft <= 0) { toast('이름은 더 바꿀 수 없어요'); return; }
     $('closet').hidden = true; startOpening('rename');
   });
+  $('bagCloset').addEventListener('click', () => { $('bagBox').hidden = true; $('btnCloset').click(); });
   $('btnCloset').addEventListener('click', () => { $('nick').value = player.name; $('nickMsg').textContent = ''; renderNameBox(); closetUI(); $('closet').hidden = false; closetPreview(); });
   $('btnClosetDone').addEventListener('click', () => { $('closet').hidden = true; if (OP.closetWait) { OP.closetWait = false; OP.closetDone = true; $('closet').style.zIndex = ''; $('btnClosetDone').textContent = '✕'; $('btnClosetDone').classList.remove('wide'); saveLook(); opAdvance(); } });
 
@@ -3065,7 +3066,7 @@
     switch (m.t) {
       case 'welcome': {
         myId = m.id; netOn = true; store('mp2026.token', m.token);
-        MY_SKILLS = m.skills || {}; MY_SLOTS = m.slots || [null, null]; setTimeout(renderSkillPad, 500);
+        MY_SKILLS = m.skills || {}; MY_SLOTS = m.slots || [null, null]; setTimeout(renderSkillPad, 500); if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); }
         if (m.picked) { PICKED.clear(); const t0 = Date.now(); for (const i of m.picked) PICKED.set(i, t0); } // 뜯긴 풀·꽃
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
@@ -3106,7 +3107,7 @@
         setNet(`접속 중 ${onlineCount}명`);
         break;
       case 'chat': {
-        chatLog.push(m); if (chatLog.length > 80) chatLog.shift(); renderChat();
+        chatLog.push(m); if (chatLog.length > 80) chatLog.shift(); renderChat(); if (m.ch === 'team' && !$('war').hidden && warTab === 'chat') { const keep = document.activeElement && document.activeElement.id === 'ncIn' ? $('ncIn').value : null; renderWar(); if (keep != null) { $('ncIn').value = keep; $('ncIn').focus(); } }
         { const r = m.from === myId ? player : remotes.get(m.from); if (r) { r.emote = (m.ch === 'team' ? '[팀] ' : '') + (m.text.length > 26 ? m.text.slice(0, 25) + '…' : m.text); r.emoteT = 4.5; } } // 말풍선 (팀 채팅은 서버가 팀원에게만 보내므로 팀원에게만 보임)
         break;
       }
@@ -3156,7 +3157,7 @@
       case 'hats': MY_HATS = m.hats || {}; MY_PCOIN = m.pcoin | 0; renderInv(); player.look.hat = m.id; saveLook(); toast(`🎩 ${HATS[m.id].name}을(를) 샀어요! 바로 썼어요 (꾸미기에서 바꿀 수 있어요)`); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
       case 'skills': MY_SKILLS = m.skills || {}; MY_SLOTS = m.slots || [null, null]; renderSkillPad(); if (m.text) { toast(m.text); SND.play('chargeFull'); } try { const f = $('skillFrame').contentWindow; if (f && f.MP_REFRESH) f.MP_REFRESH(); } catch (e) { /* 창이 아직 없음 */ } break;
       case 'cast': playCast(m); break;
-      case 'castOk': { if (m.cd) { SKCD[m.slot] = performance.now() + m.cd * 1000; SKCDLEN[m.slot] = m.cd * 1000; } if (m.text) toast(m.text); break; }
+      case 'castOk': { if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); } if (m.cd) { SKCD[m.slot] = performance.now() + m.cd * 1000; SKCDLEN[m.slot] = m.cd * 1000; } if (m.text) toast(m.text); break; }
       case 'bag': MY_BAG = m.bag || {}; if (!$('bagBox').hidden) openBag(); if (!$('shopBox').hidden) renderShop(); if (!$('craftBox').hidden) openCraft(); break;
       case 'tradeReq': $('trqText').textContent = `${m.name}님이 거래를 신청했어요`; $('tradeReq').hidden = false; $('tradeReq').dataset.from = m.from; SND.play('ok'); clearTimeout(window.__trq); window.__trq = setTimeout(() => { $('tradeReq').hidden = true; }, 25000); break;
       case 'tradeOpen': $('tradeReq').hidden = true; openTrade(m); break;
@@ -3231,12 +3232,12 @@
   }
 
   // 나라 채팅
-  const CH_NAME = { team: '팀', near: '주변', sky: '하늘', jail: '감옥' };
-  let chatCh = 'auto'; // auto = 땅이면 주변, 하늘이면 하늘
-  const curCh = () => (chatCh === 'team' ? 'team' : jailUntil > Date.now() ? 'jail' : player.scene === 'sky' ? 'sky' : 'near');
+  const CH_NAME = { all: '전체', team: '나라', near: '주변', sky: '하늘', jail: '감옥' };
+  let chatCh = 'all'; // all = 전체, team = 나라
+  const curCh = () => (chatCh === 'team' ? 'team' : jailUntil > Date.now() ? 'jail' : 'all');
   function renderChatTabs() {
     for (const b of document.querySelectorAll('#chatTabs [data-ch]')) b.setAttribute('aria-pressed', String((b.dataset.ch === 'team') === (chatCh === 'team')));
-    const c = curCh(); const auto = $('chatTabs').querySelector('[data-ch="auto"]'); if (auto) auto.textContent = CH_NAME[c === 'team' ? (player.scene === 'sky' ? 'sky' : 'near') : c];
+    const c = curCh(); $('chatChBtn').textContent = CH_NAME[c] + ' ▾'; $('chatChBtn').classList.toggle('team', c === 'team');
     $('chatIn').placeholder = `${CH_NAME[c]} 채팅 (Enter · Tab으로 바꾸기)`;
   }
   function renderChat() {
@@ -3359,7 +3360,8 @@
       store('mp2026.token', j.token); $('gLogin').hidden = true; $('gErr').textContent = ''; if (!netOn) { try { ws && ws.close(); } catch (e) { /* 없음 */ } connect(); }
     } catch (e) { $('gErr').textContent = '서버에 연결하지 못했어요. 다시 해 주세요.'; }
   }
-  $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { sendChat(); } if (e.key === 'Escape') e.target.blur(); if (e.key === 'Tab') { e.preventDefault(); chatCh = chatCh === 'team' ? 'auto' : 'team'; renderChatTabs(); } });
+  $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { sendChat(); } if (e.key === 'Escape') e.target.blur(); if (e.key === 'Tab') { e.preventDefault(); chatCh = chatCh === 'team' ? 'all' : 'team'; renderChatTabs(); } });
+  $('chatChBtn').addEventListener('click', () => { chatCh = chatCh === 'team' ? 'all' : 'team'; renderChatTabs(); $('chatIn').focus(); });
   $('chatIn').addEventListener('focus', renderChatTabs);
   $('chatIn').addEventListener('focus', () => keys.clear());
   $('btnChatSend').addEventListener('click', sendChat);
@@ -3646,7 +3648,7 @@
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
   // ---- 전쟁 창
-  let warTab = 'nation', warTarget = null;
+  let warTab = 'chat', warTarget = null;
   const FN = (i) => MPRules.frontName(i);
   const minPer = (total, F) => MPRules.minPerFront(total, F);
   const frontsOfNation = (nid) => 2 * Object.keys(owners).filter((k) => owners[k] === nid && !gone[k]).length + 1;
@@ -3674,6 +3676,10 @@
     $('warHead').innerHTML = `<b style="color:${me.color}">■</b> ${esc(me.name)} · 왕 ${esc(me.kingName || '')}<br><span>병력 <b>${me.army}</b> · 영토 ${me.territories}곳 (전선 ${2 * me.territories + 1}개) · 이번 전투 선전포고 ${me.declaresLeft}/${MPRules.NUM.maxDeclare} · 행동력 ${me.actions}</span>`;
     for (const b of document.querySelectorAll('#warTabs button')) b.setAttribute('aria-pressed', String(b.dataset.tab === warTab));
     let h = '';
+    if (warTab === 'chat') { // 💬 나라 채팅 (우리 나라 사람만)
+      const list = chatLog.filter((m) => m.ch === 'team' || (m.ch && m.ch.startsWith('nation:'))).slice(-60);
+      h += `<div class="nchat" id="nchatLog">${list.length ? list.map((m) => `<div class="msgb ${m.from === myId ? 'me' : ''}"><b>${esc(m.name)}<small>${m.ts ? new Date(m.ts).toTimeString().slice(0, 5) : ''}</small></b><span>${esc(m.text)}</span></div>`).join('') : '<p class="msg">아직 나라 채팅이 없어요. 첫 마디를 남겨 보세요!</p>'}</div><div class="ncin"><input id="ncIn" type="text" maxlength="120" placeholder="우리 나라 사람에게만 보여요" autocomplete="off"><button id="ncSend" type="button">보내기</button></div>`;
+    }
     if (warTab === 'nation') {
       h += `<div class="plan"><div class="row"><span>초대 코드</span><b class="code">${esc(me.code || '')}</b></div><p class="msg">팀원에게 이 코드를 알려 주면 [초대 코드로 들어가기]로 우리 나라에 들어와요.</p></div>`;
       h += `<h3>국민 (${me.members}${DAY < 3 ? ` / ${MPRules.NUM.maxMembersEarly}` : ''})</h3>` + (me.memberList || []).map((m) => `<div class="row"><span>${m.king ? '👑 ' : ''}${esc(m.name)}${m.me ? ' (나)' : ''}</span><span>${king && !m.king ? `<button data-king="${m.idx}">왕 넘기기</button> <button data-kick="${m.idx}">내보내기</button>` : ''}</span></div>`).join('');
@@ -3687,6 +3693,8 @@
       { const cur = (nationsPub[me.id] && nationsPub[me.id].race) || 'human';
         h += me.raceOpen ? `<div class="plan"><h3>🛡 병영 · 병력 종족</h3><div class="row"><span>지금 우리 병력: <b>${RACE_INFO[cur].icon} ${RACE_INFO[cur].name}</b> (${RACE_INFO[cur].weapon}) · ${me.army}명</span><button id="btnBarracks" type="button">🛡 병영 열기</button></div></div>` : `<div class="plan locked"><h3>🔒 병영 (잠김)</h3><p class="msg">영역전에서 <b>처음 이기면</b> 병영이 열려요 (공격·방어·동맹 참전 승리 모두). 병영에서는 우리 병력의 종족을 고를 수 있어요.</p></div>`; }
       h += `<h3>나라 정보</h3><div class="msg">수도 ${esc(terrLabel(me.capital))} · 영토 ${me.territories}곳 · 병력 ${me.army} · 목재 ${me.wood || 0} · 돌 ${me.stone || 0} · 광석 ${me.ore || 0} · 행동력 ${me.actions}</div>`;
+    }
+    if (warTab === 'capital') {
       // 천도: 왕이 코인을 내고 우리 영역 중 아무 곳으로 (전투 대기 중 불가, 하루에 한 번)
       const mineT = Object.keys(owners).filter((k) => owners[k] === me.id && +k !== me.capital).map(Number);
       h += `<div class="plan"><h3>🏰 천도</h3><p class="msg">수도를 우리 영역 중 다른 곳으로 옮겨요 · ${MPRules.costText(MPRules.NUM.capitalMoveCost)} · 선전포고를 받은 동안은 못 하고, 하루에 한 번만 · 영역을 잃을 땐 공격팀과 가까운 곳부터 넘어가니 수도는 멀리 두는 게 안전해요</p>` +
@@ -3733,7 +3741,7 @@
         ${b.rev && b.rev.length ? `<p class="msg">🔍 알아낸 적 병력: ${b.rev.map((r) => `<b>${FN(r.f)} 전선 ${r.n}명</b>`).join(' · ')}</p>` : ''}
         <div class="row"><span>막을 병력 <input id="defTotal${b.id}" type="number" min="0" value="${used || Math.min(me.army, 10 * b.F)}" style="width:80px" ${king ? '' : 'disabled'}> ${king ? `<button data-even="${b.id}" type="button">고르게</button>` : ''}</span>${b.intel > 0 && (!b.rev || b.rev.length < b.F) ? `<button data-intel="${b.id}">첩보 쓰기 (${b.intel}장)</button>` : ''}</div>
         ${troopInputs('def' + b.id + '_', b.d || Array(b.F).fill(0), !king)}${king ? `<div class="row"><span id="defSum${b.id}" data-max="${me.army + used}"></span><button data-defend="${b.id}" data-f="${b.F}">방어 배치 저장</button></div>` : ''}</div>`; }).join('');
-    } else {
+    } else if (warTab === 'nation') { // 정보 탭 아래에 지난 전투 결과
       h += `<h3>지난 전투 결과</h3>`;
       if (!v.reports.length) h += '<p class="msg">아직 전투 기록이 없어요.</p>';
       h += v.reports.slice().reverse().map((r) => {
@@ -3747,6 +3755,7 @@
     }
     if (testMode) h += `<div class="row test"><span>테스트용</span><button id="btnResolve">지금 전투 처리</button></div>`;
     box.innerHTML = h;
+    if (warTab === 'chat') { const lg = $('nchatLog'); if (lg) lg.scrollTop = lg.scrollHeight; const send2 = () => { const el = $('ncIn'), text = el.value.trim(); if (!text || !netOn) return; ws.send(JSON.stringify({ t: 'chat', text, ch: 'team' })); el.value = ''; }; $('ncSend').onclick = send2; $('ncIn').onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') send2(); }; }
     // 이벤트
     for (const b of box.querySelectorAll('[data-king]')) b.onclick = () => warAction('kingTo', { idx: +b.dataset.king });
     for (const b of box.querySelectorAll('[data-kick]')) b.onclick = () => { if (confirm('이 팀원을 내보낼까요? 그 사람은 24시간 동안 다른 나라에 가입할 수 없어요.')) warAction('kick', { idx: +b.dataset.kick }); };
@@ -4049,8 +4058,9 @@
       $('skyTimer').hidden = !(sky && player.room.id === 'jail' && jailUntil > Date.now()) || EDIT.on; // 감옥 남은 시간만
       if (sky && player.room.id === 'jail' && jailUntil > Date.now()) { const l = Math.max(0, Math.ceil((jailUntil - Date.now()) / 1000)); $('skyTimer').firstChild.textContent = '감옥 '; $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.remove('warn'); }
       else if (sky) { $('skyTimer').firstChild.textContent = '하늘 체류 '; const l = Math.max(0, Math.ceil(player.skyLeft)); $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.toggle('warn', l <= 60); }
-      $('miniCap').textContent = canTp() ? (EDIT.on ? '누르면 순간이동 (맵 고치기)' : '누르면 순간이동 (테스트용)') : '미니맵';
+      $('miniCap').textContent = player.scene === 'sky' ? (canTp() ? 'Shift+클릭 순간이동' : '하늘 지도') : '누르면 큰 지도 (M)';
       updateWhere(); updatePrompt(); drawMini(); if (!$('bigmap').hidden) drawBig();
+      { const hp = Math.max(0, PV.hp | 0), mp = manaNow(); $('hpFill').style.width = (hp / HPMAX * 100) + '%'; $('hpTxt').textContent = `${hp} / ${HPMAX}`; $('mpFill').style.width = (mp / MANA.max * 100) + '%'; $('mpTxt').textContent = `${Math.floor(mp)} / ${MANA.max}`; $('vitals').hidden = TITLE.on; } // 왼쪽 위 하트·마나
     }
     requestAnimationFrame(frame);
   }

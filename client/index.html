@@ -599,6 +599,44 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .trPick { display: flex; flex-direction: column; align-items: center; width: 64px; min-height: 0; padding: 2px; background: #fff !important; color: #2b2340 !important; border: 2px solid #c9cfdc !important; border-image: none !important; box-shadow: none !important; text-shadow: none !important; } .trPick canvas { width: 36px; height: 36px; image-rendering: pixelated; } .trPick small { font-size: 10px; line-height: 1.1; text-align: center; } .trPick:disabled { opacity: 0.35; }
 #pmenu { position: fixed; z-index: 29; min-width: 170px; background: #fffaf0; border: 3px solid #b8862b; box-shadow: 0 0 0 2px #2b2340, 0 6px 16px rgba(0,0,0,0.3); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; color: #2b2340; } #pmenu[hidden] { display: none; } #pmenu b { font-size: 13px; } #pmenu small { font-size: 11px; } #pmenu button { min-height: 32px; font-size: 13px; } #pmenu button:disabled { opacity: 0.55; }
 .bagJob { font-size: 12px; color: #6b4fb3; margin-right: 10px; }
+/* ===== HUD 개편 (2026-11): 왼쪽 위 체력·마나·자원, 오른쪽 위 미니맵+버튼, 아래 가운데 회색 채팅 ===== */
+#where { display: none !important; }
+#vitals { left: max(12px, env(safe-area-inset-left, 0px)); top: calc(12px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 5px; z-index: 6; }
+#vitals .vrow { display: flex; align-items: center; gap: 6px; }
+#vitals .vic { width: 26px; height: 26px; display: grid; place-items: center; font-size: 18px; color: #fff; background: #2b2340; border: 2px solid #fff3d6; border-radius: 6px; }
+#vitals .vic.hp { color: #ff4f6d; } #vitals .vic.mp { color: #5fc8ff; font-size: 14px; }
+#vitals .vbar { position: relative; width: 210px; height: 18px; background: #2b2340; border: 2px solid #fff3d6; border-radius: 4px; overflow: hidden; }
+#vitals .vbar i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; transition: width .25s; }
+#vitals .vbar.hp i { background: linear-gradient(#7bea6b, #3fb34a); } #vitals .vbar.mp i { background: linear-gradient(#5fc8ff, #2a7fe0); }
+#vitals .vbar b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; color: #fff; text-shadow: 0 1px 0 #2b2340, 1px 0 0 #2b2340, -1px 0 0 #2b2340, 0 -1px 0 #2b2340; }
+#inv { left: max(12px, env(safe-area-inset-left, 0px)) !important; right: auto !important; top: calc(66px + env(safe-area-inset-top, 0px)) !important; }
+#mini { top: calc(12px + env(safe-area-inset-top, 0px)) !important; bottom: auto !important; }
+#mini canvas { width: 150px !important; height: 150px !important; cursor: zoom-in !important; }
+#tools { right: calc(max(12px, env(safe-area-inset-right, 0px)) + 176px) !important; max-width: calc(60vw - 180px) !important; }
+#zoomBox { display: none !important; }
+#chat { left: 50% !important; transform: translateX(-50%); bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important; width: min(560px, calc(100vw - 340px)) !important; background: rgba(22, 20, 32, 0.58) !important; border: none !important; box-shadow: none !important; color: #fff; padding: 6px 8px !important; border-radius: 8px; }
+@media (max-width: 760px) { #chat { width: calc(100vw - 24px) !important; bottom: calc(118px + env(safe-area-inset-bottom, 0px)) !important; } }
+#chat .chathead { display: none !important; }
+#chat .chatlog { max-height: 110px; color: #f2eefc; font-size: 12px; background: none !important; border: none !important; }
+#chat .chatlog i { color: #b9b2d0; font-style: normal; } #chat .chatlog .ch-team i { color: #ffd34d; } #chat .chatlog b { color: #fff; }
+#chat .chatrow input { background: rgba(255,255,255,.12) !important; color: #fff !important; border: 1px solid rgba(255,255,255,.25) !important; }
+#chat .chatrow input::placeholder { color: #bdb6d6; }
+#chatChBtn { flex: 0 0 auto; min-height: 34px; padding: 0 10px; background: #5d5a6e; color: #fff; border: 1px solid rgba(255,255,255,.3); font-weight: 700; border-radius: 4px; }
+#chatChBtn.team { background: #b8862b; }
+#chat #btnChatSend { background: #5d5a6e !important; color: #fff !important; border-color: rgba(255,255,255,.3) !important; box-shadow: none !important; }
+#chatTab { display: none !important; }
+#skillPad { right: max(16px, env(safe-area-inset-right, 0px)) !important; bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important; }
+#help { display: none !important; }
+/* 나라 창: 위쪽 큰 탭 (클래시 로얄 느낌) + 채팅 말풍선 */
+#warTabs.bigtabs { display: flex; gap: 0; padding: 0; background: #2b2340; border-radius: 8px 8px 0 0; overflow: hidden; }
+#warTabs.bigtabs button { flex: 1; min-height: 46px; border: none; border-radius: 0; background: #3d3557; color: #cfc6ea; font-size: 14px; font-weight: 700; box-shadow: none; border-right: 2px solid #2b2340; }
+#warTabs.bigtabs button[aria-pressed="true"] { background: linear-gradient(#5a7fd6, #3f63b8); color: #fff; }
+.nchat { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; padding: 8px; background: #e9e6f2; border-radius: 6px; }
+.nchat .msgb { background: #fff; border-radius: 8px; padding: 6px 10px; box-shadow: 0 1px 0 #c9c3dc; max-width: 86%; }
+.nchat .msgb.me { align-self: flex-end; background: #dff0ff; }
+.nchat .msgb b { display: block; font-size: 12px; color: #3f63b8; } .nchat .msgb span { font-size: 14px; color: #2b2340; word-break: break-all; }
+.nchat .msgb small { font-size: 10px; color: #8a83a3; margin-left: 6px; }
+.ncin { display: flex; gap: 6px; margin-top: 8px; } .ncin input { flex: 1; min-width: 0; }
 </style>
 
 <canvas id="game" aria-label="MP 2026 세계 지도"></canvas>
@@ -609,6 +647,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div class="chips" id="whereChips"></div>
 </div>
 
+<div id="vitals" class="hud" aria-label="체력과 마나"><div class="vrow"><span class="vic hp" aria-hidden="true">♥</span><div class="vbar hp"><i id="hpFill"></i><b id="hpTxt">100 / 100</b></div></div><div class="vrow"><span class="vic mp" aria-hidden="true">◆</span><div class="vbar mp"><i id="mpFill"></i><b id="mpTxt">100 / 100</b></div></div></div>
 <div id="doom" class="hud card">
   <div class="row"><canvas id="sunMoon" width="16" height="16" aria-label="시간대"></canvas><span id="doomL"></span><span class="d" id="doomD">1일차</span><span id="doomR">12/14 · 건국기</span></div>
   <div class="bar" id="doomBar" hidden><div id="doomFill"></div></div>
@@ -616,12 +655,11 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 
 <div id="tools" class="hud">
   <button id="btnWar" type="button">나라 (B)</button><button id="btnCast" type="button">⚔ 영역전</button>
-  <button id="btnMap" type="button">지도 (M)</button>
   <button id="btnHome" type="button">수도 (T)</button>
   <button id="btnCoupon" type="button">쿠폰</button>
   <button id="btnBag" type="button">가방 (I)</button>
   <button id="btnSkill" type="button">마법 (K)</button>
-  <button id="btnCloset" type="button">꾸미기</button>
+  <button id="btnCloset" type="button" hidden>꾸미기</button>
 </div>
 
 <div id="inv" class="hud card" aria-label="보유 자원">
@@ -637,15 +675,15 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 <div id="zoomBox" class="hud"><button id="zoomIn" type="button" aria-label="지도 크게">＋</button><button id="zoomOut" type="button" aria-label="지도 작게">－</button></div>
 <div id="mini" class="hud card">
   <canvas id="miniCanvas" width="336" height="336" aria-label="미니맵, 누르면 그 위치로 이동(테스트)"></canvas>
-  <div class="cap" id="miniCap">누르면 순간이동 (테스트용)</div>
+  <div class="cap" id="miniCap">누르면 큰 지도 (M)</div>
 </div>
 
 <button id="chatTab" class="hud" type="button" hidden title="채팅 펴기" aria-label="채팅 펴기">»<small>채팅</small></button>
 <div id="chat" class="hud card" hidden>
   <div class="chathead"><span id="netText">오프라인</span><button id="chatHide" type="button" title="채팅 접기" aria-label="채팅 접기">«</button></div>
   <div id="chatLog" class="chatlog" aria-live="polite"></div>
-  <div class="chattabs" id="chatTabs"><button type="button" data-ch="auto" aria-pressed="true">주변</button><button type="button" data-ch="team" aria-pressed="false">팀</button></div>
-  <div class="chatrow"><input id="chatIn" type="text" maxlength="120" placeholder="주변 채팅 (Enter · Tab으로 바꾸기)" autocomplete="off"><button id="btnChatSend" type="button">보내기</button></div>
+  <div class="chattabs" id="chatTabs" hidden><button type="button" data-ch="all" aria-pressed="true">전체</button><button type="button" data-ch="team" aria-pressed="false">나라</button></div>
+  <div class="chatrow"><button id="chatChBtn" type="button" title="전체 / 나라 바꾸기 (Tab)">전체 ▾</button><input id="chatIn" type="text" maxlength="120" placeholder="주변 채팅 (Enter · Tab으로 바꾸기)" autocomplete="off"><button id="btnChatSend" type="button">보내기</button></div>
 </div>
 
 <div id="help" class="hud card">WASD·방향키 이동 · E 포털·금광·제단 · Shift 빨리 걷기 · 휠 확대/축소 · 1~8 감정표현 · [ ] 날짜 바꾸기 (테스트)</div>
@@ -768,6 +806,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <p class="msg">나만 쓰는 것들이에요. 채집한 재료·만든 물건·물고기가 여기 들어와요. 물고기·작물을 팔면 내 코인이 돼요. 다른 사람을 클릭하면 거래를 신청할 수 있어요.</p>
   <div class="stGrid" id="bagBody"></div>
   <button id="bagFrag" type="button" class="bagFrag" hidden>📜 멸망 조각</button>
+  <button id="bagCloset" type="button" class="bagFrag">👕 꾸미기 · 이름 바꾸기</button>
   <div class="stFoot" id="bagDonate"><span class="msg">💝 내 코인을 나라 저장소에 기부 (나라 돈 → 내 돈은 안 돼요)</span><input id="bagGiveN" type="number" min="1" value="50" style="width:80px"><button id="bagGive" type="button">기부</button></div>
 </div></div>
 <div id="craftBox" class="modalbox" hidden><div class="hv bagHv"><div class="hvClouds"></div>
@@ -856,7 +895,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div class="panel card">
     <div class="head"><h2>나라 · 전쟁</h2><button id="btnWarClose" type="button">닫기</button></div>
     <div id="warHead" class="warhead"></div>
-    <div id="warTabs" class="seg"><button type="button" data-tab="nation">나라</button><button type="button" data-tab="attack">공격</button><button type="button" data-tab="defend">방어</button><button type="button" data-tab="ally">🤝 동맹</button><button type="button" data-tab="report">결과</button></div>
+    <div id="warTabs" class="seg bigtabs"><button type="button" data-tab="chat">💬 채팅</button><button type="button" data-tab="capital">🏰 천도</button><button type="button" data-tab="attack">⚔ 공격</button><button type="button" data-tab="defend">🛡 방어</button><button type="button" data-tab="ally">🤝 동맹</button><button type="button" data-tab="nation">📋 정보</button></div>
     <div id="warBody" class="warbody"></div>
   </div>
 </div>
