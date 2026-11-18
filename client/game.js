@@ -1820,13 +1820,16 @@
   let MY_SKILLS = {}, MY_SLOTS = [null, null]; const SKCD = [0, 0], SKCDLEN = [1, 1], BUFF = { speed: 0, light: 0 }, FROZEN = new Map(); // FROZEN: 칸 → 녹는 시각
   window.MP_SKILL = { get: () => ({ skills: MY_SKILLS, slots: MY_SLOTS, bag: MY_BAG }), learn: (k) => netOn && ws.send(JSON.stringify({ t: 'learnSkill', key: k })), equip: (slot, k) => netOn && ws.send(JSON.stringify({ t: 'equipSkill', slot, key: k })) };
   function openSkills() { const f = $('skillFrame'); if (!f.src) f.src = '/skilltree?game=1'; else try { f.contentWindow.MP_REFRESH && f.contentWindow.MP_REFRESH(); } catch (e) { /* 아직 로딩 */ } $('skillBox').hidden = false; }
-  function closeSkills() { $('skillBox').hidden = true; if (PF.back) { PF.back = false; setTimeout(() => openProfile('magic', true), 0); } try { $('skillFrame').blur(); document.activeElement && document.activeElement.blur && document.activeElement.blur(); window.focus(); } catch (e) { /* 무시 */ } } // 창을 닫으면 키보드가 다시 게임으로
+  function closeSkills() { $('skillBox').hidden = true; try { $('skillFrame').blur(); document.activeElement && document.activeElement.blur && document.activeElement.blur(); window.focus(); } catch (e) { /* 무시 */ } } // 창을 닫으면 키보드가 다시 게임으로
   window.MP_SKILL_CLOSE = () => closeSkills();
   function castSkill(slot) { if (document.body.classList.contains('padEdit')) return; if (!netOn || player.scene !== 'ground' || amDead() || TITLE.on) return; const key = MY_SLOTS[slot]; if (!key) { toast('마법 칸이 비었어요 · 마법(K)에서 배운 마법을 넣어요'); return; } if (performance.now() < SKCD[slot]) return; { const need = MPRules.MAGIC_TIER[MPRules.MAGIC[key].tier].mp; if (manaNow() < need) { toast(`마나가 모자라요 (${need} 필요)`); return; } } ws.send(JSON.stringify({ t: 'cast', slot, face: player.face | 0 })); }
   const skIcoCache = {};
   async function skillIcon(cv, key) { const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); if (!key) return; const M = MPRules.MAGIC[key]; await loadPfxW(); if (!PFXW) return; const mod = await fxMod(M.fx); if (!mod) return;
     if (!skIcoCache[key]) { const m = mod.meta || {}, sz = m.size || [64, 64], o = m.origin || [sz[0] / 2, sz[1] / 2], fr = PFXW.core.createFrame(sz[0], sz[1]), f = PFXW.core.createFx(mod, Object.assign({ x: o[0], y: o[1] }, M.pal ? { palette: M.pal } : {})); f.update(Math.min(0.7, (m.duration || 1) * 0.5)); f.draw(fr); const im = new ImageData(sz[0], sz[1]); PFXW.core.composite(fr, im.data, null); const t = document.createElement('canvas'); t.width = sz[0]; t.height = sz[1]; t.getContext('2d').putImageData(im, 0, 0); skIcoCache[key] = t; }
     const t = skIcoCache[key], k = Math.min(cv.width / t.width, cv.height / t.height) * 1.5; g.imageSmoothingEnabled = false; g.drawImage(t, cv.width / 2 - t.width * k / 2, cv.height / 2 - t.height * k / 2, t.width * k, t.height * k); }
+  function drawTreeBtn() { const cv = $('skTreeCv'); if (!cv) return; const sp = stoneSprite('fire', 3); if (!sp) { setTimeout(drawTreeBtn, 300); return; } const g = cv.getContext('2d'), k = Math.min(cv.width / sp.width, cv.height / sp.height) * 0.9; g.clearRect(0, 0, cv.width, cv.height); g.imageSmoothingEnabled = false; g.drawImage(sp, (cv.width - sp.width * k) / 2, (cv.height - sp.height * k) / 2, sp.width * k, sp.height * k); }
+  setTimeout(drawTreeBtn, 0);
+  $('skTree').addEventListener('click', (e) => { e.stopPropagation(); if (document.body.classList.contains('padEdit')) return; openSkills(); }); // 패드 위 마법석 → 스킬 트리
   function renderSkillPad() { for (const i of [0, 1]) { const b = $('sk' + i), key = MY_SLOTS[i]; b.classList.toggle('empty', !key); b.title = key ? `${MPRules.MAGIC[key].name} (${i ? 'F' : 'R'})` : `빈 칸 (${i ? 'F' : 'R'}) · 마법(K)에서 넣어요`; skillIcon(b.querySelector('canvas'), key); } }
   const fxMods = {}; async function fxMod(k) { if (!fxMods[k]) fxMods[k] = import('./assets/pixelfx/fx/' + k + '.js').catch(() => null); return fxMods[k]; }
   async function playCast(m) { // 마법 연출 (나·다른 사람 모두)
@@ -1853,28 +1856,9 @@
     MPRules.STATS.forEach(([k, nm], i) => { const [x, y] = pt(i, R * st[k] / 10); h += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.6" fill="#7a3e14"/>`; const [lx, ly] = pt(i, R + 18), anc = Math.abs(lx) < 8 ? 'middle' : lx > 0 ? 'start' : 'end';
       h += `<text x="${lx.toFixed(1)}" y="${(ly + (ly < -40 ? -4 : 4)).toFixed(1)}" text-anchor="${anc}">${nm} <tspan class="v">${st[k] % 1 ? st[k].toFixed(1) : st[k]}</tspan></text>`; });
     $('pfRadar').innerHTML = h; }
-  // 고른 캐릭터만 (88명 → 16명). 숫자는 chars.json 순서 그대로라 저장된 모습과 맞음
   const pickChars = () => CHARS.names.map((n, j) => [j, n]); // 캐릭터 전부 (88명)
-  const PF_ORDER = ['bag', 'magic', 'look', 'stats'];
-  const noFlip = () => matchMedia('(max-width: 760px), (prefers-reduced-motion: reduce)').matches;
-  function pfClone(el, skip) { // 페이지 모습 그대로 복사 (캔버스 그림까지)
-    const d = document.createElement('div'), cs = getComputedStyle(el); for (const k of ['display', 'flexDirection', 'alignItems', 'gap']) d.style[k] = cs[k];
-    for (const ch of el.children) { if (skip && ch.matches(skip)) continue; const c = ch.cloneNode(true); const a = ch.querySelectorAll('canvas'), b = c.querySelectorAll('canvas'); if (ch.tagName === 'CANVAS') c.getContext('2d').drawImage(ch, 0, 0); const fix = (o, n) => { const r = o.getBoundingClientRect(); n.style.width = r.width + 'px'; n.style.height = r.height + 'px'; n.style.flex = 'none'; }; if (ch.tagName === 'CANVAS' || ch.tagName === 'svg') fix(ch, c); a.forEach((cv, i) => { try { b[i].getContext('2d').drawImage(cv, 0, 0); fix(cv, b[i]); } catch (e) {} }); for (const x of [c, ...c.querySelectorAll('[id]')]) x.removeAttribute('id'); if (ch.classList.contains('pfBody')) c.scrollTop = 0; d.appendChild(c); }
-    return d; }
-  function pfBox(book, el, cls) { const bk = book.getBoundingClientRect(), r = el.getBoundingClientRect(), d = document.createElement('div'); d.className = cls; Object.assign(d.style, { left: r.left - bk.left + 'px', top: r.top - bk.top + 'px', width: r.width + 'px', height: r.height + 'px' }); return d; }
-  function pfFlip(from, to, oldRight) { // 다음 탭: 옛 장이 책등 쪽으로 넘어감 / 앞 탭: 새 장이 책등에서 펼쳐짐
-    if (noFlip()) return; const book = $('profile').querySelector('.book'), R = book.querySelector('.page.right');
-    for (const o of book.querySelectorAll('.pfLeaf')) o.remove();
-    const fwd = PF_ORDER.indexOf(to) > PF_ORDER.indexOf(from), leaf = pfBox(book, R, 'pfLeaf' + (fwd ? '' : ' bwd'));
-    leaf.appendChild(fwd ? oldRight : pfClone(R, '.bmarks')); book.appendChild(leaf);
-    let stay = null; if (!fwd) { stay = pfBox(book, R, 'pfLeaf'); stay.style.animation = 'none'; stay.style.zIndex = 4; stay.appendChild(oldRight); book.appendChild(stay); }
-    setTimeout(() => { leaf.remove(); if (stay) stay.remove(); }, 400); }
-  function openProfile(tab, noCover) {
-    const was = !$('profile').hidden, from = PF.tab, book = $('profile').querySelector('.book'); tab = tab || PF.tab;
-    const oldRight = was && tab !== from && !noFlip() ? pfClone(book.querySelector('.page.right'), '.bmarks') : null;
-    PF.tab = tab; $('profile').hidden = false; if (PF.tab === 'stats' && netOn) ws.send(JSON.stringify({ t: 'stats' })); renderProfile(); if (!PF.raf) PF.raf = requestAnimationFrame(pfLoop);
-    if (oldRight) pfFlip(from, tab, oldRight);
-  }
+  function openProfile(tab) { // 양피지 프로필: 주머니 · 꾸미기 · 통계 (마법은 패드 위 마법석 버튼 · K)
+    PF.tab = tab === 'magic' ? 'bag' : (tab || PF.tab); $('profile').hidden = false; if (PF.tab === 'stats' && netOn) ws.send(JSON.stringify({ t: 'stats' })); renderProfile(); if (!PF.raf) PF.raf = requestAnimationFrame(pfLoop); }
   function closeProfile() { $('profile').hidden = true; cancelAnimationFrame(PF.raf); PF.raf = 0; }
   function pfLoop(now) { if ($('profile').hidden) { PF.raf = 0; return; } const cv = $('pfChar'), g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); g.imageSmoothingEnabled = false;
     const look = player.look, c = (look.char | 0) - USER.chars.length, t = now / 1000;
@@ -1891,9 +1875,6 @@
     if (PF.tab === 'bag') { const list = myTradables().filter((q) => !q.k.startsWith('hat:')); const tools = Object.keys(MY_TOOLS).filter((k) => MY_TOOLS[k]);
       h += `<div class="pfSec">주머니 <small>${list.length}칸</small></div><div class="pfGrid">${list.map((q) => `<div class="pfSlot" title="${esc(persName(q.k))}"><canvas data-pk="${q.k}" width="56" height="56"></canvas>${q.n > 1 ? `<i>${q.n}</i>` : ''}</div>`).join('')}${Array.from({ length: Math.max(0, 15 - list.length) }, () => '<div class="pfSlot empty"></div>').join('')}</div>`;
       h += `<div class="pfSec">도구</div>` + (tools.length ? `<div class="pfGrid">${tools.map((k) => `<div class="pfSlot" title="${esc(MPRules.TOOLS[k].name)}"><canvas data-pk="tool:${k}" width="56" height="56"></canvas></div>`).join('')}</div>` : '<p class="pfMsg">아직 도구가 없어요 · 작업대에서 만들어요</p>'); }
-    else if (PF.tab === 'magic') { h += `<div class="pfSec">마법 2칸 <small>R · F</small></div><div class="pfGrid" style="grid-template-columns:repeat(2,1fr);max-width:220px">${MY_SLOTS.map((k, i) => `<div class="pfSlot" title="${k ? esc(MPRules.MAGIC[k].name) : '빈 칸'}"><canvas data-sk="${k || ''}" width="56" height="56"></canvas><i>${i ? 'F' : 'R'}</i></div>`).join('')}</div>`;
-      const learned = Object.keys(MY_SKILLS).filter((k) => MY_SKILLS[k] > 0 && MPRules.MAGIC[k]); h += `<div class="pfSec">배운 마법 <small>${learned.length}</small></div>` + (learned.length ? learned.map((k) => `<div class="pfRow"><span><span style="color:${MPRules.magicEl(MPRules.MAGIC[k].el).ring || MPRules.magicEl(MPRules.MAGIC[k].el).hex}">●</span> ${MPRules.magicEl(MPRules.MAGIC[k].el).name} · ${MPRules.MAGIC[k].name}</span><b>${MY_SKILLS[k]}/${MPRules.MAGIC_TIER[MPRules.MAGIC[k].tier].max}</b></div>`).join('') : '<p class="pfMsg">아직 배운 마법이 없어요 · 작업대에서 마법석을 만들어요</p>');
-      h += `<button class="pfBtn" id="pfTree" type="button">스킬 트리 펼치기 · K</button>`; }
     else if (PF.tab === 'look') { const cur = player.look.char | 0;
       h += `<div class="pfSec">캐릭터 <small>${CHARS.names.length}명</small></div><div class="pfGrid faces">${pickChars().map(([j, nm]) => `<button class="pfSlot face" type="button" data-ch="${j + USER.chars.length}" aria-pressed="${cur === j + USER.chars.length}" title="${nm}" aria-label="${nm}"><canvas data-face="${j}" width="38" height="38"></canvas></button>`).join('')}</div>`;
       h += `<div class="pfSec">옷 색</div><div class="pfSw">${HUES.map((deg, i) => `<button type="button" data-hue="${i}" aria-label="옷 색 ${i + 1}" aria-pressed="${(player.look.hue | 0) === i}" style="background:hsl(${(200 + deg) % 360},55%,55%)"></button>`).join('')}</div>`;
@@ -1912,7 +1893,7 @@
     for (const b of body.querySelectorAll('[data-skn]')) b.onclick = () => { player.look.sk = +b.dataset.skn; relook(); };
     on('pfRename', () => { if (renamesLeft <= 0) { toast('이름은 더 바꿀 수 없어요'); return; } closeProfile(); startOpening('rename'); });
     const nk = $('pfNick'); if (nk) nk.oninput = () => { player.name = nk.value.trim() || '나'; tagW.delete(player.name); saveLook(); $('pfName').textContent = player.name; };
-    on('pfTree', () => { const bk = $('profile').querySelector('.book'); if (noFlip()) { closeProfile(); PF.back = true; openSkills(); return; } bk.classList.add('toMagic'); setTimeout(() => { closeProfile(); bk.classList.remove('toMagic'); PF.back = true; openSkills(); }, 430); }); // 책이 빛나며 스킬 트리로 on('pfCloset', () => { closeProfile(); $('btnCloset').click(); }); 
+ on('pfCloset', () => { closeProfile(); $('btnCloset').click(); }); 
     for (const b of body.querySelectorAll('[data-hat]')) b.onclick = () => { player.look.hat = b.dataset.hat; relook(); };
   }
   const CRAFT = { tab: 'tool' };
@@ -2437,7 +2418,7 @@
   const vaccinePrice = () => VACCINE_BASE + VACCINE_STEP * inv.bought;
   function saveInv() { store('mp2026.inv', inv); renderInv(); }
   { const ch = document.getElementById('chat'); const fit = () => document.documentElement.style.setProperty('--chatH', (ch.hidden ? 0 : ch.offsetHeight) + 'px'); if (window.ResizeObserver) new ResizeObserver(fit).observe(ch); fit(); } // 행동 안내를 채팅 위로
-  function renderInv() { if ($('invP')) $('invP').textContent = MY_PCOIN.toLocaleString(); if ($('bagBox') && !$('bagBox').hidden) openBag(); $('invCoin').textContent = (ONLINE ? MY_PCOIN : inv.coin).toLocaleString(); /* 화면 위 코인 = 내 코인 */ $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = myView ? myView.me.vaccine : inv.vaccine; $('invWood').textContent = myView ? myView.me.wood : 0; if (build.on) setBuild(true); }
+  function renderInv() { if ($('invP')) $('invP').textContent = MY_PCOIN.toLocaleString(); if ($('bagBox') && !$('bagBox').hidden) openBag(); $('invCoin').textContent = (ONLINE ? MY_PCOIN : inv.coin).toLocaleString(); /* 화면 위 코인 = 내 코인 */ if (build.on) setBuild(true); }
   const player = {
     x: 0, y: 0, dir: 1, moving: false, scene: 'ground', room: null, entry: null,
     name: saved.name || '나', tag: '#277a58', team: store('mp2026.team') || 3,
@@ -5059,7 +5040,7 @@
     else if (DOOM) { const n = terrs.filter((t) => t && gone[t.id]).length; if (n) setTimeout(() => toast(`균열이 영토 ${n}곳을 삼켰다`), 600); }
     requestAnimationFrame((n) => { last = n; frame(n); });
   }).catch((err) => {
-    $('loadingText').textContent = '지도를 불러오지 못했어요';
+    $('loadingText').textContent = '지도를 불러오지 못했어요'; console.error('init', err && err.stack);
     $('loadingSub').textContent = err.message;
   });
 })();
