@@ -437,7 +437,7 @@ wss.on('connection', (ws) => {
         t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander.map(({ token, ...r }) => r), board: boardPub(),
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], picked: Object.entries(world.s.picked || {}).filter(([, t]) => now() - t < NUM.regrowMin * 60e3).map(([i]) => +i), job: acc.job || null, tools: acc.tools || {}, pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), dug: Object.keys(world.s.dug || {}).map(Number), weapons: acc.weapons || {}, weapon: acc.weapon || null, startDay: gameClock().day, traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], picked: Object.entries(world.s.picked || {}).filter(([, t]) => now() - t < NUM.regrowMin * 60e3).map(([i]) => +i), job: acc.job || null, tools: acc.tools || {}, skills: acc.skills || {}, slots: acc.slots || [null, null], pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), dug: Object.keys(world.s.dug || {}).map(Number), weapons: acc.weapons || {}, weapon: acc.weapon || null, startDay: gameClock().day, traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
       return;
@@ -938,15 +938,56 @@ wss.on('connection', (ws) => {
         else if (!done && why) send(ws, { t: 'err', text: why });
         break;
       }
+      case 'learnSkill': { // 마법석을 칸에 끼워서 배우기 / 강화
+        const key = String(m.key || ''), M = MPRules.MAGIC[key]; if (!M) return; s.acc.skills = s.acc.skills || {};
+        const why = MPRules.canLearn(s.acc.skills, key); if (why) return send(ws, { t: 'err', text: why });
+        const sk = MPRules.stoneKey(M.el, MPRules.MAGIC_TIER[M.tier].n); s.acc.bag = s.acc.bag || {};
+        if (!(s.acc.bag[sk] > 0)) return send(ws, { t: 'err', text: `${MPRules.stoneName(M.el, MPRules.MAGIC_TIER[M.tier].n)}이(가) 필요해요` });
+        s.acc.bag[sk] -= 1; if (!s.acc.bag[sk]) delete s.acc.bag[sk]; s.acc.skills[key] = (s.acc.skills[key] | 0) + 1; dirty = true;
+        s.acc.slots = s.acc.slots || [null, null]; if (!s.acc.slots.includes(key)) { const i = s.acc.slots.indexOf(null); if (i >= 0) s.acc.slots[i] = key; } // 빈 칸이 있으면 바로 걸어 둠
+        send(ws, { t: 'bag', bag: s.acc.bag }); send(ws, { t: 'skills', skills: s.acc.skills, slots: s.acc.slots, text: `✨ ${M.name}${s.acc.skills[key] > 1 ? ` ${s.acc.skills[key]}단계로 강화` : '을(를) 배웠어요'}!` }); break;
+      }
+      case 'equipSkill': { // 마법 2칸 중 하나에 걸기
+        const key = m.key ? String(m.key) : null, i = m.slot === 1 ? 1 : 0; s.acc.skills = s.acc.skills || {}; s.acc.slots = s.acc.slots || [null, null];
+        if (key && !(s.acc.skills[key] > 0)) return; if (key) { const j = s.acc.slots.indexOf(key); if (j >= 0) s.acc.slots[j] = null; } s.acc.slots[i] = key; dirty = true;
+        send(ws, { t: 'skills', skills: s.acc.skills, slots: s.acc.slots }); break;
+      }
+      case 'cast': { // 마법 쓰기 (R/F, 패드 동그라미)
+        if (s.scene !== 'ground' || s.x == null || (s.deadUntil || 0) > now() || jailed(s.acc)) return;
+        const slots = s.acc.slots || [], key = slots[m.slot === 1 ? 1 : 0], M = key && MPRules.MAGIC[key]; if (!M) return;
+        const lv = (s.acc.skills || {})[key] | 0; if (!lv) return; const T = MPRules.MAGIC_TIER[M.tier]; s.acc.cdAt = s.acc.cdAt || {};
+        if (T.cd) { if (now() - (s.acc.cdAt[key] || 0) < T.cd * 1000 - 300) return; s.acc.cdAt[key] = now(); }
+        else { const day = gameDayKey(); s.acc.ultDay = s.acc.ultDay || {}; if (s.acc.ultDay[key] === day) return send(ws, { t: 'err', text: '궁극기는 하루에 1번만 써요' }); s.acc.ultDay[key] = day; }
+        const face = m.face | 0, D = [[0, 1], [0, -1], [-1, 0], [1, 0]][face] || [0, 1], tx = Math.floor(s.x / 32), ty = Math.floor(s.y / 32);
+        let text = '', extra = {};
+        if (M.eff === 'grow') { let n2 = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const e = world.s.tiles[tileIdx(tx + D[0] + dx, ty + D[1] + dy)]; if (e && e.k === 'farm' && e.crop) { const left = Math.max(0, e.crop.at + e.crop.d - Date.now()); e.crop.at -= left * Math.min(0.6, 0.2 + 0.1 * (lv - 1)); n2++; sendTile(tileIdx(tx + D[0] + dx, ty + D[1] + dy)); } } if (n2) dirty = true; text = n2 ? `🌱 밭 ${n2}칸이 쑥쑥 자랐어요` : '🌱 앞에 밭이 없어요'; }
+        else if (M.eff === 'boulder' || M.eff === 'quake') { const R2 = M.eff === 'quake' ? 2 : 0; let n2 = 0; for (let dy = -R2; dy <= R2; dy++) for (let dx = -R2; dx <= R2; dx++) { const x = tx + D[0] * (R2 ? 2 : 1) + dx, y = ty + D[1] * (R2 ? 2 : 1) + dy, i = tileIdx(x, y); if (tileAt(x, y) !== TT.MOUNTAIN) continue; world.s.dug = world.s.dug || {}; world.s.dug[i] = 1; CLEAR_SET.add(i); n2++; const msg = JSON.stringify({ t: 'dug', i }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); } if (n2) { addMat(s, 'm_stone', n2 * 2); dirty = true; } text = n2 ? `⛰ 산 ${n2}칸을 부쉈어요 · 돌 +${n2 * 2}` : '⛰ 앞에 산이 없어요'; }
+        else if (M.eff === 'gatherArea' || M.eff === 'gatherBig') { const R2 = M.eff === 'gatherBig' ? 5 : 3; world.s.picked = world.s.picked || {}; const got = {}; for (let dy = -R2; dy <= R2; dy++) for (let dx = -R2; dx <= R2; dx++) { const x = tx + dx, y = ty + dy, i = tileIdx(x, y), P2 = MPRules.plantKind(tileAt(x, y), x, y); if (!P2 || treeHere(x, y) || now() - (world.s.picked[i] || 0) < NUM.regrowMin * 60e3) continue; world.s.picked[i] = now(); got[P2.mat] = (got[P2.mat] || 0) + P2.n; const msg = JSON.stringify({ t: 'picked', i }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); } for (const [k, v] of Object.entries(got)) addMat(s, k, v); dirty = true; text = Object.keys(got).length ? `🍃 ${Object.entries(got).map(([k, v]) => `${MPRules.MATS[k].name} +${v}`).join(', ')}` : '🍃 둘레에 뜯을 풀·꽃이 없어요'; }
+        else if (M.eff === 'freeze' || M.eff === 'bridge') { const len = M.eff === 'bridge' ? 6 : 2 + lv, tiles = []; for (let k = 1; k <= len; k++) { const x = tx + D[0] * k, y = ty + D[1] * k; if (tileAt(x, y) === TT.WATER || tileAt(x, y) === TT.VOID) tiles.push(tileIdx(x, y)); } extra = { frozen: tiles, sec: M.eff === 'bridge' ? 30 : 10 }; text = tiles.length ? `❄ 물 ${tiles.length}칸이 얼었어요` : '❄ 앞에 물이 없어요'; }
+        else if (M.eff === 'blink') { let x = tx, y = ty; for (let k = 1; k <= 4; k++) { const nx = tx + D[0] * k, ny = ty + D[1] * k; if (!walkableTerrain(tileAt(nx, ny)) || treeHere(nx, ny) && !world.s.chopped[tileIdx(nx, ny)]) break; const e = world.s.tiles[tileIdx(nx, ny)]; if (e && (e.k === 'wall' || e.k === 'water')) break; x = nx; y = ny; } if (x !== tx || y !== ty) { s.x = x * 32 + 16; s.y = y * 32 + 16; send(ws, { t: 'pos', x: s.x, y: s.y }); } }
+        else if (M.eff === 'recall') { const pos = capitalPos(s.acc, s.token); if (pos) { placeAt(s, pos); send(ws, { t: 'warp', pos }); text = '✨ 우리 수도로 돌아왔어요'; } else text = '나라가 없어서 돌아갈 수도가 없어요'; }
+        else if (M.eff === 'speed') extra = { speed: 5 + lv - 1 };
+        else if (M.eff === 'light') extra = { light: 30 };
+        else if (M.eff === 'heal') extra = { heal: 1 };
+        areaSend(s, Object.assign({ t: 'cast', id: s.id, key, x: s.x, y: s.y, face }, extra));
+        send(ws, { t: 'castOk', key, slot: m.slot === 1 ? 1 : 0, cd: T.cd, text });
+        break;
+      }
       case 'craft': { // 작업대: 내 가방 재료로 도구·횃불·가구 만들기 (하늘 상점가 작업대, 또는 우리 저장소 옆)
         const R = MPRules.RECIPE_BY[String(m.id || '')], cnt = Math.max(1, Math.min(20, m.n | 0)); if (!R) return;
         const n = world.nationOfPlayer(s.token), here = (s.scene === 'sky' && s.room === 'market') || (s.scene === 'ground' && n && nearStore(s, n, 3));
         if (!here) return send(ws, { t: 'err', text: '작업대 앞에서 만들어요 (하늘 상점가, 또는 우리 저장소 옆)' });
         if (R.tool && needTool(s, R.tool)) return send(ws, { t: 'err', text: `이미 ${R.name}이(가) 있어요` });
-        const k2 = R.tool ? 1 : cnt; s.acc.bag = s.acc.bag || {};
-        const lack = Object.entries(R.mats).filter(([k, v]) => (s.acc.bag[k] | 0) < v * k2).map(([k, v]) => `${MPRules.MATS[k].name} ${v * k2 - (s.acc.bag[k] | 0)}`);
+        const k2 = R.tool || R.cat === 'magic' ? 1 : cnt; s.acc.bag = s.acc.bag || {};
+        if (R.hidden && !MPRules.hiddenOpen(s.acc.skills || {}, R.el)) return send(ws, { t: 'err', text: '아직 알 수 없는 힘이에요' });
+        if (R.quiz && m.quiz !== 'ok') return send(ws, { t: 'err', text: '문제를 맞혀야 만들어져요' });
+        if (R.daily) { const day = gameDayKey(); if (s.acc.ms3Day === day) return send(ws, { t: 'err', text: '마법석 Ⅲ은 하루에 1번만 만들 수 있어요' }); }
+        const fishHave = () => Object.entries(s.acc.bag).filter(([k]) => k.startsWith('fi_')).reduce((a, [, v]) => a + v, 0);
+        const matName = (k) => (k === 'fish' ? '물고기' : (MPRules.MATS[k] || MPRules.RECIPE_BY[k] || { name: k }).name);
+        const lack = Object.entries(R.mats).filter(([k, v]) => (k === 'fish' ? fishHave() : s.acc.bag[k] | 0) < v * k2).map(([k, v]) => `${matName(k)} ${v * k2 - (k === 'fish' ? fishHave() : s.acc.bag[k] | 0)}`);
         if (lack.length) return send(ws, { t: 'err', text: `재료가 모자라요: ${lack.join(', ')}` });
-        for (const [k, v] of Object.entries(R.mats)) { s.acc.bag[k] -= v * k2; if (!s.acc.bag[k]) delete s.acc.bag[k]; }
+        for (const [k, v] of Object.entries(R.mats)) { if (k === 'fish') { let left = v * k2; for (const fk of Object.keys(s.acc.bag)) { if (!fk.startsWith('fi_') || left <= 0) continue; const t2 = Math.min(left, s.acc.bag[fk]); s.acc.bag[fk] -= t2; left -= t2; if (!s.acc.bag[fk]) delete s.acc.bag[fk]; } continue; } s.acc.bag[k] -= v * k2; if (!s.acc.bag[k]) delete s.acc.bag[k]; }
+        if (R.daily) s.acc.ms3Day = gameDayKey();
         if (R.tool) { s.acc.tools = s.acc.tools || {}; s.acc.tools[R.tool] = 1; send(ws, { t: 'tools', tools: s.acc.tools, text: `🔨 ${R.name}을(를) 만들었어요!` }); }
         else { const g = (R.give || 1) * k2; s.acc.bag[R.id] = (s.acc.bag[R.id] || 0) + g; send(ws, { t: 'ok', text: `🔨 ${R.name} ${g}개를 만들었어요 (내 가방)` }); }
         dirty = true; send(ws, { t: 'bag', bag: s.acc.bag }); break;
@@ -1592,6 +1633,11 @@ async function adminOp(m) {
     }
     case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
     case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
+    case 'giveBag': { // 관리자: 이름으로 찾은 사람 가방에 물건 넣기 (재료·마법석 시험용)
+      const name = String(m.name || ''), k = String(m.k || ''), n = Math.max(1, Math.min(999, m.n | 0)); if (!/^(m_|ms_|fi_|f_)\w+$/.test(k)) return { ok: false, err: '물건 이름이 이상해요' };
+      const ent = Object.entries(state.accounts).find(([, a]) => a && a.name === name); if (!ent) return { ok: false, err: '그 이름의 사람이 없어요' };
+      const acc = ent[1]; acc.bag = acc.bag || {}; acc.bag[k] = (acc.bag[k] || 0) + n; dirty = true;
+      for (const o of online.values()) if (o.token === ent[0]) send(o.ws, { t: 'bag', bag: acc.bag }); return { ok: true, bag: acc.bag }; }
     case 'startPcoin': state.settings.startPcoin = Math.max(0, Math.min(100000, m.n | 0)); dirty = true; return { ok: true, n: state.settings.startPcoin };
     case 'rosterMode': state.settings.rosterLogin = !!m.on; dirty = true; return { ok: true, on: rosterOn() };
     case 'rosterImport': { // 명단 붙여 넣기: 한 줄에 학번 이름 메일 (탭·쉼표·띄어쓰기)

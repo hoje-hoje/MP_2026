@@ -126,6 +126,43 @@
     { id: 'f_pot', cat: 'furniture', name: '꽃 화분', mats: { m_stone: 2, m_flower: 1 } },
     { id: 'f_rug', cat: 'furniture', name: '러그', mats: { m_fiber: 6, m_flower: 2 } },
   ];
+
+  // ---------------------------------------------------------- 마법: 마법석 스킬 트리 (기본 6속성 + 숨은 4속성)
+  const PAL = { POISON: ['#0c0614', '#24103a', '#3c1a5e', '#5a2a8a', '#7e3cb8', '#a85ee0', '#d49aff', '#f4e0ff'], SHADOW: ['#000000', '#07040c', '#120a1c', '#1e122c', '#2e1c40', '#4a3060', '#7a5a96', '#c0a8e0'], WATER: ['#0a1a3a', '#0e3a7a', '#1560b8', '#1e8ad8', '#3fb6f0', '#7fd8ff', '#c8f0ff', '#ffffff'], DARK: ['#05020c', '#14082a', '#2a1050', '#4a1c80', '#7a32b0', '#b060e0', '#e0b0ff'] };
+  // [칸, 이름, pixelfx, 설명, 효과(eff), 색 바꾸기]  eff: 서버가 실제로 하는 일 (없으면 연출만)
+  const MAGIC_BASE = [
+    { id: 'nature', name: '자연', en: '대지·식물', hex: '#2ef07a', mat: { m_fiber: 1 }, n: [['t1', '꽃 피우기', 'nature/healing-bloom', '둘레 3×3 밭 작물이 빨리 자라요 (강화마다 더)', 'grow'], ['a', '덩굴 묶기', 'nature/root-snare', '침입자를 묶어요 (준비 중: 연출만)'], ['b', '바위 굴리기', 'nature/boulder', '바라보는 산 1칸을 곡괭이 없이 부숴요 · 돌 +2', 'boulder'], ['ult', '지진', 'nature/quake', '주변 산을 한꺼번에 부숴요 · 돌 많이', 'quake']] },
+    { id: 'fire', name: '불', en: '불꽃', hex: '#ff3b4a', mat: { m_wood: 1 }, n: [['t1', '불씨', 'fire/torch', '30초 동안 내 둘레가 밝아져요', 'light'], ['a', '파이어볼', 'fire/fireball', '불덩이를 날려요 (나무 태우기는 준비 중)', null, null, 1], ['b', '화염 고리', 'fire/fire-ring', '내 둘레를 불꽃이 감싸요 (연출)'], ['ult', '메테오', 'fire/meteor', '하늘에서 운석이 떨어져요 (연출)']] },
+    { id: 'bolt', name: '번개', en: '전기', hex: '#ffd23d', mat: { m_ore: 1 }, n: [['t1', '번쩍', 'lightning/zap-hit', '번쩍! 둘레를 밝게 비춰요'], ['a', '연쇄 번개', 'lightning/chain-lightning', '번개가 튀어요 (연출)', null, null, 1], ['b', '번개 공', 'lightning/ball-lightning', '머리 위에 번개 공 (연출)'], ['ult', '번개구름', 'lightning/storm-cloud', '먹구름에서 번개가 쏟아져요 (연출)']] },
+    { id: 'wind', name: '바람', en: '하늘·공기', hex: '#9df5e4', mat: { m_fiber: 1, m_wood: 1 }, n: [['t1', '순풍', 'status/haste', '5초 동안 빨라져요 (강화마다 +1초)', 'speed'], ['a', '돌풍', 'explosions/smoke-bomb', '앞을 밀어내요 (연출)'], ['b', '나뭇잎 폭풍', 'nature/leaf-storm', '둘레 3칸의 풀·꽃을 한꺼번에 채집해요', 'gatherArea'], ['ult', '회오리', 'nature/tornado', '둘레 5칸의 풀·꽃을 휩쓸어 모아요', 'gatherBig']] },
+    { id: 'holy', name: '빛', en: '신성', hex: '#fff3b0', mat: { m_flower: 1 }, n: [['t1', '회복', 'holy/heal', '물속 익사 카운트를 되돌리고 몸이 떠올라요', 'heal'], ['a', '보호막', 'holy/divine-shield', '보호막 (연출)'], ['b', '광역 회복', 'holy/heal-aoe', '주변 회복 (연출)'], ['ult', '부활', 'holy/resurrection', '쓰러진 팀원 일으키기 (준비 중)']] },
+    { id: 'ice', name: '얼음', en: '냉기', hex: '#3fd6ff', mat: { fish: 1 }, n: [['t1', '서리', 'ice/snowflake-burst', '앞의 물 3칸을 10초 동안 얼려 건너요 (강화마다 +1칸)', 'freeze'], ['a', '얼음창', 'ice/ice-lance', '얼음 다리 6칸 30초', 'bridge', null, 1], ['b', '얼음 가시', 'ice/ice-spikes', '얼음 가시 (연출)'], ['ult', '눈보라', 'ice/blizzard-vortex', '눈보라 (연출)']] },
+  ];
+  const MAGIC_HIDDEN = [
+    { id: 'water', name: '물', en: '흐르는 물', hex: '#3d8bff', req: ['fire', 'ice'], n: [['t1', '물방울', 'nature/acid-splash', '둘레 밭에 물을 줘요 (작물 빨리)', 'grow', PAL.WATER], ['a', '물대포', 'fire/flamethrower', '물을 뿜어요 (연출)', null, PAL.WATER, 1], ['b', '물의 고리', 'fire/fire-ring', '물의 고리 (연출)', null, PAL.WATER], ['ult', '해일', 'ice/blizzard-vortex', '큰 물결 (연출)', null, PAL.WATER]] },
+    { id: 'poison', name: '독', en: '보라 독', hex: '#b45cff', req: ['nature', 'ice'], n: [['t1', '독 포자', 'nature/spore-burst', '포자 (연출)', null, PAL.POISON], ['a', '독구름', 'nature/poison-cloud', '독구름 (연출)', null, PAL.POISON], ['b', '산성 튀기기', 'nature/acid-splash', '바라보는 산 1칸을 녹여요', 'boulder', PAL.POISON], ['ult', '독 늪', 'nature/toxic-puddle', '독 늪 (연출)', null, PAL.POISON]] },
+    { id: 'dark', name: '어둠', en: '검은 그림자', hex: '#1a1124', ring: '#8c78b0', req: ['holy', 'bolt', 'fire'], n: [['t1', '그림자', 'status/cursed', '그림자 (연출)', null, PAL.SHADOW], ['a', '영혼 흡수', 'spawn/soul-rise', '영혼 흡수 (연출)', null, PAL.SHADOW], ['b', '분해', 'spawn/disintegrate', '분해 (연출)', null, PAL.SHADOW], ['ult', '블랙홀', 'explosions/implosion', '블랙홀 (연출)', null, PAL.DARK]] },
+    { id: 'chrono', name: '시공', en: '별·시간·공간', hex: '#ffffff', req: ['nature', 'fire', 'bolt', 'wind', 'holy', 'ice'], n: [['t1', '마법진', 'arcane/magic-circle-cast', '마법진 (연출)'], ['a', '순간이동', 'arcane/blink-in', '바라보는 쪽으로 4칸 순간이동', 'blink'], ['b', '별똥별', 'arcane/star-fall', '별똥별 (연출)'], ['ult', '시간 정지', 'arcane/time-stop', '바로 우리 수도로 돌아가요', 'recall']] },
+  ];
+  const MAGIC_TIER = { t1: { roman: 'Ⅰ', n: 1, max: 3, cd: 20 }, a: { roman: 'Ⅱ', n: 2, max: 1, cd: 30 }, b: { roman: 'Ⅱ', n: 2, max: 1, cd: 30 }, ult: { roman: 'Ⅲ', n: 3, max: 1, cd: 0 } }; // ult: 게임 하루 1번
+  const MAGIC_EL = [...MAGIC_BASE, ...MAGIC_HIDDEN], MAGIC = {};
+  for (const e of MAGIC_EL) for (const [k, name, fx, desc, eff, pal, dir] of e.n) MAGIC[e.id + '.' + k] = { key: e.id + '.' + k, el: e.id, tier: k, name, fx, desc, eff: eff || null, pal: pal || null, dir: !!dir, hex: e.hex };
+  const magicEl = (id) => MAGIC_EL.find((e) => e.id === id);
+  const stoneKey = (el, n) => `ms_${el}_${n}`; // 마법석 = 내 가방 물건
+  const stoneName = (el, n) => `${(magicEl(el) || {}).name} 마법석 ${['', 'Ⅰ', 'Ⅱ', 'Ⅲ'][n]}`;
+  const hiddenOpen = (skills, el) => { const e = magicEl(el); return !e.req || e.req.every((r) => (skills[r + '.ult'] | 0) > 0); };
+  function magicPre(key) { const M = MAGIC[key]; if (!M) return []; const e = magicEl(M.el); if (M.tier === 't1') return e.req ? e.req.map((r) => r + '.ult') : []; if (M.tier === 'ult') return [M.el + '.a', M.el + '.b']; return [M.el + '.t1']; }
+  function canLearn(skills, key) { const M = MAGIC[key]; if (!M) return '없는 마법이에요'; const lv = skills[key] | 0, T = MAGIC_TIER[M.tier]; if (lv >= T.max) return '다 배웠어요';
+    if (M.tier === 'a' || M.tier === 'b') { if ((skills[M.el + '.' + (M.tier === 'a' ? 'b' : 'a')] | 0) > 0) return '다른 쪽을 골랐어요'; }
+    const pre = magicPre(key); if (M.tier === 'ult' ? !pre.some((p) => skills[p]) : !pre.every((p) => skills[p])) return magicEl(M.el).req && !hiddenOpen(skills, M.el) ? '아직 알 수 없는 힘이에요' : '앞 마법을 먼저 배워요';
+    return ''; }
+  // 마법석 만들기 (작업대): Ⅰ 재료 / Ⅱ Ⅰ×3 + 문제 / Ⅲ Ⅱ×2 + 어려운 문제 (하루 1번)
+  for (const e of MAGIC_EL) {
+    RECIPES.push({ id: stoneKey(e.id, 1), cat: 'magic', el: e.id, sn: 1, name: stoneName(e.id, 1), mats: e.req ? { m_ore: 3, m_flower: 2 } : Object.assign({ m_ore: 2, m_flower: 1 }, e.mat), desc: e.req ? `${e.name}의 힘이 열린 사람만` : `${e.name} 마법 Ⅰ을 배우거나 강화해요`, hidden: !!e.req });
+    RECIPES.push({ id: stoneKey(e.id, 2), cat: 'magic', el: e.id, sn: 2, name: stoneName(e.id, 2), mats: { [stoneKey(e.id, 1)]: 3 }, quiz: 'normal', desc: '수학 문제를 맞히면 만들어져요', hidden: !!e.req });
+    RECIPES.push({ id: stoneKey(e.id, 3), cat: 'magic', el: e.id, sn: 3, name: stoneName(e.id, 3), mats: { [stoneKey(e.id, 2)]: 2 }, quiz: 'hard', daily: true, desc: '어려운 문제 · 하루 1번', hidden: !!e.req });
+  }
+
   const RECIPE_BY = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
   function plantKind(t, x, y) {
     if (t !== T.GRASS) return null; const h = hash(x, y, 7);
@@ -807,5 +844,5 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

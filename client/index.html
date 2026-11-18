@@ -478,6 +478,19 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 #atkBtn { right: 78px; bottom: calc(250px + env(safe-area-inset-bottom, 0px)); width: 84px; height: 84px; font-size: 34px; background: radial-gradient(circle at 35% 30%, #ff7a6a, #e8423c 60%, #b8282a); }
 #swapBtn { right: 174px; bottom: calc(262px + env(safe-area-inset-bottom, 0px)); width: 60px; height: 60px; background: radial-gradient(circle at 35% 30%, #a89cff, #6b4fb3 65%); }
 #swapBtn small { position: absolute; bottom: -18px; font: 700 11px var(--font-body); color: #2b2340; background: #fffaf0; padding: 0 4px; border: 2px solid #2b2340; white-space: nowrap; }
+/* 마법 2칸: 금빛 두 겹 테두리 동그라미 (패드·폰은 크게) */
+#skillPad { position: fixed; right: 76px; bottom: calc(256px + env(safe-area-inset-bottom, 0px)); z-index: 21; display: flex; gap: 12px; }
+#skillPad[hidden] { display: none; }
+.skb { position: relative; width: 72px; height: 72px; border-radius: 50%; padding: 0; border: 3px solid #f2d27a; background: radial-gradient(circle at 50% 45%, #2f6e6a, #163a3c 70%); box-shadow: 0 0 0 3px #1b1430, 0 0 0 6px #b99a4a, 0 4px 0 6px #1b1430; display: grid; place-items: center; touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+.skb canvas { width: 46px; height: 46px; image-rendering: pixelated; }
+.skb .cd { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(rgba(10,6,20,.72) var(--p, 0%), transparent 0); pointer-events: none; }
+.skb kbd { position: absolute; right: -6px; bottom: -6px; background: #1b1430; color: #f2d27a; font-size: 11px; padding: 1px 5px; border: 2px solid #f2d27a; border-radius: 4px; }
+.skb.empty { background: #24203a; } .skb.empty canvas { opacity: .25; }
+.skb:active { transform: translateY(2px); }
+@media (any-pointer: coarse) { .skb { width: 88px; height: 88px; } .skb canvas { width: 56px; height: 56px; } .skb kbd { display: none; } }
+#skillBox .skWrap { position: relative; width: min(1500px, 96vw); height: min(1000px, 92vh); background: #060c10; border: 4px solid #2b2340; box-shadow: 0 0 0 4px #f2d27a; }
+#skillBox iframe { width: 100%; height: 100%; border: 0; display: block; }
+#skillBox .hvX { position: absolute; right: 8px; top: 8px; z-index: 2; }
 #atkBtn[hidden], #swapBtn[hidden] { display: none; } #atkBtn:active, #swapBtn:active { transform: translateY(3px); box-shadow: 0 1px 0 #2b2340; }
 #rLogin { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(11,8,32,0.82); }
 #rLogin[hidden], #rStep1[hidden], #rStep2[hidden], .rRow[hidden] { display: none; }
@@ -607,6 +620,7 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <button id="btnHome" type="button">수도 (T)</button>
   <button id="btnCoupon" type="button">쿠폰</button>
   <button id="btnBag" type="button">가방 (I)</button>
+  <button id="btnSkill" type="button">마법 (K)</button>
   <button id="btnCloset" type="button">꾸미기</button>
 </div>
 
@@ -707,6 +721,8 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
   <div class="hvTabs" id="shopTabs"></div><div class="hvCoin" id="shopCoin"></div><div class="hvGrid" id="shopBody"></div>
 </div></div>
 <button id="atkBtn" type="button" hidden title="공격 (J) · 꾹 = 차징">⚔</button>
+<div id="skillPad" hidden><button class="skb" id="sk0" type="button" title="마법 1 (R)"><canvas width="48" height="48"></canvas><i class="cd"></i><kbd>R</kbd></button><button class="skb" id="sk1" type="button" title="마법 2 (F)"><canvas width="48" height="48"></canvas><i class="cd"></i><kbd>F</kbd></button></div>
+<div id="skillBox" class="modalbox" hidden><div class="skWrap"><button id="skillClose" class="hvX" type="button" aria-label="닫기">✕</button><iframe id="skillFrame" title="마법석 스킬 트리"></iframe></div></div>
 <button id="swapBtn" type="button" hidden title="무기 바꾸기 (Q) · 주먹 ↔ 무기"><canvas id="swapCv" width="40" height="40"></canvas><small>무기 교체</small></button>
 <div id="rLogin" hidden><div class="gIn">
   <b>MP</b>
