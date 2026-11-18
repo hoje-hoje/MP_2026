@@ -2436,6 +2436,7 @@
   const VACCINE_BASE = 3000, VACCINE_STEP = 500, SKY_LIMIT = 5 * 60;
   const vaccinePrice = () => VACCINE_BASE + VACCINE_STEP * inv.bought;
   function saveInv() { store('mp2026.inv', inv); renderInv(); }
+  { const ch = document.getElementById('chat'); const fit = () => document.documentElement.style.setProperty('--chatH', (ch.hidden ? 0 : ch.offsetHeight) + 'px'); if (window.ResizeObserver) new ResizeObserver(fit).observe(ch); fit(); } // 행동 안내를 채팅 위로
   function renderInv() { if ($('invP')) $('invP').textContent = MY_PCOIN.toLocaleString(); if ($('bagBox') && !$('bagBox').hidden) openBag(); $('invCoin').textContent = (ONLINE ? MY_PCOIN : inv.coin).toLocaleString(); /* 화면 위 코인 = 내 코인 */ $('invArmy').textContent = (myView ? myView.me.army : inv.army).toLocaleString(); $('invVac').textContent = myView ? myView.me.vaccine : inv.vaccine; $('invWood').textContent = myView ? myView.me.wood : 0; if (build.on) setBuild(true); }
   const player = {
     x: 0, y: 0, dir: 1, moving: false, scene: 'ground', room: null, entry: null,

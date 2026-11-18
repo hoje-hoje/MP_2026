@@ -700,6 +700,9 @@ body.padEdit #skillPad { outline: 3px dashed #ffd34d; outline-offset: 8px; curso
 #zoomBox { display: none !important; }
 #chat { left: 50% !important; transform: translateX(-50%); bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important; width: min(560px, calc(100vw - 340px)) !important; background: rgba(22, 20, 32, 0.58) !important; border: none !important; box-shadow: none !important; color: #fff; padding: 6px 8px !important; border-radius: 8px; }
 @media (max-width: 760px) { #chat { width: calc(100vw - 24px) !important; bottom: calc(118px + env(safe-area-inset-bottom, 0px)) !important; } }
+/* 행동 안내(E 꾹)는 채팅창 바로 위에 (채팅을 가리지 않게) — --chatH 는 game.js 가 채팅 높이로 맞춤 */
+body:not(.building) #prompt { bottom: calc(10px + var(--chatH, 56px) + 10px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 760px) { body:not(.building) #prompt { bottom: calc(118px + var(--chatH, 56px) + 10px + env(safe-area-inset-bottom, 0px)); } }
 #chat .chathead { display: none !important; }
 #chat .chatlog { max-height: 110px; color: #f2eefc; font-size: 12px; background: none !important; border: none !important; }
 #chat .chatlog i { color: #b9b2d0; font-style: normal; } #chat .chatlog .ch-team i { color: #ffd34d; } #chat .chatlog b { color: #fff; }
@@ -749,10 +752,6 @@ body.padEdit #skillPad { outline: 3px dashed #ffd34d; outline-offset: 8px; curso
 
 <div id="inv" class="hud card" aria-label="보유 자원">
   <span class="invc"><span class="coinSpin" role="img" aria-label="코인"></span> <span id="invCoin">0</span></span>
-  <span title="내 코인 (개인 지갑)"><b>👛</b> <span id="invP">0</span></span>
-  <span><b>병력</b> <span id="invArmy">0</span></span>
-  <span><b>목재</b> <span id="invWood">0</span></span>
-  <span><b>백신</b> <span id="invVac">0</span></span>
 </div>
 
 <div id="skyTimer" class="hud card" hidden>하늘 체류 <b id="skyLeft">5:00</b> 남음</div>
