@@ -4937,6 +4937,7 @@
     { id: 'serif', lay: 'left', orn: '✦', logo: (cv) => makeTitleLogo(cv) },
     { id: 'arco', lay: 'lefttop', menu: 'caps', logo: (cv) => makeTextLogo(cv, [TLn('MATH', 22, { bold: true, sp: 1, c: '#f6ecd6', c2: '#d8c29a', shadow: '#2a1a10', ol: '#2a1a10', align: 'left' }), TLn('PUZZLE', 22, { bold: true, sp: 1, c: '#f6ecd6', c2: '#d8c29a', shadow: '#2a1a10', ol: '#2a1a10', align: 'left' })]) },
     { id: 'witch', lay: 'right', logo: (cv) => makeTextLogo(cv, [TLn('the adventures of', 11, { c: '#efe3c4', align: 'center', gap: 2 }), TLn('MATH', 22, { bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' }), TLn('WORLD', 22, { bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' })]) },
+    { id: 'witchC', lay: 'center', big: 1, logo: (cv) => makeTextLogo(cv, [TLn('the adventures of', 11, { c: '#efe3c4', align: 'center', gap: 2 }), TLn('MATH', 22, { bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' }), TLn('WORLD', 22, { bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' })]) }, // 가운데 크게
     { id: 'camp', lay: 'center', orn: '✦', logo: (cv) => makeTextLogo(cv, [TLn('the', 11, { c: '#f4ead2', align: 'left', gap: -2 }), TLn('Puzzle', 22, { sp: 1, c: '#ffffff', c2: '#e8e0cc', shadow: '#1a2a24', align: 'center' })]) },
     { id: 'play', lay: 'rightmid', orn: 'M  P', menu: 'bigfirst', logo: null },
     { id: 'quest', lay: 'lefttop', menu: 'caps', logo: (cv) => makeTextLogo(cv, [TLn('NUMBER', 22, { bold: true, sp: 1, c: '#d6fff4', c2: '#5fd3b8', ol: '#0e2f2a', shadow: '#0e2f2a', align: 'left' }), TLn('QUEST', 22, { bold: true, sp: 3, c: '#d6fff4', c2: '#5fd3b8', ol: '#0e2f2a', shadow: '#0e2f2a', align: 'left' })]) },
@@ -4947,7 +4948,7 @@
     if (i == null) { let last = -1; try { last = +localStorage.getItem('mp2026.titleV'); } catch (e) { /* 없음 */ } i = Math.floor(Math.random() * TITLES.length); if (i === last) i = (i + 1) % TITLES.length; }
     try { localStorage.setItem('mp2026.titleV', i); } catch (e) { /* 없음 */ } TITLE.v = i;
     const T = TITLES[i], tt = $('title'); tt.dataset.lay = T.lay; tt.dataset.menu = T.menu || ''; tt.dataset.tv = T.id;
-    const lc = $('tLogo2'); lc.hidden = !T.logo; if (T.logo) { T.logo(lc); const k = Math.max(2, Math.floor(Math.min(470, innerWidth * 0.46) / lc.width)); lc.style.width = lc.width * k + 'px'; } /* 정수배로 키워 픽셀이 또렷하게 */
+    const lc = $('tLogo2'); lc.hidden = !T.logo; if (T.logo) { T.logo(lc); const k = Math.max(2, Math.floor((T.big ? Math.min(620, innerWidth * 0.52) : Math.min(470, innerWidth * 0.46)) / lc.width)); lc.style.width = lc.width * k + 'px'; } /* 정수배로 키워 픽셀이 또렷하게 */
     $('tOrnT').textContent = T.orn || ''; $('tOrnW').hidden = !T.orn;
     $('tStart').textContent = T.menu === 'caps' ? '새로 시작' : T.menu === 'bigfirst' ? 'PLAY' : '시작하기'; }
   // 연기: 지금 글자의 점들이 흩어져 → 다음 타이틀 글자 자리로 날아가 모임
