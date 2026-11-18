@@ -17,7 +17,8 @@
 html, body { height: 100%; }
 body { margin: 0; background: radial-gradient(ellipse at 50% 95%, #13232c 0%, var(--bg) 62%); color: var(--fg); font-family: var(--font); padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); overflow-x: hidden; }
 .stage { position: relative; width: 100%; max-width: 1280px; margin: 0 auto; aspect-ratio: 12 / 10.6; }
-.node.sealed { opacity: .35; } .brlabel.sealed { opacity: .5; text-shadow: none; }
+.node.sealed { opacity: .25; pointer-events: none; } .node.sealed canvas { visibility: hidden; } .node.sealed::after { content: '?'; position: absolute; color: #56606a; font-weight: 700; } .brlabel.sealed { opacity: .45; text-shadow: none; }
+.stage.upper { aspect-ratio: 12 / 6; } .stage.upper .low { display: none !important; }
 @media (max-width: 760px) { .stage { aspect-ratio: auto; height: 560px; } }
 svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
 .node { position: absolute; transform: translate(-50%, -50%); width: 4.3%; aspect-ratio: 1; border-radius: 50%; border: 3px solid #4a5560; background: #10181d; padding: 0; cursor: pointer; display: grid; place-items: center; transition: transform .12s; }
@@ -25,15 +26,15 @@ svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
 .node canvas { width: 72%; height: 72%; image-rendering: pixelated; filter: grayscale(1) brightness(.55); }
 .node.big { width: 5.6%; }
 .node.small { width: 3.6%; }
-.node.open { border-color: var(--c); box-shadow: 0 0 0 0 var(--c); animation: pulse 1.5s ease-in-out infinite; }
+.node.open { border-color: var(--r, var(--c)); box-shadow: 0 0 0 0 var(--c); animation: pulse 1.5s ease-in-out infinite; }
 .node.open canvas { filter: grayscale(.4) brightness(.9); }
-.node.learned { border-color: var(--c); background: var(--c); box-shadow: 0 0 14px 2px var(--c); }
+.node.learned { border-color: var(--r, var(--c)); background: var(--c); box-shadow: 0 0 14px 2px var(--r, var(--c)); }
 .node.learned canvas { filter: none; }
 .node.sel { outline: 3px solid #fff; outline-offset: 4px; }
-@keyframes pulse { 50% { box-shadow: 0 0 12px 3px var(--c); } }
+@keyframes pulse { 50% { box-shadow: 0 0 12px 3px var(--r, var(--c)); } }
 @media (prefers-reduced-motion: reduce) { .node.open { animation: none; } }
 .pill { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 4px); font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 9px; border: 2px solid #4a5560; color: var(--dim); background: var(--bg); white-space: nowrap; }
-.node.learned .pill, .node.open .pill { border-color: var(--c); color: var(--c); }
+.node.learned .pill, .node.open .pill { border-color: var(--r, var(--c)); color: var(--r, var(--c)); }
 .brlabel { position: absolute; transform: translate(-50%, -50%); text-align: center; font-weight: 700; letter-spacing: 1px; font-size: 14px; color: var(--c); text-shadow: 0 0 10px var(--c); pointer-events: none; white-space: nowrap; }
 .brlabel small { display: block; font-size: 10px; color: var(--dim); text-shadow: none; letter-spacing: 0; font-weight: 400; }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; max-width: 1500px; margin: 0 auto; align-items: start; }
@@ -59,11 +60,12 @@ svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
   <div class="points"><b id="pts"></b><span id="ptsLbl">내 마법석</span></div>
   <button class="reset" id="reset" type="button">다시 찍기</button>
 </div><div class="info" id="info"></div></div>
-<p class="note">시안 화면 · 위는 기본 6속성, 아래는 궁극기(Ⅲ)를 모으면 열리는 숨은 속성 (물 = 불+얼음 · 독 = 자연+얼음 · 어둠 = 빛+번개+불 · 시공 = 기본 6속성 모두)</p>
+<p class="note">시안 화면 · 처음엔 위의 기본 6속성만 보여요. 숨은 속성이 하나라도 열리면 아래쪽이 나타나고, 아직 못 연 숨은 속성은 ???로 보여요.</p>
 <script type="module">
 const P = '/assets/pixelfx/';
 const core = await import(P + 'core/index.js');
 const cache = {}; const load = async (k) => (cache[k] = cache[k] || await import(P + 'fx/' + k + '.js'));
+const POISON = ['#0c0614', '#24103a', '#3c1a5e', '#5a2a8a', '#7e3cb8', '#a85ee0', '#d49aff', '#f4e0ff'], SHADOW = ['#000000', '#07040c', '#120a1c', '#1e122c', '#2e1c40', '#4a3060', '#7a5a96', '#c0a8e0'];
 const WATER = ['#0a1a3a', '#0e3a7a', '#1560b8', '#1e8ad8', '#3fb6f0', '#7fd8ff', '#c8f0ff', '#ffffff'], DARK = ['#05020c', '#14082a', '#2a1050', '#4a1c80', '#7a32b0', '#b060e0', '#e0b0ff'];
 // 위로 퍼지는 기본 6속성 (왼쪽 → 오른쪽)
 const BASE = [
@@ -76,10 +78,10 @@ const BASE = [
 ];
 // 아래로 열리는 숨은 속성: 필요한 속성의 궁극기(Ⅲ)를 모두 배우면 열림
 const HIDDEN = [
-  { id: 'water', name: '물', en: '불 + 얼음', hex: '#3d8bff', req: ['fire', 'ice'], n: [['t1', '물방울', 'nature/acid-splash', '메마른 밭에 물을 줘요 (작물 +10%)', WATER], ['a', '물대포', 'fire/flamethrower', '멀리까지 물을 뿜어 불을 끄고 밀어내요', WATER], ['b', '물의 고리', 'fire/fire-ring', '내 둘레를 물이 감싸 덫을 씻어내요', WATER], ['ult', '해일', 'ice/blizzard-vortex', '큰 물결이 휩쓸어요', WATER]] },
-  { id: 'poison', name: '독', en: '자연 + 얼음', hex: '#a6ff3d', req: ['nature', 'ice'], n: [['t1', '독 포자', 'nature/spore-burst', '포자를 뿌려 침입자를 느리게 해요'], ['a', '독구름', 'nature/poison-cloud', '우리 땅에 독구름을 남겨요'], ['b', '산성 튀기기', 'nature/acid-splash', '방벽·바위를 녹여요'], ['ult', '독 늪', 'nature/toxic-puddle', '오래 남는 독 늪으로 길을 막아요']] },
-  { id: 'dark', name: '어둠', en: '빛 + 번개 + 불', hex: '#c25bff', req: ['holy', 'bolt', 'fire'], n: [['t1', '그림자', 'status/cursed', '밤에 내 모습이 흐려져요'], ['a', '영혼 흡수', 'spawn/soul-rise', '쓰러진 자리에서 재료를 거둬요'], ['b', '분해', 'spawn/disintegrate', '설치물을 부숴 재료로 돌려받아요'], ['ult', '블랙홀', 'explosions/implosion', '주변 모든 것을 빨아들여요', DARK]] },
-  { id: 'chrono', name: '시공', en: '기본 6속성 모두', hex: '#ffffff', req: ['nature', 'fire', 'bolt', 'wind', 'holy', 'ice'], n: [['t1', '마법진', 'arcane/magic-circle-cast', '다음 수학 퀴즈 시간이 늘어나요'], ['a', '순간이동', 'arcane/blink-in', '앞으로 휙 이동해요'], ['b', '별똥별', 'arcane/star-fall', '하늘에서 재료가 떨어져요'], ['ult', '시간 정지', 'arcane/time-stop', '수도로 귀환 · 잠깐 시간이 멈춰요']] },
+  { id: 'water', name: '물', en: '흐르는 물', hex: '#3d8bff', req: ['fire', 'ice'], n: [['t1', '물방울', 'nature/acid-splash', '메마른 밭에 물을 줘요 (작물 +10%)', WATER], ['a', '물대포', 'fire/flamethrower', '멀리까지 물을 뿜어 불을 끄고 밀어내요', WATER], ['b', '물의 고리', 'fire/fire-ring', '내 둘레를 물이 감싸 덫을 씻어내요', WATER], ['ult', '해일', 'ice/blizzard-vortex', '큰 물결이 휩쓸어요', WATER]] },
+  { id: 'poison', name: '독', en: '보라 독', hex: '#b45cff', req: ['nature', 'ice'], n: [['t1', '독 포자', 'nature/spore-burst', '포자를 뿌려 침입자를 느리게 해요', POISON], ['a', '독구름', 'nature/poison-cloud', '우리 땅에 독구름을 남겨요', POISON], ['b', '산성 튀기기', 'nature/acid-splash', '방벽·바위를 녹여요', POISON], ['ult', '독 늪', 'nature/toxic-puddle', '오래 남는 독 늪으로 길을 막아요', POISON]] },
+  { id: 'dark', name: '어둠', en: '검은 그림자', hex: '#1a1124', ring: '#8c78b0', req: ['holy', 'bolt', 'fire'], n: [['t1', '그림자', 'status/cursed', '밤에 내 모습이 흐려져요', SHADOW], ['a', '영혼 흡수', 'spawn/soul-rise', '쓰러진 자리에서 재료를 거둬요', SHADOW], ['b', '분해', 'spawn/disintegrate', '설치물을 부숴 재료로 돌려받아요', SHADOW], ['ult', '블랙홀', 'explosions/implosion', '주변 모든 것을 빨아들여요', DARK]] },
+  { id: 'chrono', name: '시공', en: '별·시간·공간', hex: '#ffffff', req: ['nature', 'fire', 'bolt', 'wind', 'holy', 'ice'], n: [['t1', '마법진', 'arcane/magic-circle-cast', '다음 수학 퀴즈 시간이 늘어나요'], ['a', '순간이동', 'arcane/blink-in', '앞으로 휙 이동해요'], ['b', '별똥별', 'arcane/star-fall', '하늘에서 재료가 떨어져요'], ['ult', '시간 정지', 'arcane/time-stop', '수도로 귀환 · 잠깐 시간이 멈춰요']] },
 ];
 const MAX = { t1: 3, a: 1, b: 1, ult: 1 }, CD = { t1: '5초', a: '8초', b: '10초', ult: '하루 1번' }, ROMAN = { t1: 'Ⅰ', a: 'Ⅱ', b: 'Ⅱ', ult: 'Ⅲ' };
 const CX = 600, CY = 520, pt = (deg, r) => [CX + r * Math.cos(deg * Math.PI / 180), CY - r * Math.sin(deg * Math.PI / 180)];
@@ -87,7 +89,7 @@ const UA = BASE.map((_, i) => 162 - i * (144 / (BASE.length - 1))), DA = HIDDEN.
 const N = { root: { key: 'root', name: '마력 깨우기', fx: 'arcane/mana-burst', hex: '#ffffff', desc: '모두 처음부터 배워요. 작은 빛을 켤 수 있어요.', max: 1, pos: [CX, CY], big: true } };
 const EL = [...BASE, ...HIDDEN];
 function place(e, a, R, spread) { for (const [k, name, fx, desc, pal] of e.n) { const pos = k === 't1' ? pt(a, R[0]) : k === 'a' ? pt(a + spread, R[1]) : k === 'b' ? pt(a - spread, R[1]) : pt(a, R[2]);
-  N[e.id + '.' + k] = { key: e.id + '.' + k, el: e, tier: k, name, fx, pal, desc, hex: e.hex, max: MAX[k], pos, big: k === 'ult' }; } }
+  N[e.id + '.' + k] = { key: e.id + '.' + k, el: e, tier: k, name, fx, pal, desc, hex: e.hex, ring: e.ring, max: MAX[k], pos, big: k === 'ult' }; } }
 BASE.forEach((e, i) => place(e, UA[i], [150, 285, 420], 6));
 HIDDEN.forEach((e, i) => place(e, DA[i], [170, 290, 400], 8));
 let lv = { root: 1, 'fire.t1': 3, 'fire.a': 1, 'fire.ult': 1, 'holy.t1': 1, 'nature.t1': 1, 'nature.a': 1, 'nature.ult': 1, 'ice.t1': 2, 'ice.b': 1, 'ice.ult': 1, 'water.t1': 1 }, sel = 'poison.t1';
@@ -101,19 +103,20 @@ function state(k) { const n = N[k]; if (L(k) >= n.max) return 'learned';
 const needOf = (k) => (k === 'root' ? [] : [[N[k].el.id, ROMAN[N[k].tier]]]);
 const elName = (id) => EL.find((e) => e.id === id).name, stoneName = ([id, r]) => `${elName(id)} 마법석 ${r}`, haveS = ([id, r]) => INV[id + '.' + r] | 0;
 const stage = document.getElementById('stage'), map = document.getElementById('map');
-for (const k of Object.keys(N)) { const n = N[k], b = document.createElement('button'); b.type = 'button'; b.className = 'node' + (n.big ? ' big' : ''); b.dataset.k = k; b.style.setProperty('--c', n.hex); b.style.left = (n.pos[0] / 12) + '%'; b.style.top = (n.pos[1] / 10.6) + '%'; b.setAttribute('aria-label', n.name);
-  b.innerHTML = `<canvas width="48" height="48" data-ico="${k}"></canvas><span class="pill"></span>`; b.onclick = () => { sel = k; render(); }; stage.append(b); }
+for (const k of Object.keys(N)) { const n = N[k], b = document.createElement('button'); b.type = 'button'; b.className = 'node' + (n.big ? ' big' : ''); b.dataset.k = k; b.style.setProperty('--c', n.hex); b.style.setProperty('--r', n.ring || n.hex); b.style.left = (n.pos[0] / 12) + '%'; b.style.top = 'calc(' + n.pos[1] + ' / var(--vh, 10.6) * 1%)'; b.setAttribute('aria-label', n.name);
+  if (n.el && n.el.req) b.classList.add('low'); b.innerHTML = `<canvas width="48" height="48" data-ico="${k}"></canvas><span class="pill"></span>`; b.onclick = () => { sel = k; render(); }; stage.append(b); }
 const labels = [];
 BASE.forEach((e, i) => labels.push([e, pt(UA[i], 498)]));
 HIDDEN.forEach((e, i) => labels.push([e, pt(DA[i], 478)]));
-for (const [e, [x, y]] of labels) { const d = document.createElement('div'); d.className = 'brlabel'; d.dataset.el = e.id; d.style.setProperty('--c', e.hex); d.style.left = (x / 12) + '%'; d.style.top = (y / 10.6) + '%'; d.innerHTML = `${e.req ? '🔒 ' : ''}${e.name}<small>${e.en}</small>`; stage.append(d); }
+for (const [e, [x, y]] of labels) { const d = document.createElement('div'); d.className = 'brlabel'; d.dataset.el = e.id; d.style.setProperty('--c', e.hex); d.style.left = (x / 12) + '%'; d.style.top = 'calc(' + y + ' / var(--vh, 10.6) * 1%)'; if (e.req) d.classList.add('low'); d.style.setProperty('--c', e.ring || e.hex); stage.append(d); }
 function drawMap() { let h = '';
   for (const r of [150, 285, 420]) h += `<path d="M${CX - r} ${CY} A${r} ${r} 0 0 1 ${CX + r} ${CY}" fill="none" stroke="#1c2a32" stroke-width="2"/>`;
-  for (const r of [170, 290, 400]) h += `<path d="M${CX - r} ${CY} A${r} ${r} 0 0 0 ${CX + r} ${CY}" fill="none" stroke="#1a1c30" stroke-width="2" stroke-dasharray="3 7"/>`;
-  h += `<line x1="${CX - 470}" y1="${CY}" x2="${CX + 470}" y2="${CY}" stroke="#26323a" stroke-width="2"/>`;
-  h += `<text x="${CX - 465}" y="${CY + 22}" fill="#56606a" font-size="13" font-family="Galmuri11">▼ 숨은 속성 · 궁극기(Ⅲ)를 모으면 열려요</text>`;
-  for (const k of Object.keys(N)) { const n = N[k]; if (n.tier === 't1' && n.el.req) { const a = N.root.pos, b = n.pos, on = hiddenOpen(n.el); h += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${on ? n.hex : '#2a2f45'}" stroke-width="${on ? 3 : 2}" stroke-dasharray="6 6" opacity="${on ? 0.9 : 1}"/>`; continue; }
-    for (const p of pre(k)) { const a = N[p].pos, b = n.pos, on = L(k) && L(p), col = n.hex;
+  const anyLow = HIDDEN.some(hiddenOpen);
+  if (anyLow) for (const r of [170, 290, 400]) h += `<path d="M${CX - r} ${CY} A${r} ${r} 0 0 0 ${CX + r} ${CY}" fill="none" stroke="#1a1c30" stroke-width="2" stroke-dasharray="3 7"/>`;
+  if (anyLow) { h += `<line x1="${CX - 470}" y1="${CY}" x2="${CX + 470}" y2="${CY}" stroke="#26323a" stroke-width="2"/>`; h += `<text x="${CX - 465}" y="${CY + 22}" fill="#56606a" font-size="13" font-family="Galmuri11">▼ 숨은 속성</text>`; }
+  for (const k of Object.keys(N)) { const n = N[k]; if (n.tier === 't1' && n.el.req) { const a = N.root.pos, b = n.pos, on = hiddenOpen(n.el); if (!on) continue; h += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${on ? n.hex : '#2a2f45'}" stroke-width="${on ? 3 : 2}" stroke-dasharray="6 6" opacity="${on ? 0.9 : 1}"/>`; continue; }
+    if (n.el && n.el.req && !hiddenOpen(n.el)) continue; // 잠긴 숨은 속성은 선도 안 그림
+    for (const p of pre(k)) { const a = N[p].pos, b = n.pos, on = L(k) && L(p), col = n.ring || n.hex;
       h += on ? `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="7" opacity=".25"/><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="3"/>` : `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#3a4650" stroke-width="2"/>`; } }
   map.innerHTML = h; }
 const mkFx = (mod, n, x, y) => core.createFx(mod, Object.assign({ x, y }, n.pal ? { palette: n.pal } : {}));
@@ -128,18 +131,19 @@ async function preview(n) { const id = ++pvId, mod = await load(n.fx); if (id !=
   (function step(now) { if (id !== pvId) return; const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt; if (t > (m.duration || 1) + 0.5) spawn();
     core.clearFrame(fr); f.update(dt); f.draw(fr); core.composite(fr, im.data, null); t2.getContext('2d').putImageData(im, 0, 0);
     g.fillStyle = '#0b1418'; g.fillRect(0, 0, W, H); g.fillStyle = '#16242b'; for (let y = 4; y < H; y += 10) for (let x = (y / 10) % 2 ? 9 : 4; x < W; x += 10) g.fillRect(x, y, 1, 1); g.drawImage(t2, 0, 0); requestAnimationFrame(step); })(last); }
-function info() { const n = N[sel], st = state(sel), box = document.getElementById('info'); box.style.setProperty('--c', n.hex);
+function info() { if (N[sel].el && N[sel].el.req && !hiddenOpen(N[sel].el)) sel = 'root'; const n = N[sel], st = state(sel), box = document.getElementById('info'); box.style.setProperty('--c', n.hex);
   const nd = needOf(sel), enough = nd.every((q) => haveS(q) >= 1), can = st === 'open' && enough;
-  const lockMsg = n.el && n.el.req && !hiddenOpen(n.el) ? `${n.el.req.map((r) => elName(r) + ' Ⅲ').join(' + ')} 를 모두 배우면 열려요` : (n.tier === 'a' || n.tier === 'b') && L(n.el.id + '.' + (n.tier === 'a' ? 'b' : 'a')) ? '다른 쪽을 골랐어요' : '앞 마법을 먼저 배워요';
+  const lockMsg = n.el && n.el.req && !hiddenOpen(n.el) ? '아직 알 수 없는 힘이에요' : (n.tier === 'a' || n.tier === 'b') && L(n.el.id + '.' + (n.tier === 'a' ? 'b' : 'a')) ? '다른 쪽을 골랐어요' : '앞 마법을 먼저 배워요';
   box.innerHTML = `<h2>${n.name}</h2><div class="sub">${n.el ? `${n.el.name} 마법석 ${ROMAN[n.tier]}` : '시작'} · ${L(sel)}/${n.max}</div><canvas id="pv" width="160" height="120"></canvas><p>${n.desc}</p>
-    <div class="kv">${nd.length ? `끼울 마법석: <b style="color:var(--c)">${nd.map(stoneName).join(' + ')}</b> · 가진 것 ${nd.map(haveS).join('')}개${n.max > 1 ? ' (한 번 올릴 때마다 1개)' : ''}<br>` : ''}${n.el && n.el.req ? `열리는 조건: ${n.el.req.map((r) => elName(r) + ' Ⅲ').join(' + ')}<br>` : ''}쿨타임 ${CD[n.tier] || '-'}</div>
+    <div class="kv">${nd.length ? `끼울 마법석: <b style="color:var(--c)">${nd.map(stoneName).join(' + ')}</b> · 가진 것 ${nd.map(haveS).join('')}개${n.max > 1 ? ' (한 번 올릴 때마다 1개)' : ''}<br>` : ''}쿨타임 ${CD[n.tier] || '-'}</div>
     <button id="learn" type="button" ${can ? '' : 'disabled'}>${st === 'learned' ? '다 배웠어요' : st === 'locked' ? lockMsg : !enough ? `${nd.map(stoneName).join(', ')} 필요` : `${nd.map(stoneName).join(' + ')} 끼우기`}</button>`;
   document.getElementById('learn').onclick = () => { if (!can) return; lv[sel] = L(sel) + 1; for (const q of nd) INV[q[0] + '.' + q[1]] -= 1; render(); }; preview(n); }
 function render() { for (const b of stage.querySelectorAll('.node')) { const k = b.dataset.k, st = state(k), n = N[k]; b.classList.toggle('learned', L(k) > 0); b.classList.toggle('open', st === 'open'); b.classList.toggle('sel', k === sel); b.classList.toggle('sealed', !!(n.el && n.el.req && !hiddenOpen(n.el))); b.querySelector('.pill').textContent = `${L(k)}/${n.max}`; }
-  for (const d of stage.querySelectorAll('.brlabel')) { const e = EL.find((q) => q.id === d.dataset.el); if (e.req) d.innerHTML = `${hiddenOpen(e) ? '🔓 ' : '🔒 '}${e.name}<small>${e.en}</small>`; d.classList.toggle('sealed', !!(e.req && !hiddenOpen(e))); }
+  for (const d of stage.querySelectorAll('.brlabel')) { const e = EL.find((q) => q.id === d.dataset.el); d.innerHTML = e.req && !hiddenOpen(e) ? '???<small>아직 알 수 없는 힘</small>' : `${e.name}<small>${e.en}</small>`; d.classList.toggle('sealed', !!(e.req && !hiddenOpen(e))); }
+  const anyLow = HIDDEN.some(hiddenOpen); stage.classList.toggle('upper', !anyLow); map.setAttribute('viewBox', anyLow ? '0 0 1200 1060' : '0 0 1200 600'); stage.style.setProperty('--vh', anyLow ? 10.6 : 6);
   { const e = N[sel].el || BASE[1]; document.getElementById('pts').innerHTML = ['Ⅰ', 'Ⅱ', 'Ⅲ'].map((r) => `<span style="color:${e.hex}">${r}</span>×${INV[e.id + '.' + r] | 0}`).join('  '); document.getElementById('ptsLbl').textContent = `내 ${e.name} 마법석`; }
   drawMap(); info(); }
-document.getElementById('reset').onclick = () => { lv = { root: 1 }; INV = {}; for (const e of EL) for (const r of ['Ⅰ', 'Ⅱ', 'Ⅲ']) INV[e.id + '.' + r] = r === 'Ⅰ' ? 3 : 1; render(); };
+document.getElementById('reset').onclick = () => { lv = { root: 1 }; sel = 'fire.t1'; INV = {}; for (const e of EL) for (const r of ['Ⅰ', 'Ⅱ', 'Ⅲ']) INV[e.id + '.' + r] = r === 'Ⅰ' ? 3 : 1; render(); };
 render(); icons();
 </script>
 </body>
