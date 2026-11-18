@@ -630,6 +630,22 @@ body #vitals .vbar b { font-size: 10px; text-shadow: 0 1px 0 #2a1810, 1px 0 0 #2
 .setHead .homeBtn { margin-left: auto; margin-right: 8px; width: 33px; height: 33px; min-height: 0; padding: 0; border: 0 !important; border-image: none !important; background: none !important; } .setHead .homeBtn img { image-rendering: pixelated; display: block; } .setHead .homeBtn:hover { filter: brightness(1.1); }
 #title[data-tv="play"] .tOrn { width: auto; }
 #title[data-tv="rpg"] { background: radial-gradient(ellipse 90% 80% at 50% 50%, transparent 55%, rgba(6,8,12,.38) 100%) !important; } #title[data-tv="rpg"] .tRays { background: repeating-conic-gradient(from 200deg at 8% -10%, rgba(214,170,255,.09) 0deg 3deg, transparent 3deg 9deg); } #title[data-tv="rpg"]::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 90% 80% at 50% 50%, transparent 50%, rgba(70,30,120,.35) 100%); } #title[data-tv="rpg"] .tLogo2 { filter: drop-shadow(0 0 22px rgba(190,140,255,.55)) drop-shadow(0 4px 0 rgba(20,8,30,.5)); }
+/* 제작대 창: 덩굴 감긴 나무 가판대 (참고 그림을 보고 새로 그림 · assets/ui/stall*.png) */
+#craftBox .cfPanel { border-width: 54px 33px 33px 33px; border-image: url(assets/ui/stall.png) 18 11 11 11 fill / 54px 33px 33px 33px round; padding: 18px 14px 8px; color: #f1e6cc; animation: stallIn .35s cubic-bezier(.2,.8,.25,1); overflow: visible; }
+@keyframes stallIn { from { transform: translateY(16px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.stallPlate { position: absolute; left: 50%; top: -74px; transform: translateX(-50%); z-index: 3; min-width: 150px; text-align: center; font-family: var(--font-display); font-size: 18px; color: #5a2e14; letter-spacing: .2em; padding: 2px 22px; border: solid; border-width: 15px 15px 12px 12px; border-image: url(assets/ui/scroll.png) 9 5 9 4 fill / 15px 15px 12px 12px round; image-rendering: pixelated; filter: drop-shadow(0 3px 0 rgba(0,0,0,.35)); }
+.stallX { position: absolute; right: -24px; top: -48px; z-index: 3; width: 33px; height: 33px; min-height: 0; padding: 0; border: 0 !important; border-image: none !important; background: url(assets/ui/stall_x.png) 0 0 / 100% 100% !important; image-rendering: pixelated; } .stallX:hover { filter: brightness(1.25); }
+#craftBox .setCard { background: rgba(255,255,255,.035); box-shadow: inset 0 0 0 2px #2c3152; clip-path: none; color: #f1e6cc; }
+#craftBox .setCard h3, #craftBox .cfName { color: #f3d39a; } #craftBox .setCard h3 small, #craftBox .setNote, #craftBox .cfRec small { color: #a7a9c4; }
+#craftBox .cfRec:hover, #craftBox .cfRec[aria-pressed="true"] { background: rgba(255,214,140,.1); box-shadow: inset 0 0 0 2px #b0763a; }
+#craftBox .cfGrid { background: transparent; box-shadow: none; padding: 0; gap: 6px; }
+#craftBox .cfCell, #craftBox .cfOut, #craftBox .cfMat { background: none; box-shadow: none; border: 6px solid; border-image: url(assets/ui/stall_slot.png) 2 fill / 6px stretch; image-rendering: pixelated; }
+#craftBox .cfOut { box-shadow: 0 0 0 3px #2c3152; } #craftBox .cfOut.ok { animation: stallGlow 1.2s ease-in-out infinite; } @keyframes stallGlow { 50% { filter: brightness(1.2) drop-shadow(0 0 10px #ffd27a); } }
+#craftBox .cfMat[aria-pressed="true"] { filter: brightness(1.25); box-shadow: 0 0 0 3px #f3d39a; }
+#craftBox .cfArrow { background: #b0763a; }
+#craftBox .sOk { border-image: url(assets/ui/btn_ok.png) 3 fill / 9px stretch !important; color: #1e3a0e; text-shadow: 0 1px 0 rgba(255,255,255,.4); } #craftBox .sOk::before { content: '✔ '; } #craftBox .sOk:disabled { filter: grayscale(.7) brightness(.8); }
+#craftBox .sNo { border-image: url(assets/ui/btn_no.png) 3 fill / 9px stretch !important; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.4); } #craftBox .sNo::before { content: '✕ '; }
+#craftBox .pfTop { margin-top: -6px; }
 /* ===== 설정 창 (나무 틀) ===== */
 .gearBtn { min-width: 44px; padding: 0 8px !important; display: grid; place-items: center; }
 /* 설정: 사용자 두루마리 그림을 다시 그린 픽셀 틀 (assets/ui/scroll.png) */
@@ -884,13 +900,13 @@ body:not(.building) #prompt { bottom: calc(10px + var(--chatH, 56px) + 10px + en
   <div class="setBtns"><button id="sReplay" type="button">오프닝 다시 보기</button></div></section>
 </div></div>
 <div id="craftBox" class="modalbox" hidden><div class="cfPanel">
-  <div class="pfTop"><b>제작대</b><div class="pfTabs" id="craftTabs"></div><button id="craftClose" class="scrX" type="button" aria-label="닫기"></button></div>
+  <div class="stallPlate">제작대</div><button id="craftClose" class="stallX" type="button" aria-label="닫기"></button><div class="pfTop"><div class="pfTabs" id="craftTabs"></div></div>
   <div class="cfCols" id="cfGridView">
     <section class="setCard cfBook"><h3>조합법</h3><div class="cfList" id="cfList"></div></section>
     <section class="setCard cfWork">
       <div class="cfTable"><div class="cfGrid" id="cfGrid"></div><div class="cfArrow" aria-hidden="true"></div><button type="button" class="cfOut" id="cfOut" aria-label="만들기"><canvas width="64" height="64"></canvas><i></i></button></div>
       <p class="cfName" id="cfName">재료를 칸에 놓아 보세요</p>
-      <div class="setBtns cfBtns"><button id="cfMake" type="button" disabled>만들기</button><button id="cfMax" type="button" disabled>최대로</button><button id="cfClear" type="button">칸 비우기</button></div>
+      <div class="setBtns cfBtns"><button id="cfMake" class="sOk" type="button" disabled>만들기</button><button id="cfMax" type="button" disabled>최대로</button><button id="cfClear" class="sNo" type="button">비우기</button></div>
       <h3>내 재료 <small>누르고 → 칸을 눌러 놓기 · 놓인 칸을 누르면 빼기</small></h3>
       <div class="cfMats" id="craftMats"></div>
       <p class="setNote" id="cfNote"></p>

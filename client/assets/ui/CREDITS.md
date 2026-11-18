@@ -28,3 +28,9 @@
 | hp_heart.png · mp_gem.png · vbar.png | 하트·체력바 도트 그림 | 같은 모양으로 새로 그림, 빛 줄이고 차분한 색 |
 
 > 2026-11-18: 프로필을 양피지 두루마리로 바꾸며 도감 책 틀(book_*)·리본(rib_*)은 지움.
+
+## 제작대 (2026-11-18)
+| 파일 | 원본 | 바꾼 것 |
+|---|---|---|
+| ../extra/workbench.png | 나무 가구 모음 그림(SangrealPixel 트위터, Archive.zip 5번) 13번 작업대 | 잘라서 배경 지움 — **출처·허락 확인 필요** |
+| stall.png · stall_slot.png · stall_x.png · btn_ok.png · btn_no.png | 덩굴 감긴 나무 가판대 UI 참고 그림 (판매용 미리보기, 워터마크 있음) | 그림은 쓰지 않고 같은 느낌으로 새로 그림 |

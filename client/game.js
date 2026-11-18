@@ -312,7 +312,10 @@
     R(O, 4, 0, 2, 5); R('#9a9a9a', 3, 0, 4, 2); R('#cfcfcf', 3, 0, 4, 1); // 망치
     R(O, 15, 1, 5, 4); R('#c9c9c9', 15, 2, 4, 2); R('#8a5a2e', 18, 1, 2, 2); // 톱
     return (BENCH_CV = c); }
-  function drawBench(g, x, y) { const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.fillStyle = 'rgba(0,0,0,0.25)'; ell(g, x, y - 2, 22, 6); g.drawImage(benchArt(), x - 22, y - 40, 44, 40); g.imageSmoothingEnabled = prev; }
+  const BENCH_IMG = new Image(); BENCH_IMG.src = 'assets/extra/workbench.png'; // 사용자 그림 (나무 가구 모음 13번)
+  function drawBench(g, x, y) { const prev = g.imageSmoothingEnabled; g.fillStyle = 'rgba(0,0,0,0.25)'; ell(g, x, y - 2, 34, 7);
+    if (BENCH_IMG.complete && BENCH_IMG.naturalWidth) { const w = 70, h = Math.round(w * BENCH_IMG.naturalHeight / BENCH_IMG.naturalWidth); g.imageSmoothingEnabled = true; g.drawImage(BENCH_IMG, x - w / 2, y - h + 2, w, h); }
+    else { g.imageSmoothingEnabled = false; g.drawImage(benchArt(), x - 22, y - 40, 44, 40); } g.imageSmoothingEnabled = prev; }
   function drawStore(g, x, y, nid) { // 수도 저장소 (크기에 맞춰 장작·코인·팻말 위치)
     const key = STORE_ART[(nationsPub[nid] && nationsPub[nid].storeLv) | 0], im = ART['x_' + key], w = im ? im.width * 2 : 96, h = im ? im.height * 2 : 80;
     pix(g, key, x, y + 4, 2); pix(g, 'woodpile', x + w / 2 + 12, y + 4, 2); pix(g, 'coinA', x - w / 2 - 8, y - 2, 0, 18);
@@ -4374,7 +4377,7 @@
       const pr = GPROPS.get(i); if (pr) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawProp(g, pr.r, X, Y) });
     }
     for (const n of nodes) if (!gone[n.id] && n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1 && !(build.moving && build.moving.kind === 'mine' && build.moving.terr === n.id)) list.push({ x: n.x, y: n.y, draw: (g, X, Y) => drawOre(g, X, Y, mined.has(n.id)) });
-    for (const [i, nid] of STORE_AT) { if (build.moving && build.moving.kind === 'store' && nid === MY_NID) continue; const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); if (nid === MY_NID) { const bx = X + BENCH_DX; list.push({ x: bx, y: Y, draw: (g, a, b) => { drawBench(g, a, b); sign(g, a, b - 58, '제작대'); } }); } }
+    for (const [i, nid] of STORE_AT) { if (build.moving && build.moving.kind === 'store' && nid === MY_NID) continue; const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); if (nid === MY_NID) { const bx = X + BENCH_DX; list.push({ x: bx, y: Y, draw: (g, a, b) => { drawBench(g, a, b); sign(g, a, b - 64, '제작대'); } }); } }
     { // 무너진 땅 위로 피어오르는 보라 기운
       const now2 = performance.now() / 1000;
       for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) { const q = terrAt(tx, ty); if (!(q > 0 && gone[q])) continue; const hh = hash(tx, ty, 77); if (hh > 0.14) continue; const k = (now2 * (0.3 + hh * 2) + hh * 9) % 1; ctx.globalAlpha = 0.8 * (1 - k); ctx.fillStyle = hh < 0.05 ? '#ff9cff' : '#b45cf0'; ctx.fillRect(tx * TILE + 8 + Math.sin(now2 * 2 + hh * 20) * 6, ty * TILE + 28 - k * 46, 4, 4); }
