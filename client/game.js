@@ -4915,10 +4915,39 @@
     draw(S * 0.5 + S, S * 0.5 + S, 'rgba(60,36,14,.55)'); // 그림자
     draw(S, S, '#f4ead2'); // 글자
     g.globalCompositeOperation = 'source-atop'; const gr = g.createLinearGradient(0, 0, 0, H2); gr.addColorStop(0, 'rgba(255,255,255,.25)'); gr.addColorStop(.55, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(214,170,98,.45)'); g.fillStyle = gr; g.fillRect(0, 0, W2, H2); g.globalCompositeOperation = 'source-over'; }
-  const tMenuBtns = () => [...document.querySelectorAll('#tMenu button')];
+  // 글자 로고: 갈무리 글꼴로 작게 그린 뒤 픽셀 그대로 키움 (반투명 없이 또렷하게) + 테두리·그림자·금빛
+  function makeTextLogo(cv, lines) { const font = 'Galmuri11, Galmuri11Full, monospace', pad = 4, tmp = document.createElement('canvas').getContext('2d');
+    const L = lines.map((l) => { tmp.font = `${l.bold ? '700 ' : ''}${l.px}px ${font}`; const sp = l.sp || 0, w = [...l.t].reduce((a, ch) => a + tmp.measureText(ch).width + sp, -sp); return Object.assign({ w: Math.ceil(w), h: Math.ceil(l.px * 1.15) }, l); });
+    const W2 = Math.max(...L.map((l) => l.w)) + pad * 2 + 2, H2 = L.reduce((a, l) => a + l.h + (l.gap || 0), 0) + pad * 2 + 2; cv.width = W2; cv.height = H2; const g = cv.getContext('2d');
+    const m = document.createElement('canvas'); m.width = W2; m.height = H2; const mg = m.getContext('2d'); let y = pad;
+    for (const l of L) { mg.font = `${l.bold ? '700 ' : ''}${l.px}px ${font}`; mg.textBaseline = 'top'; mg.fillStyle = '#fff'; let x = l.align === 'left' ? pad : l.align === 'right' ? W2 - pad - l.w : (W2 - l.w) / 2; for (const ch of l.t) { mg.fillText(ch, Math.round(x), y); x += mg.measureText(ch).width + (l.sp || 0); } l.y0 = y; y += l.h + (l.gap || 0); }
+    const a = mg.getImageData(0, 0, W2, H2), d = a.data; for (let i = 3; i < d.length; i += 4) d[i] = d[i] > 110 ? 255 : 0; mg.putImageData(a, 0, 0);
+    const onAt = (x, yy) => x >= 0 && yy >= 0 && x < W2 && yy < H2 && d[(yy * W2 + x) * 4 + 3]; const out = g.createImageData(W2, H2), o = out.data;
+    const lineOf = (yy) => L.find((l) => yy >= l.y0 && yy < l.y0 + l.h + (l.gap || 0)) || L[L.length - 1];
+    const put = (x, yy, c) => { const i = (yy * W2 + x) * 4; o[i] = c[0]; o[i + 1] = c[1]; o[i + 2] = c[2]; o[i + 3] = 255; };
+    const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    for (let yy = 0; yy < H2; yy++) for (let x = 0; x < W2; x++) { const l = lineOf(yy);
+      if (onAt(x, yy)) { const t = (yy - l.y0) / l.h, c1 = hex(l.c || '#f4ead2'), c2 = hex(l.c2 || l.c || '#f4ead2'); put(x, yy, c1.map((v, k) => Math.round(v + (c2[k] - v) * Math.min(1, Math.max(0, t))))); }
+      else if (l.shadow && onAt(x - 1, yy - 1)) put(x, yy, hex(l.shadow));
+      else if (l.ol && (onAt(x + 1, yy) || onAt(x - 1, yy) || onAt(x, yy + 1) || onAt(x, yy - 1))) put(x, yy, hex(l.ol)); }
+    g.putImageData(out, 0, 0); }
+  // 타이틀 5종 (사용자 참고 그림 각각) — 들어올 때마다 바뀜
+  const TITLES = [
+    { id: 'serif', lay: 'left', orn: '2 0 2 6', logo: (cv) => makeTitleLogo(cv) },
+    { id: 'arco', lay: 'lefttop', orn: '', menu: 'caps', logo: (cv) => makeTextLogo(cv, [{ t: 'MATH', px: 22, bold: true, sp: 1, c: '#f6ecd6', c2: '#d8c29a', shadow: '#2a1a10', ol: '#2a1a10', align: 'left' }, { t: 'PUZZLE', px: 22, bold: true, sp: 1, c: '#f6ecd6', c2: '#d8c29a', shadow: '#2a1a10', ol: '#2a1a10', align: 'left' }]) },
+    { id: 'witch', lay: 'right', orn: '', logo: (cv) => makeTextLogo(cv, [{ t: 'the adventures of', px: 11, c: '#efe3c4', align: 'center', gap: 2 }, { t: 'MATH', px: 22, bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' }, { t: 'WORLD', px: 22, bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' }]) },
+    { id: 'camp', lay: 'center', orn: '✦', logo: (cv) => makeTextLogo(cv, [{ t: 'the', px: 11, c: '#f4ead2', align: 'left', gap: -2 }, { t: 'Puzzle', px: 22, sp: 1, c: '#ffffff', c2: '#e8e0cc', shadow: '#1a2a24', align: 'center' }]) },
+    { id: 'play', lay: 'rightmid', orn: 'M P  ·  2 0 2 6', menu: 'bigfirst', logo: null },
+  ];
+  function pickTitle() { let last = -1; try { last = +localStorage.getItem('mp2026.titleV'); } catch (e) { /* 없음 */ }
+    let i = Math.floor(Math.random() * TITLES.length); if (i === last) i = (i + 1) % TITLES.length; try { localStorage.setItem('mp2026.titleV', i); } catch (e) { /* 없음 */ }
+    const T = TITLES[i], tt = $('title'); tt.dataset.lay = T.lay; tt.dataset.menu = T.menu || ''; tt.dataset.tv = T.id;
+    const lc = $('tLogo2'); lc.hidden = !T.logo; if (T.logo) { T.logo(lc); const k = Math.max(2, Math.floor(Math.min(380, innerWidth * 0.42) / lc.width)); lc.style.width = lc.width * k + 'px'; } /* 정수배로 키워 픽셀이 또렷하게 */ $('tOrnT').textContent = T.orn; $('tOrnW').hidden = !T.orn;
+    $('tStart').textContent = T.menu === 'caps' ? '새로 시작' : T.menu === 'bigfirst' ? 'PLAY' : '시작하기'; }
+  const tMenuBtns = () => [...document.querySelectorAll('#tMenu button:not([hidden])')];
   function tSelect(i) { const b = tMenuBtns(); TITLE.sel = (i + b.length) % b.length; b.forEach((x, k) => x.classList.toggle('sel', k === TITLE.sel)); }
   function startTitle() {
-    { const lc = $('tLogo2'); if (lc && !lc.dataset.done) { makeTitleLogo(lc); lc.dataset.done = 1; } } tSelect(0);
+    pickTitle(); tSelect(0);
     for (const cv of document.querySelectorAll('canvas.logoCv')) if (!cv.dataset.done) { makeLogo(cv); cv.dataset.done = 1; }
     const cand = terrs.filter((t) => t && !gone[t.id]);
     const t = cand[Math.floor(Math.random() * cand.length)] || home;
@@ -4929,10 +4958,15 @@
     addEventListener('pointerdown', startTitleMusic, true); addEventListener('keydown', startTitleMusic, true);
     try { $('tBgm').value = store('mp2026.bgm') ?? 60; $('tSfx').value = store('mp2026.sfx') ?? 70; $('tBgmV').textContent = $('tBgm').value + '%'; $('tSfxV').textContent = $('tSfx').value + '%'; } catch (e) { /* 없음 */ }
   }
-  function endTitle() {
-    if (!TITLE.on) return;
+  function endTitle() { // 시작: 로고·메뉴가 커지며 사라지고 → 동그랗게 닫혔다가 → 내 캐릭터 쪽으로 열림
+    if (!TITLE.on || TITLE.leaving) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { endTitleNow(); return; }
+    TITLE.leaving = true; $('title').classList.add('leaving'); SND.play('open'); const fx = $('irisFx'); fx.hidden = false; fx.className = 'close';
+    setTimeout(() => { endTitleNow(true); fx.className = 'open'; setTimeout(() => { fx.hidden = true; fx.className = ''; }, 900); }, 1050); }
+  function endTitleNow(quiet) {
+    if (!TITLE.on) return; TITLE.leaving = false; $('title').classList.remove('leaving');
     TITLE.on = false; document.body.classList.remove('titling'); $('title').hidden = true; titleDone = true;
-    SND.bgm(BGM_CUR); SND.play('open');
+    SND.bgm(BGM_CUR); if (!quiet) SND.play('open');
     invalidateChunks(); mapSig = '';
     const firstTime = ONLINE ? !nameSet : !store('mp2026.opened');
     if (firstTime) startOpening(); else { if (needFound) openFound('who'); maybeDoomPopup(); }

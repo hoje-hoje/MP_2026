@@ -684,15 +684,40 @@ body #vitals .vbar b { font-size: 10px; text-shadow: 0 1px 0 #2a1810, 1px 0 0 #2
 @keyframes tRays { to { transform: rotate(4deg) translateX(2%); opacity: .7; } }
 .tBlock { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; animation: tIn 1.4s ease-out both; }
 @keyframes tIn { from { opacity: 0; transform: translateY(10px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
-.tLogo2 { width: clamp(220px, 26vw, 360px); image-rendering: pixelated; filter: drop-shadow(0 0 18px rgba(255,226,160,.28)) drop-shadow(0 4px 0 rgba(20,14,8,.35)); }
+.tLogo2 { image-rendering: pixelated; filter: drop-shadow(0 0 18px rgba(255,226,160,.28)) drop-shadow(0 4px 0 rgba(20,14,8,.35)); }
 .tOrn { display: flex; align-items: center; gap: 12px; color: #e9d9b0; font-family: var(--font-display); font-size: 13px; letter-spacing: .3em; opacity: .85; width: clamp(220px, 26vw, 360px); } .tOrn i { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(233,217,176,.8), transparent); }
 #title .tmenu { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 18px; }
-#title .tmenu button { all: unset; cursor: pointer; position: relative; font-family: var(--font-display); font-size: 17px; letter-spacing: .32em; color: #f4ead2; opacity: .55; padding: 4px 0 4px 26px; text-shadow: 0 2px 0 rgba(0,0,0,.45); transition: opacity .2s, transform .2s; }
+#title .tmenu button[hidden] { display: none; } #title .tmenu button { all: unset; cursor: pointer; position: relative; font-family: var(--font-display); font-size: 17px; letter-spacing: .32em; color: #f4ead2; opacity: .55; padding: 4px 0 4px 26px; text-shadow: 0 2px 0 rgba(0,0,0,.45); transition: opacity .2s, transform .2s; }
 #title .tmenu button::before { content: '✦'; position: absolute; left: 0; top: 50%; transform: translateY(-50%) scale(.6); color: #ffd98a; opacity: 0; transition: opacity .2s, transform .2s; }
 #title .tmenu button.sel, #title .tmenu button:hover, #title .tmenu button:focus-visible { opacity: 1; transform: translateX(4px); } #title .tmenu button.sel::before, #title .tmenu button:hover::before, #title .tmenu button:focus-visible::before { opacity: 1; transform: translateY(-50%) scale(1); }
 #title .tstart { font-size: 11px; letter-spacing: .25em; color: #e9d9b0; opacity: .5; margin-top: 10px; animation: none; }
 @media (prefers-reduced-motion: reduce) { .tRays, .tBlock { animation: none; } }
 @media (max-width: 760px) { #title { padding-left: 24px; } }
+/* 타이틀 5종 배치 */
+#title[data-lay="lefttop"] { justify-content: flex-start !important; padding-top: max(40px, 10vh); }
+#title[data-lay="lefttop"] .tBlock { height: calc(100vh - 2 * max(40px, 10vh)); } #title[data-lay="lefttop"] .tmenu { margin-top: auto; }
+#title[data-lay="right"] { align-items: flex-end !important; justify-content: flex-start !important; padding: max(40px, 9vh) max(28px, 8vw) 0 0; background: radial-gradient(ellipse 85% 75% at 40% 50%, transparent 35%, rgba(8,10,14,.55) 100%), linear-gradient(270deg, rgba(8,12,10,.7) 0%, rgba(8,12,10,.35) 34%, transparent 62%) !important; }
+#title[data-lay="right"] .tBlock { align-items: center; }
+#title[data-lay="center"] { align-items: center !important; padding-left: 0; background: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(8,12,10,.45) 0%, rgba(8,12,10,.2) 45%, rgba(8,10,14,.6) 100%) !important; } #title[data-lay="center"] .tBlock { align-items: center; } #title[data-lay="center"] .tmenu { align-items: center; }
+#title[data-lay="rightmid"] { align-items: flex-end !important; padding: 0 max(28px, 12vw) 0 0; background: radial-gradient(ellipse 85% 75% at 35% 50%, transparent 35%, rgba(8,10,14,.6) 100%), linear-gradient(270deg, rgba(8,12,10,.72) 0%, rgba(8,12,10,.3) 40%, transparent 65%) !important; }
+#title[data-lay="rightmid"] .tBlock, #title[data-lay="rightmid"] .tmenu { align-items: center; }
+#title[data-lay="right"] .tmenu { align-items: center; }
+#title[data-menu="caps"] .tmenu button { font-size: 14px; letter-spacing: .4em; }
+#title[data-menu="bigfirst"] .tmenu button:first-child { font-size: 54px; letter-spacing: .25em; padding-left: 0; opacity: .9; text-shadow: 0 0 18px rgba(255,230,170,.35), 0 3px 0 rgba(0,0,0,.45); } #title[data-menu="bigfirst"] .tmenu button:first-child::before { display: none; }
+#title[data-tv="camp"] .tOrn { width: auto; font-size: 22px; color: #ffcf6a; text-shadow: 0 0 14px #ff9a3a; animation: tFlick 2.4s ease-in-out infinite; } #title[data-tv="camp"] .tOrn i { display: none; } @keyframes tFlick { 50% { opacity: .6; transform: scale(.92); } }
+#title[data-tv="play"] .tOrn { width: auto; }
+.tLogo2[hidden] { display: none; }
+.tOrn[hidden] { display: none !important; }
+/* 시작 애니메이션 */
+#title.leaving .tBlock { animation: tOut .7s cubic-bezier(.5,0,.75,0) forwards; } #title.leaving .tRays { animation: none; opacity: 0; transition: opacity .6s; }
+@keyframes tOut { to { opacity: 0; transform: scale(1.08) translateY(-6px); filter: blur(4px) brightness(1.6); letter-spacing: .05em; } }
+#irisFx { position: fixed; inset: 0; z-index: 70; pointer-events: none; overflow: hidden; }
+#irisFx[hidden] { display: none; }
+#irisFx::before { content: ''; position: absolute; left: 50%; top: 50%; width: 300vmax; height: 300vmax; transform: translate(-50%, -50%); border-radius: 50%; box-shadow: 0 0 0 300vmax #0b0d10, inset 0 0 60px 30px #0b0d10; }
+#irisFx.close::before { animation: irisClose 1.05s cubic-bezier(.7,0,.3,1) forwards; }
+#irisFx.open::before { animation: irisOpen .95s cubic-bezier(.2,.7,.2,1) forwards; }
+@keyframes irisClose { from { width: 300vmax; height: 300vmax; } to { width: 0; height: 0; } }
+@keyframes irisOpen { from { width: 0; height: 0; } to { width: 300vmax; height: 300vmax; } }
 /* ===== 설정 창 (나무 틀) ===== */
 .gearBtn { min-width: 44px; padding: 0 8px !important; display: grid; place-items: center; }
 /* 설정: 사용자 두루마리 그림을 다시 그린 픽셀 틀 (assets/ui/scroll.png) */
@@ -1058,13 +1083,14 @@ body:not(.building) #prompt { bottom: calc(10px + var(--chatH, 56px) + 10px + en
 
 <div id="stick" hidden><div></div></div>
 
+<div id="irisFx" hidden aria-hidden="true"></div>
 <div id="title" hidden>
   <div class="tRays" aria-hidden="true"></div>
   <div class="tBlock">
     <canvas class="tLogo2" id="tLogo2" aria-label="MP"></canvas>
-    <div class="tOrn" aria-hidden="true"><i></i><span>2 0 2 6</span><i></i></div>
-    <nav class="tmenu" id="tMenu" aria-label="시작 메뉴"><button id="tStart" type="button">시작하기</button><button id="tSettings" type="button">설정</button><button id="tCoupon" type="button">쿠폰</button></nav>
-    <div class="tstart">↑ ↓ 로 고르고 Enter</div>
+    <div class="tOrn" id="tOrnW" aria-hidden="true"><i></i><span id="tOrnT">2 0 2 6</span><i></i></div>
+    <nav class="tmenu" id="tMenu" aria-label="시작 메뉴"><button id="tStart" type="button">시작하기</button><button id="tSettings" type="button" hidden>설정</button><button id="tCoupon" type="button" hidden>쿠폰</button></nav>
+    <div class="tstart">Enter 를 눌러 시작</div>
   </div>
   <div id="tSet" class="card" hidden><b>설정</b><label>배경음악 <input id="tBgm" type="range" min="0" max="100" value="60"> <span id="tBgmV">60%</span></label><label>효과음 <input id="tSfx" type="range" min="0" max="100" value="70"> <span id="tSfxV">70%</span></label><small>지금 음악은 임시예요 (나중에 받은 음악으로 바꿔요)</small><button id="tReplay" type="button">🎬 오프닝 다시 보기</button></div>
 </div>
