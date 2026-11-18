@@ -7,145 +7,121 @@
 <style>
 @font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11.woff2) format('woff2'); font-display: swap; }
 @font-face { font-family: 'Galmuri11'; src: url(assets/fonts/Galmuri11-Bold.woff2) format('woff2'); font-weight: 700; font-display: swap; }
-/* 게임 창과 같은 말투: 두꺼운 남색 테두리 + 크림색 종이 + 주황 띠. 속성마다 보석 색 */
+/* 어두운 하늘에 부채꼴 별자리 (아래 가운데 뿌리에서 위로 퍼짐) · 속성마다 형광 색 */
 :root {
-  --ink: #2b2340; --paper: #fffdf8; --cream: #fff3d6; --muted: #6a6280; --frame: #ff6a2a; --void: #1b1430;
-  --fire: #ff6a2a; --ice: #5fc8ff; --bolt: #ffd23d; --holy: #fff1a8; --nature: #5fbf5a; --arcane: #b07cff;
+  --bg: #060c10; --bg2: #0d171d; --line: #3a4650; --dim: #7d8a94; --fg: #eef4f6;
+  --fire: #ff3b4a; --ice: #3fd6ff; --bolt: #ffd23d; --holy: #fff3b0; --nature: #2ef07a; --star: #b57bff;
   --font: 'Galmuri11', system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: radial-gradient(ellipse at 50% 30%, #3a2f63 0%, var(--void) 70%); color: var(--ink); font-family: var(--font); min-height: 100vh; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
-.win { max-width: 1180px; margin: 0 auto; background: var(--paper); border: 4px solid var(--ink); box-shadow: 0 0 0 4px var(--frame), 0 0 0 8px var(--ink), 0 18px 0 8px rgba(0,0,0,.35); }
-.top { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: linear-gradient(#ffe7b8, #ffd27a); border-bottom: 4px solid var(--ink); flex-wrap: wrap; }
-.top h1 { margin: 0; font-size: 22px; letter-spacing: .5px; }
-.stones { margin-left: auto; display: flex; align-items: center; gap: 8px; background: var(--ink); color: #fff; padding: 6px 12px; font-weight: 700; }
-.gem { width: 14px; height: 14px; transform: rotate(45deg); background: linear-gradient(135deg, #e8d7ff, #8a5cff); border: 2px solid #fff; }
-.reset { background: var(--paper); border: 3px solid var(--ink); font: inherit; font-weight: 700; padding: 6px 10px; cursor: pointer; }
-.body { display: grid; grid-template-columns: 1fr 300px; min-height: 560px; }
-@media (max-width: 900px) { .body { grid-template-columns: 1fr; } }
-.tree { position: relative; padding: 14px 10px 18px; overflow-x: auto; background: repeating-linear-gradient(0deg, transparent 0 31px, rgba(43,35,64,.04) 31px 32px), repeating-linear-gradient(90deg, transparent 0 31px, rgba(43,35,64,.04) 31px 32px); }
-.grid { position: relative; min-width: 720px; display: grid; grid-template-columns: repeat(6, 1fr); row-gap: 26px; }
-svg.lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
-.grid > :not(svg) { position: relative; z-index: 1; } /* 선은 칸 뒤로 */
-.root { grid-column: 1 / -1; display: flex; justify-content: center; }
-.col-h { text-align: center; font-weight: 700; font-size: 13px; padding: 3px 0; }
-.row2 { display: flex; justify-content: center; gap: 4px; }
-.row2 .node { width: 54px; height: 54px; } .row2 .node .in canvas { width: 34px; height: 34px; } .row2 .lbl { font-size: 10px; max-width: 60px; }
-.cell { display: flex; justify-content: center; }
-.node { position: relative; width: 64px; height: 64px; border: none; padding: 0; background: none; cursor: pointer; font: inherit; }
-.node .hex { position: absolute; inset: 0; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: var(--ink); }
-.node .in { position: absolute; inset: 4px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: var(--c); display: grid; place-items: center; }
-.node .in canvas { width: 40px; height: 40px; image-rendering: pixelated; }
-.node.locked .in { background: #c9c3d6; filter: grayscale(1); }
-.node.locked .in canvas { opacity: .35; }
-.node.open .hex { background: var(--c); animation: pulse 1.4s ease-in-out infinite; }
-.node.learned .in { box-shadow: inset 0 0 0 3px #fff; }
-.node.learned::after { content: '✔'; position: absolute; right: -4px; bottom: -2px; background: #2f8a4a; color: #fff; font-size: 11px; width: 18px; height: 18px; display: grid; place-items: center; border: 2px solid var(--ink); }
-.node.sel .hex { background: #fff; box-shadow: none; }
-.node.ult { width: 76px; height: 76px; }
-.node .cost { position: absolute; left: 50%; top: -9px; transform: translateX(-50%); background: var(--ink); color: #fff; font-size: 10px; padding: 1px 5px; white-space: nowrap; }
-.node.learned .cost { display: none; }
-.lbl { text-align: center; font-size: 11px; font-weight: 700; margin-top: 4px; min-height: 14px; background: var(--paper); padding: 0 3px; }
-.nwrap { display: flex; flex-direction: column; align-items: center; }
-@keyframes pulse { 50% { filter: brightness(1.35); } }
-@media (prefers-reduced-motion: reduce) { .node.open .hex { animation: none; } }
-.combo { grid-column: 1 / -1; display: flex; justify-content: center; gap: 28px; padding-top: 8px; border-top: 3px dashed rgba(43,35,64,.25); margin-top: 6px; flex-wrap: wrap; }
-.combo .t { width: 100%; text-align: center; font-weight: 700; font-size: 13px; color: var(--muted); }
-.side { border-left: 4px solid var(--ink); background: var(--cream); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-@media (max-width: 900px) { .side { border-left: none; border-top: 4px solid var(--ink); } }
-.side h2 { margin: 0; font-size: 18px; }
-.chip { display: inline-block; padding: 2px 8px; border: 2px solid var(--ink); font-size: 11px; font-weight: 700; background: var(--c, #fff); }
-.prev { width: 100%; aspect-ratio: 4 / 3; border: 3px solid var(--ink); background: #2c4a30; image-rendering: pixelated; }
-.side p { margin: 0; font-size: 13px; line-height: 1.55; }
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12px; }
-.kv b { color: var(--muted); font-weight: 700; }
-.learn { margin-top: auto; background: var(--frame); color: #fff; border: 3px solid var(--ink); font: inherit; font-weight: 700; font-size: 15px; padding: 10px; cursor: pointer; box-shadow: 0 4px 0 var(--ink); }
-.learn:disabled { background: #b9b3c6; cursor: default; }
-.learn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
-.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); padding: 8px 16px; border-top: 4px solid var(--ink); background: var(--paper); }
-.legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; border: 2px solid var(--ink); }
-.note { max-width: 1180px; margin: 22px auto 0; color: #d9d0f2; font-size: 12px; text-align: center; }
+html, body { height: 100%; }
+body { margin: 0; background: radial-gradient(ellipse at 50% 95%, #13232c 0%, var(--bg) 62%); color: var(--fg); font-family: var(--font); padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); overflow-x: hidden; }
+.stage { position: relative; width: 100%; max-width: 1280px; margin: 0 auto; aspect-ratio: 12 / 7; }
+@media (max-width: 760px) { .stage { aspect-ratio: auto; height: 560px; } }
+svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
+.node { position: absolute; transform: translate(-50%, -50%); width: 4.3%; aspect-ratio: 1; border-radius: 50%; border: 3px solid #4a5560; background: #10181d; padding: 0; cursor: pointer; display: grid; place-items: center; transition: transform .12s; }
+.node:hover, .node:focus-visible { transform: translate(-50%, -50%) scale(1.1); outline: none; }
+.node canvas { width: 72%; height: 72%; image-rendering: pixelated; filter: grayscale(1) brightness(.55); }
+.node.big { width: 5.6%; }
+.node.small { width: 3.6%; }
+.node.open { border-color: var(--c); box-shadow: 0 0 0 0 var(--c); animation: pulse 1.5s ease-in-out infinite; }
+.node.open canvas { filter: grayscale(.4) brightness(.9); }
+.node.learned { border-color: var(--c); background: var(--c); box-shadow: 0 0 14px 2px var(--c); }
+.node.learned canvas { filter: none; }
+.node.sel { outline: 3px solid #fff; outline-offset: 4px; }
+@keyframes pulse { 50% { box-shadow: 0 0 12px 3px var(--c); } }
+@media (prefers-reduced-motion: reduce) { .node.open { animation: none; } }
+.pill { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 4px); font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 9px; border: 2px solid #4a5560; color: var(--dim); background: var(--bg); white-space: nowrap; }
+.node.learned .pill, .node.open .pill { border-color: var(--c); color: var(--c); }
+.brlabel { position: absolute; transform: translate(-50%, -50%); text-align: center; font-weight: 700; letter-spacing: 1px; font-size: 14px; color: var(--c); text-shadow: 0 0 10px var(--c); pointer-events: none; white-space: nowrap; }
+.brlabel small { display: block; font-size: 10px; color: var(--dim); text-shadow: none; letter-spacing: 0; font-weight: 400; }
+.info { position: absolute; left: 0; top: 0; width: min(300px, 40%); padding: 12px 14px; background: linear-gradient(90deg, rgba(6,12,16,.92), rgba(6,12,16,.55)); border-left: 3px solid var(--c, #fff); }
+.info h2 { margin: 0 0 2px; font-size: 16px; color: var(--c, #fff); letter-spacing: 1px; }
+.info .sub { font-size: 11px; color: var(--dim); margin-bottom: 8px; }
+.info canvas { width: 100%; aspect-ratio: 4 / 3; image-rendering: pixelated; border: 2px solid #26323a; background: #0b1418; display: block; }
+.info p { margin: 8px 0 6px; font-size: 12px; line-height: 1.5; }
+.info .kv { font-size: 11px; color: var(--dim); line-height: 1.6; }
+.info button { margin-top: 8px; width: 100%; font: inherit; font-weight: 700; font-size: 13px; padding: 8px; background: var(--c, #fff); color: #061014; border: none; cursor: pointer; }
+.info button:disabled { background: #2a343b; color: var(--dim); cursor: default; }
+.points { position: absolute; left: 57.5%; bottom: 0; transform: translateX(-50%); text-align: center; }
+.points b { display: block; font-size: 30px; line-height: 1; }
+.points span { font-size: 11px; color: var(--dim); letter-spacing: 2px; }
+.points .bar { width: 120px; height: 4px; background: #26323a; margin: 6px auto 0; } .points .bar i { display: block; height: 100%; background: #c98a4a; }
+.reset { position: absolute; right: 0; bottom: 1%; font: inherit; font-size: 12px; background: none; color: var(--dim); border: 2px solid #26323a; padding: 6px 10px; cursor: pointer; }
+.note { max-width: 1280px; margin: 10px auto 0; text-align: center; color: var(--dim); font-size: 12px; }
 </style>
 </head>
 <body>
-<div class="win">
-  <div class="top"><h1>✨ 마법석 스킬 트리</h1><button class="reset" type="button" id="reset">다시 찍기</button><div class="stones"><span class="gem" aria-hidden="true"></span>마법석 <span id="st">3</span>개</div></div>
-  <div class="body">
-    <div class="tree"><div class="grid" id="grid"><svg class="lines" id="lines" aria-hidden="true"></svg></div></div>
-    <div class="side" id="side"></div>
-  </div>
-  <div class="legend"><span><i style="background:#fff"></i>배움</span><span><i style="background:#ffd27a"></i>지금 배울 수 있음 (반짝)</span><span><i style="background:#c9c3d6"></i>잠김 (앞 칸을 먼저)</span><span>2단계는 둘 중 하나를 골라요 · 궁극기는 2단계 하나만 배워도 열려요</span></div>
+<div class="stage" id="stage"><svg class="map" id="map" viewBox="0 0 1200 700" preserveAspectRatio="none" aria-hidden="true"></svg>
+  <div class="info" id="info"></div>
+  <div class="points"><b id="pts">3</b><span>마법석</span><div class="bar"><i id="ptsBar" style="width:40%"></i></div></div>
+  <button class="reset" id="reset" type="button">다시 찍기</button>
 </div>
-<p class="note">시안 화면이에요. 칸을 누르면 오른쪽에서 마법이 실제로 터지고, "배우기"로 마법석을 써 볼 수 있어요.</p>
+<p class="note">시안 화면 · 동그라미를 누르면 왼쪽 위에서 마법이 실제로 터져요. 2단계는 둘 중 하나만 · 궁극기는 2단계 하나만 배워도 열려요 · 1단계는 3번까지 올릴 수 있어요.</p>
 <script type="module">
 const P = '/assets/pixelfx/';
 const core = await import(P + 'core/index.js');
 const cache = {}; const load = async (k) => (cache[k] = cache[k] || await import(P + 'fx/' + k + '.js'));
+// 왼쪽 → 오른쪽 순서 (이웃한 속성끼리 합체 마법)
 const EL = [
-  { id: 'fire', name: '불', c: 'var(--fire)', n: [['spark', '불씨', 'fire/torch', '손끝에 작은 불을 켜요 · 밤에 주변이 밝아져요'], ['ball', '파이어볼', 'fire/fireball', '불덩이를 날려요'], ['ring', '화염 고리', 'fire/fire-ring', '내 둘레를 불꽃이 감싸요'], ['ult', '메테오', 'fire/meteor', '하늘에서 운석이 떨어져요']] },
-  { id: 'ice', name: '얼음', c: 'var(--ice)', n: [['spark', '서리', 'ice/snowflake-burst', '눈송이가 흩날려요 · 물 위를 잠깐 얼려 건너요'], ['ball', '얼음창', 'ice/ice-lance', '얼음 창을 날려요'], ['ring', '얼음 가시', 'ice/ice-spikes', '땅에서 얼음 가시가 솟아요'], ['ult', '눈보라', 'ice/blizzard-vortex', '큰 눈보라가 몰아쳐요']] },
-  { id: 'bolt', name: '번개', c: 'var(--bolt)', n: [['spark', '정전기', 'lightning/spark-arc', '찌릿! 작은 전기 · 잠깐 빨라져요'], ['ball', '연쇄 번개', 'lightning/chain-lightning', '번개가 여러 명에게 튀어요'], ['ring', '전기 공', 'lightning/ball-lightning', '떠다니는 번개 공'], ['ult', '번개구름', 'lightning/storm-cloud', '먹구름에서 번개가 쏟아져요']] },
-  { id: 'holy', name: '빛', c: 'var(--holy)', n: [['spark', '회복', 'holy/heal', '나를 치료해요'], ['ball', '보호막', 'holy/divine-shield', '잠깐 아무것도 못 맞아요'], ['ring', '광역 회복', 'holy/heal-aoe', '주변 모두를 치료해요'], ['ult', '부활', 'holy/resurrection', '쓰러진 친구를 일으켜요']] },
-  { id: 'nature', name: '자연', c: 'var(--nature)', n: [['spark', '꽃 피우기', 'nature/healing-bloom', '작물이 빨리 자라요'], ['ball', '덩굴 묶기', 'nature/root-snare', '덩굴로 발을 묶어요'], ['ring', '바위 던지기', 'nature/boulder', '큰 바위를 굴려요'], ['ult', '지진', 'nature/quake', '땅이 흔들려요']] },
-  { id: 'arcane', name: '비전', c: 'var(--arcane)', n: [['spark', '마법진', 'arcane/magic-circle-cast', '수학 마법진을 그려요 · 마법이 강해져요'], ['ball', '순간이동', 'arcane/blink-in', '앞으로 휙 이동해요'], ['ring', '비전 광선', 'arcane/arcane-beam', '마력 광선을 쏴요'], ['ult', '시간 정지', 'arcane/time-stop', '잠깐 시간이 멈춰요']] },
+  { id: 'nature', name: '자연', en: '대지·식물', c: 'var(--nature)', hex: '#2ef07a', n: [['t1', '꽃 피우기', 'nature/healing-bloom', '작물이 빨리 자라요'], ['a', '덩굴 묶기', 'nature/root-snare', '덩굴로 발을 묶어요'], ['b', '바위 굴리기', 'nature/boulder', '큰 바위를 굴려요'], ['ult', '지진', 'nature/quake', '땅이 크게 흔들려요']] },
+  { id: 'fire', name: '불', en: '불꽃', c: 'var(--fire)', hex: '#ff3b4a', n: [['t1', '불씨', 'fire/torch', '손끝에 불을 켜요 · 밤에 주변이 밝아져요'], ['a', '파이어볼', 'fire/fireball', '불덩이를 날려요'], ['b', '화염 고리', 'fire/fire-ring', '내 둘레를 불꽃이 감싸요'], ['ult', '메테오', 'fire/meteor', '하늘에서 운석이 떨어져요']] },
+  { id: 'bolt', name: '번개', en: '전기', c: 'var(--bolt)', hex: '#ffd23d', n: [['t1', '정전기', 'lightning/spark-arc', '찌릿! · 잠깐 빨라져요'], ['a', '연쇄 번개', 'lightning/chain-lightning', '번개가 여러 명에게 튀어요'], ['b', '번개 공', 'lightning/ball-lightning', '떠다니는 번개 공'], ['ult', '번개구름', 'lightning/storm-cloud', '먹구름에서 번개가 쏟아져요']] },
+  { id: 'star', name: '시공', en: '별·시간·공간', c: 'var(--star)', hex: '#b57bff', n: [['t1', '마법진', 'arcane/magic-circle-cast', '수학 마법진 · 다음 마법이 강해져요'], ['a', '순간이동', 'arcane/blink-in', '앞으로 휙 이동해요'], ['b', '별똥별', 'arcane/star-fall', '별이 쏟아져요'], ['ult', '시간 정지', 'arcane/time-stop', '잠깐 시간이 멈춰요']] },
+  { id: 'holy', name: '빛', en: '신성', c: 'var(--holy)', hex: '#fff3b0', n: [['t1', '회복', 'holy/heal', '나를 치료해요'], ['a', '보호막', 'holy/divine-shield', '잠깐 아무것도 못 맞아요'], ['b', '광역 회복', 'holy/heal-aoe', '주변 모두를 치료해요'], ['ult', '부활', 'holy/resurrection', '쓰러진 친구를 일으켜요']] },
+  { id: 'ice', name: '얼음', en: '냉기', c: 'var(--ice)', hex: '#3fd6ff', n: [['t1', '서리', 'ice/snowflake-burst', '물 위를 잠깐 얼려 건너요'], ['a', '얼음창', 'ice/ice-lance', '얼음 창을 날려요'], ['b', '얼음 가시', 'ice/ice-spikes', '땅에서 얼음 가시가 솟아요'], ['ult', '눈보라', 'ice/blizzard-vortex', '큰 눈보라가 몰아쳐요']] },
 ];
-const ROOT = { key: 'root', name: '마력 깨우기', fx: 'arcane/mana-burst', c: 'var(--arcane)', desc: '모두 처음부터 배워요. 작은 빛을 켤 수 있어요.', cost: 0 };
 const COMBO = [
-  { key: 'c1', name: '불꽃 회오리', fx: 'fire/fire-tornado', c: 'var(--fire)', need: ['fire.ball', 'nature.ring'], desc: '불 2단계 + 자연 2단계 · 합체 마법' },
-  { key: 'c2', name: '플라즈마', fx: 'lightning/plasma-ball', c: 'var(--bolt)', need: ['bolt.ball', 'arcane.ring'], desc: '번개 2단계 + 비전 2단계 · 합체 마법' },
-  { key: 'c3', name: '성스러운 얼음', fx: 'ice/ice-crystal', c: 'var(--ice)', need: ['ice.ring', 'holy.ball'], desc: '얼음 2단계 + 빛 2단계 · 합체 마법' },
+  { key: 'c1', name: '불꽃 회오리', fx: 'fire/fire-tornado', between: [0, 1], need: ['nature.b', 'fire.a'], hex: '#ff8a3d', desc: '자연 + 불 · 합체 마법' },
+  { key: 'c2', name: '플라즈마', fx: 'lightning/plasma-ball', between: [2, 3], need: ['bolt.b', 'star.a'], hex: '#e08bff', desc: '번개 + 시공 · 합체 마법' },
+  { key: 'c3', name: '성스러운 얼음', fx: 'ice/ice-crystal', between: [4, 5], need: ['holy.b', 'ice.a'], hex: '#9fe8ff', desc: '빛 + 얼음 · 합체 마법' },
 ];
-const COST = { spark: 1, ball: 2, ring: 2, ult: 4 };
-const N = {}; N.root = ROOT;
-for (const e of EL) for (const [k, name, fx, desc] of e.n) N[e.id + '.' + k] = { key: e.id + '.' + k, el: e, tier: k, name, fx, desc, c: e.c, cost: COST[k] };
-for (const c of COMBO) N[c.key] = Object.assign({ cost: 3 }, c);
-// 예시 상태: 불씨·파이어볼·회복을 배운 학생
-let learned = new Set(['root', 'fire.spark', 'fire.ball', 'holy.spark']), stones = 3, sel = 'fire.ult';
-function prereq(k) { const n = N[k]; if (k === 'root') return []; if (n.need) return n.need; if (n.tier === 'spark') return ['root']; if (n.tier === 'ult') return [n.el.id + '.ball', n.el.id + '.ring']; return [n.el.id + '.spark']; }
-function state(k) { if (learned.has(k)) return 'learned'; const n = N[k], pr = prereq(k);
-  if (n.tier === 'ball' || n.tier === 'ring') { const other = n.el.id + '.' + (n.tier === 'ball' ? 'ring' : 'ball'); if (learned.has(other)) return 'locked'; }
-  const ok = n.tier === 'ult' ? pr.some((p) => learned.has(p)) : pr.every((p) => learned.has(p)); return ok ? 'open' : 'locked'; }
-const grid = document.getElementById('grid'), svg = document.getElementById('lines');
-function nodeEl(k, ult) { const n = N[k], w = document.createElement('div'); w.className = 'nwrap';
-  const b = document.createElement('button'); b.type = 'button'; b.className = 'node' + (ult ? ' ult' : ''); b.dataset.k = k; b.style.setProperty('--c', n.c); b.setAttribute('aria-label', n.name);
-  b.innerHTML = `<span class="hex"></span><span class="in"><canvas width="40" height="40" data-ico="${k}"></canvas></span><span class="cost">${n.cost ? '◆' + n.cost : ''}</span>`;
-  b.onclick = () => { sel = k; render(); }; const l = document.createElement('div'); l.className = 'lbl'; l.textContent = n.name; w.append(b, l); return w; }
-function build() {
-  const r = document.createElement('div'); r.className = 'root'; r.append(nodeEl('root')); grid.append(r);
-  for (const e of EL) { const h = document.createElement('div'); h.className = 'col-h'; h.style.color = 'var(--ink)'; h.innerHTML = `<span class="chip" style="--c:${e.c}">${e.name}</span>`; grid.append(h); }
-  for (const e of EL) { const c = document.createElement('div'); c.className = 'cell'; c.append(nodeEl(e.id + '.spark')); grid.append(c); }
-  for (const e of EL) { const c = document.createElement('div'); c.className = 'row2'; c.append(nodeEl(e.id + '.ball'), nodeEl(e.id + '.ring')); grid.append(c); }
-  for (const e of EL) { const c = document.createElement('div'); c.className = 'cell'; c.append(nodeEl(e.id + '.ult', true)); grid.append(c); }
-  const cb = document.createElement('div'); cb.className = 'combo'; cb.innerHTML = '<div class="t">합체 마법 (서로 다른 속성 2단계를 찍으면 열려요)</div>'; for (const c of COMBO) cb.append(nodeEl(c.key)); grid.append(cb);
-}
-function lines() { const gr = grid.getBoundingClientRect(); const pos = (k) => { const el = grid.querySelector(`[data-k="${k}"]`).getBoundingClientRect(); return [el.left - gr.left + el.width / 2, el.top - gr.top + el.height / 2]; };
-  let h = ''; for (const k of Object.keys(N)) for (const p of prereq(k)) { if (N[k].need) continue; const [x1, y1] = pos(p), [x2, y2] = pos(k), on = learned.has(k) && learned.has(p), my = (y1 + y2) / 2;
-    h += `<path d="M${x1} ${y1} V${my} H${x2} V${y2}" fill="none" stroke="${on ? '#2b2340' : 'rgba(43,35,64,.25)'}" stroke-width="${on ? 4 : 3}" ${on ? '' : 'stroke-dasharray="4 4"'}/>`; }
-  svg.innerHTML = h; }
-const icoFx = {};
-async function icons() { for (const c of grid.querySelectorAll('canvas[data-ico]')) { const n = N[c.dataset.ico], mod = await load(n.fx), m = mod.meta || {}, sz = m.size || [64, 64];
-  const fr = core.createFrame(sz[0], sz[1]), f = core.createFx(mod, { x: (m.origin || [sz[0] / 2])[0], y: (m.origin || [0, sz[1] / 2])[1] }); f.update(Math.min(0.6, (m.duration || 1) * 0.45)); f.draw(fr);
-  const im = new ImageData(sz[0], sz[1]); core.composite(fr, im.data, null); const tmp = document.createElement('canvas'); tmp.width = sz[0]; tmp.height = sz[1]; tmp.getContext('2d').putImageData(im, 0, 0);
-  const g = c.getContext('2d'), k = Math.min(40 / sz[0], 40 / sz[1]) * 1.6; g.imageSmoothingEnabled = false; g.drawImage(tmp, 20 - sz[0] * k / 2, 20 - sz[1] * k / 2, sz[0] * k, sz[1] * k); } }
-let pv = null;
-function side() { const n = N[sel], st = state(sel), s = document.getElementById('side'), pr = prereq(sel);
-  s.innerHTML = `<div><span class="chip" style="--c:${n.c}">${n.el ? n.el.name : n.need ? '합체' : '기본'}</span> <span class="chip">${{ spark: '1단계', ball: '2단계', ring: '2단계', ult: '궁극기' }[n.tier] || (n.need ? '합체 마법' : '시작')}</span></div>
-    <h2>${n.name}</h2><canvas class="prev" id="pv" width="160" height="120"></canvas><p>${n.desc}</p>
-    <div class="kv"><b>필요</b><span>${pr.length ? pr.map((p) => N[p].name).join(n.tier === 'ult' ? ' 또는 ' : ' + ') : '없음'}</span><b>마법석</b><span>${n.cost ? '◆ ' + n.cost + '개' : '무료'}</span><b>쿨타임</b><span>${{ spark: '5초', ball: '8초', ring: '10초', ult: '60초' }[n.tier] || '20초'}</span></div>
-    <button class="learn" id="learn" type="button" ${st === 'open' && stones >= n.cost ? '' : 'disabled'}>${st === 'learned' ? '✔ 배웠어요' : st === 'locked' ? (n.tier === 'ball' || n.tier === 'ring') && learned.has(n.el.id + '.' + (n.tier === 'ball' ? 'ring' : 'ball')) ? '다른 쪽을 골랐어요' : '🔒 앞 칸을 먼저 배워요' : stones < n.cost ? '마법석이 모자라요' : `◆${n.cost} 써서 배우기`}</button>`;
-  document.getElementById('learn').onclick = () => { if (state(sel) !== 'open' || stones < n.cost) return; learned.add(sel); stones -= n.cost; render(); };
-  preview(n); }
-let pvLoop = 0;
-async function preview(n) { const id = ++pvLoop, mod = await load(n.fx); if (id !== pvLoop) return; const cv = document.getElementById('pv'), g = cv.getContext('2d'), m = mod.meta || {}, sz = m.size || [80, 80], o = m.origin || [sz[0] / 2, sz[1] / 2];
-  const W = 160, H = 120, fr = core.createFrame(W, H), im = new ImageData(W, H), tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H;
-  let f = null, t = 0, last = performance.now(); const spawn = () => { f = core.createFx(mod, { x: W / 2 - (sz[0] / 2 - o[0]), y: H / 2 + 6 - (sz[1] / 2 - o[1]) }); t = 0; };
-  spawn(); (function step(now) { if (id !== pvLoop) return; const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt; if (t > (m.duration || 1) + 0.5) spawn();
-    core.clearFrame(fr); f.update(dt); f.draw(fr); core.composite(fr, im.data, null); tmp.getContext('2d').putImageData(im, 0, 0);
-    g.fillStyle = '#2c4a30'; g.fillRect(0, 0, W, H); g.fillStyle = 'rgba(0,0,0,.18)'; for (let y = 0; y < H; y += 8) for (let x = (y / 8) % 2 ? 4 : 0; x < W; x += 8) g.fillRect(x, y, 1, 1); g.drawImage(tmp, 0, 0); requestAnimationFrame(step); })(last); }
-function render() { for (const b of grid.querySelectorAll('.node')) { const k = b.dataset.k, st = state(k); b.classList.toggle('learned', st === 'learned'); b.classList.toggle('open', st === 'open'); b.classList.toggle('locked', st === 'locked'); b.classList.toggle('sel', k === sel); }
-  document.getElementById('st').textContent = stones; lines(); side(); }
-document.getElementById('reset').onclick = () => { learned = new Set(['root']); stones = 7; render(); };
-build(); render(); icons(); addEventListener('resize', lines);
+const MAX = { t1: 3, a: 1, b: 1, ult: 1 }, COST = { t1: 1, a: 2, b: 2, ult: 4 }, CD = { t1: '5초', a: '8초', b: '10초', ult: '60초' };
+const CX = 690, CY = 590, ANG = EL.map((_, i) => 162 - i * (144 / (EL.length - 1))), RAD = { t1: 150, ab: 285, ult: 420, combo: 360 };
+const pt = (deg, r) => [CX + r * Math.cos(deg * Math.PI / 180), CY - r * Math.sin(deg * Math.PI / 180)];
+const N = { root: { key: 'root', name: '마력 깨우기', fx: 'arcane/mana-burst', hex: '#ffffff', desc: '모두 처음부터 배워요. 작은 빛을 켤 수 있어요.', max: 1, cost: 0, pos: [CX, CY], big: true } };
+EL.forEach((e, i) => { const a = ANG[i]; for (const [k, name, fx, desc] of e.n) { const pos = k === 't1' ? pt(a, RAD.t1) : k === 'a' ? pt(a + 6, RAD.ab) : k === 'b' ? pt(a - 6, RAD.ab) : pt(a, RAD.ult);
+  N[e.id + '.' + k] = { key: e.id + '.' + k, el: e, tier: k, name, fx, desc, hex: e.hex, max: MAX[k], cost: COST[k], pos, big: k === 'ult' }; } });
+for (const c of COMBO) N[c.key] = Object.assign({ max: 1, cost: 3, pos: pt((ANG[c.between[0]] + ANG[c.between[1]]) / 2, RAD.combo), small: true }, c);
+let lv = { root: 1, 'fire.t1': 3, 'fire.a': 1, 'holy.t1': 1 }, stones = 3, sel = 'fire.ult';
+const L = (k) => lv[k] | 0;
+function pre(k) { const n = N[k]; if (k === 'root') return []; if (n.need) return n.need; if (n.tier === 't1') return ['root']; if (n.tier === 'ult') return [n.el.id + '.a', n.el.id + '.b']; return [n.el.id + '.t1']; }
+function state(k) { const n = N[k]; if (L(k) >= n.max) return 'learned';
+  if (n.tier === 'a' || n.tier === 'b') { const o = n.el.id + '.' + (n.tier === 'a' ? 'b' : 'a'); if (L(o)) return 'locked'; }
+  const ok = n.tier === 'ult' ? pre(k).some((p) => L(p)) : pre(k).every((p) => L(p)); return ok ? (L(k) ? 'learned-part' : 'open') : 'locked'; }
+const stage = document.getElementById('stage'), map = document.getElementById('map');
+// 노드 만들기
+for (const k of Object.keys(N)) { const n = N[k], b = document.createElement('button'); b.type = 'button'; b.className = 'node' + (n.big ? ' big' : '') + (n.small ? ' small' : ''); b.dataset.k = k; b.style.setProperty('--c', n.hex); b.style.left = (n.pos[0] / 12) + '%'; b.style.top = (n.pos[1] / 7) + '%'; b.setAttribute('aria-label', n.name);
+  b.innerHTML = `<canvas width="48" height="48" data-ico="${k}"></canvas><span class="pill"></span>`; b.onclick = () => { sel = k; render(); }; stage.append(b); }
+EL.forEach((e, i) => { const [x, y] = pt(ANG[i], RAD.ult + 78); const d = document.createElement('div'); d.className = 'brlabel'; d.style.setProperty('--c', e.hex); d.style.left = (x / 12) + '%'; d.style.top = (y / 7) + '%'; d.innerHTML = `${e.name}<small>${e.en}</small>`; stage.append(d); });
+function drawMap() { let h = '';
+  for (const r of [RAD.t1, RAD.ab, RAD.ult]) h += `<path d="M${CX - r} ${CY} A${r} ${r} 0 0 1 ${CX + r} ${CY}" fill="none" stroke="#1c2a32" stroke-width="2"/>`; // 둥근 길
+  for (let a = 14; a <= 166; a += 4) { const [x1, y1] = pt(a, RAD.ult + 40), [x2, y2] = pt(a, RAD.ult + 48); h += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#1c2a32" stroke-width="2"/>`; }
+  for (const k of Object.keys(N)) for (const p of pre(k)) { const a = N[p].pos, b = N[k].pos, on = L(k) && L(p), col = N[k].hex;
+    h += on ? `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="7" opacity=".25"/><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="3"/>` : `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#3a4650" stroke-width="2" ${N[k].need ? 'stroke-dasharray="5 6"' : ''}/>`; }
+  map.innerHTML = h; }
+async function icons() { for (const c of stage.querySelectorAll('canvas[data-ico]')) { const n = N[c.dataset.ico], mod = await load(n.fx), m = mod.meta || {}, sz = m.size || [64, 64], o = m.origin || [sz[0] / 2, sz[1] / 2];
+  const fr = core.createFrame(sz[0], sz[1]), f = core.createFx(mod, { x: o[0], y: o[1] }); f.update(Math.min(0.7, (m.duration || 1) * 0.5)); f.draw(fr);
+  const im = new ImageData(sz[0], sz[1]); core.composite(fr, im.data, null); const t = document.createElement('canvas'); t.width = sz[0]; t.height = sz[1]; t.getContext('2d').putImageData(im, 0, 0);
+  const g = c.getContext('2d'), k = Math.min(48 / sz[0], 48 / sz[1]) * 1.5; g.imageSmoothingEnabled = false; g.drawImage(t, 24 - sz[0] * k / 2, 24 - sz[1] * k / 2, sz[0] * k, sz[1] * k); } }
+let pvId = 0;
+async function preview(n) { const id = ++pvId, mod = await load(n.fx); if (id !== pvId) return; const cv = document.getElementById('pv'); if (!cv) return; const g = cv.getContext('2d'), m = mod.meta || {}, sz = m.size || [80, 80], o = m.origin || [sz[0] / 2, sz[1] / 2];
+  const W = 160, H = 120, fr = core.createFrame(W, H), im = new ImageData(W, H), t2 = document.createElement('canvas'); t2.width = W; t2.height = H; let f, t = 0, last = performance.now();
+  const spawn = () => { f = core.createFx(mod, { x: W / 2 - (sz[0] / 2 - o[0]), y: H / 2 + 6 - (sz[1] / 2 - o[1]) }); t = 0; }; spawn();
+  (function step(now) { if (id !== pvId) return; const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt; if (t > (m.duration || 1) + 0.5) spawn();
+    core.clearFrame(fr); f.update(dt); f.draw(fr); core.composite(fr, im.data, null); t2.getContext('2d').putImageData(im, 0, 0);
+    g.fillStyle = '#0b1418'; g.fillRect(0, 0, W, H); g.fillStyle = '#16242b'; for (let y = 4; y < H; y += 10) for (let x = (y / 10) % 2 ? 9 : 4; x < W; x += 10) g.fillRect(x, y, 1, 1); g.drawImage(t2, 0, 0); requestAnimationFrame(step); })(last); }
+function info() { const n = N[sel], st = state(sel), box = document.getElementById('info'); box.style.setProperty('--c', n.hex);
+  const tierName = { t1: '1단계', a: '2단계', b: '2단계', ult: '궁극기' }[n.tier] || (n.need ? '합체 마법' : '시작');
+  const can = (st === 'open' || st === 'learned-part') && stones >= n.cost;
+  box.innerHTML = `<h2>${n.name}</h2><div class="sub">${n.el ? n.el.name + ' 마법 · ' : ''}${tierName} · ${L(sel)}/${n.max}</div><canvas id="pv" width="160" height="120"></canvas><p>${n.desc}</p>
+    <div class="kv">필요: ${pre(sel).length ? pre(sel).map((p) => N[p].name).join(n.tier === 'ult' ? ' 또는 ' : ' + ') : '없음'}<br>마법석: ${n.cost ? n.cost + '개' + (n.max > 1 ? ' (한 번 올릴 때마다)' : '') : '무료'} · 쿨타임 ${CD[n.tier] || '20초'}</div>
+    <button id="learn" type="button" ${can ? '' : 'disabled'}>${st === 'learned' ? '다 배웠어요' : st === 'locked' ? ((n.tier === 'a' || n.tier === 'b') && L(n.el.id + '.' + (n.tier === 'a' ? 'b' : 'a')) ? '다른 쪽을 골랐어요' : '앞 마법을 먼저 배워요') : stones < n.cost ? '마법석이 모자라요' : `마법석 ${n.cost}개로 ${L(sel) ? '강화' : '배우기'}`}</button>`;
+  document.getElementById('learn').onclick = () => { if (!can) return; lv[sel] = L(sel) + 1; stones -= n.cost; render(); }; preview(n); }
+function render() { for (const b of stage.querySelectorAll('.node')) { const k = b.dataset.k, st = state(k), n = N[k]; b.classList.toggle('learned', L(k) > 0); b.classList.toggle('open', st === 'open' || st === 'learned-part'); b.classList.toggle('sel', k === sel); b.querySelector('.pill').textContent = `${L(k)}/${n.max}`; }
+  document.getElementById('pts').textContent = stones; document.getElementById('ptsBar').style.width = Math.min(100, stones / 10 * 100) + '%'; drawMap(); info(); }
+document.getElementById('reset').onclick = () => { lv = { root: 1 }; stones = 10; render(); };
+render(); icons();
 </script>
 </body>
 </html>
