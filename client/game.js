@@ -850,11 +850,11 @@
   const PLATE = new Image(); PLATE.src = 'assets/ui/nameplate.png'; const plateCache = new Map();
   function plateTag(text, color) { const key = text + '|' + color; let c = plateCache.get(key); if (c) return c; if (!PLATE.complete || !PLATE.naturalWidth) return null;
     const S = 2, H = 22 * S, k = H / PLATE.naturalHeight, Lw = Math.round(58 * k), Rw = Math.round(150 * k), cv = document.createElement('canvas'), g = cv.getContext('2d');
-    g.font = `${11 * S}px ${PFONT}`; const tw = g.measureText(text).width, W = Math.ceil(Math.max(Lw + Rw, Lw * 0.6 + tw + Rw * 0.6 + 8 * S));
+    g.font = `${11 * S}px ${PFONT}`; const tw = g.measureText(text).width, W = Math.ceil(Math.max(Lw + Rw, tw + 2 * Math.max(Lw, Rw) * 0.6 + 8 * S));
     cv.width = W; cv.height = H; const g2 = cv.getContext('2d'); g2.imageSmoothingEnabled = true; g2.imageSmoothingQuality = 'high';
     g2.drawImage(PLATE, 0, 0, 58, PLATE.naturalHeight, 0, 0, Lw, H); g2.drawImage(PLATE, 58, 0, 192, PLATE.naturalHeight, Lw, 0, W - Lw - Rw, H); g2.drawImage(PLATE, 250, 0, 150, PLATE.naturalHeight, W - Rw, 0, Rw, H);
     if (color) { g2.globalCompositeOperation = 'source-atop'; g2.globalAlpha = 0.32; g2.fillStyle = color; g2.fillRect(0, 0, W, H); g2.globalAlpha = 1; g2.globalCompositeOperation = 'source-over'; }
-    g2.font = `${11 * S}px ${PFONT}`; g2.textAlign = 'center'; g2.textBaseline = 'middle'; const tx = (Lw * 0.6 + W - Rw * 0.6) / 2, ty = H / 2 + S;
+    g2.font = `${11 * S}px ${PFONT}`; g2.textAlign = 'center'; g2.textBaseline = 'middle'; const tx = W / 2, ty = H / 2 + S;
     g2.fillStyle = '#3a2210'; g2.fillText(text, tx, ty + S); g2.fillStyle = '#fff3d6'; g2.fillText(text, tx, ty);
     c = { cv, w: W / S, h: H / S }; if (plateCache.size > 400) plateCache.clear(); plateCache.set(key, c); return c; }
   function nameTag(g, x, y, text, color) {
