@@ -721,7 +721,8 @@ body #vitals .vbar b { font-size: 10px; text-shadow: 0 1px 0 #2a1810, 1px 0 0 #2
 #tSmoke { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
 #title .tBlock { transition: opacity .6s ease, filter .6s ease; } #title .tBlock.fadeOut { opacity: 0; filter: blur(6px); } #title .tBlock.hideNow { opacity: 0; transition: none; } #title .tBlock.fadeIn { animation: tIn .7s ease-out both; }
 .setHead .homeBtn { margin-left: auto; margin-right: 8px; width: 33px; height: 33px; min-height: 0; padding: 0; border: 0 !important; border-image: none !important; background: none !important; } .setHead .homeBtn img { image-rendering: pixelated; display: block; } .setHead .homeBtn:hover { filter: brightness(1.1); }
-#title[data-tv="kingdom"] .tOrn, #title[data-tv="play"] .tOrn { width: auto; }
+#title[data-tv="play"] .tOrn { width: auto; }
+#title[data-tv="rpg"] { background: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(60,20,90,.35) 0%, rgba(40,12,70,.5) 50%, rgba(18,6,34,.82) 100%) !important; } #title[data-tv="rpg"] .tRays { background: repeating-conic-gradient(from 200deg at 8% -10%, rgba(214,170,255,.09) 0deg 3deg, transparent 3deg 9deg); } #title[data-tv="rpg"]::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: rgba(120,60,200,.22); mix-blend-mode: color; } #title[data-tv="rpg"] .tLogo2 { filter: drop-shadow(0 0 22px rgba(190,140,255,.55)) drop-shadow(0 4px 0 rgba(20,8,30,.5)); }
 /* ===== 설정 창 (나무 틀) ===== */
 .gearBtn { min-width: 44px; padding: 0 8px !important; display: grid; place-items: center; }
 /* 설정: 사용자 두루마리 그림을 다시 그린 픽셀 틀 (assets/ui/scroll.png) */

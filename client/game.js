@@ -4940,8 +4940,7 @@
     { id: 'camp', lay: 'center', orn: '✦', logo: (cv) => makeTextLogo(cv, [TLn('the', 11, { c: '#f4ead2', align: 'left', gap: -2 }), TLn('Puzzle', 22, { sp: 1, c: '#ffffff', c2: '#e8e0cc', shadow: '#1a2a24', align: 'center' })]) },
     { id: 'play', lay: 'rightmid', orn: 'M  P', menu: 'bigfirst', logo: null },
     { id: 'quest', lay: 'lefttop', menu: 'caps', logo: (cv) => makeTextLogo(cv, [TLn('NUMBER', 22, { bold: true, sp: 1, c: '#d6fff4', c2: '#5fd3b8', ol: '#0e2f2a', shadow: '#0e2f2a', align: 'left' }), TLn('QUEST', 22, { bold: true, sp: 3, c: '#d6fff4', c2: '#5fd3b8', ol: '#0e2f2a', shadow: '#0e2f2a', align: 'left' })]) },
-    { id: 'rpg', lay: 'center', logo: (cv) => makeTextLogo(cv, [TLn('a math', 11, { c: '#ffd6ec', align: 'center', gap: 1, sp: 2 }), TLn('Puzzle RPG', 22, { sp: 1, c: '#ffe0f2', c2: '#b48cff', ol: '#2a1838', shadow: '#2a1838', align: 'center' })]) },
-    { id: 'kingdom', lay: 'right', orn: '— ✦ —', logo: (cv) => makeTextLogo(cv, [TLn('수학 왕국', 22, { bold: true, sp: 2, c: '#fff0d0', c2: '#ff9a5a', ol: '#3a1608', shadow: '#3a1608', align: 'center' }), TLn('KINGDOM OF NUMBERS', 11, { c: '#ffd9b0', align: 'center' })]) },
+    { id: 'rpg', lay: 'center', logo: (cv) => makeTextLogo(cv, [TLn('a math', 11, { bold: true, c: '#ffd6ec', align: 'center', gap: 1, sp: 2, ol: '#2a1838' }), TLn('Puzzle RPG', 22, { bold: true, sp: 1, c: '#ffe0f2', c2: '#b48cff', ol: '#2a1838', shadow: '#2a1838', align: 'center' })]) },
     { id: 'word', lay: 'left', logo: (cv) => makeTextLogo(cv, [TLn('Math', 22, { sp: 1, c: '#e8f2ff', c2: '#8fb6ff', shadow: '#121c34', align: 'left' }), TLn('Puzzle World', 11, { sp: 1, c: '#c9dcff', align: 'left' })]) },
   ];
   function pickTitle(force) { let i = force;
