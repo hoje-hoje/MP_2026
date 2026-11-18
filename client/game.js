@@ -4907,7 +4907,18 @@
     };
     layer('MP', 38, 2, '#f1ecff', '#2b2340', '#6b4fb3');
   }
+  function makeTitleLogo(cv) { // 얇은 세리프 픽셀 글자 'MP' (굵은 세로획 2칸 · 가는 획 1칸)
+    const G = { M: ['XXX.....XXX', '.XX.....XX.', '.XXX...XXX.', '.XX.X.X.XX.', '.XX.X.X.XX.', '.XX..X..XX.', '.XX..X..XX.', '.XX.....XX.', '.XX.....XX.', '.XX.....XX.', '.XX.....XX.', '.XX.....XX.', 'XXXX...XXXX'],
+      P: ['XXXXXXXX...', '.XX....XX..', '.XX.....XX.', '.XX.....XX.', '.XX.....XX.', '.XX....XX..', '.XXXXXXX...', '.XX........', '.XX........', '.XX........', '.XX........', '.XX........', 'XXXX.......'] };
+    const S = 7, gap = 3, cols = 11 * 2 + gap, W2 = (cols + 2) * S, H2 = (13 + 2) * S; cv.width = W2; cv.height = H2; const g = cv.getContext('2d');
+    const draw = (dx, dy, col) => { g.fillStyle = col; ['M', 'P'].forEach((ch, k) => G[ch].forEach((row, y) => [...row].forEach((c, x) => { if (c === 'X') g.fillRect((x + k * (11 + gap)) * S + dx, y * S + dy, S, S); }))); };
+    draw(S * 0.5 + S, S * 0.5 + S, 'rgba(60,36,14,.55)'); // 그림자
+    draw(S, S, '#f4ead2'); // 글자
+    g.globalCompositeOperation = 'source-atop'; const gr = g.createLinearGradient(0, 0, 0, H2); gr.addColorStop(0, 'rgba(255,255,255,.25)'); gr.addColorStop(.55, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(214,170,98,.45)'); g.fillStyle = gr; g.fillRect(0, 0, W2, H2); g.globalCompositeOperation = 'source-over'; }
+  const tMenuBtns = () => [...document.querySelectorAll('#tMenu button')];
+  function tSelect(i) { const b = tMenuBtns(); TITLE.sel = (i + b.length) % b.length; b.forEach((x, k) => x.classList.toggle('sel', k === TITLE.sel)); }
   function startTitle() {
+    { const lc = $('tLogo2'); if (lc && !lc.dataset.done) { makeTitleLogo(lc); lc.dataset.done = 1; } } tSelect(0);
     for (const cv of document.querySelectorAll('canvas.logoCv')) if (!cv.dataset.done) { makeLogo(cv); cv.dataset.done = 1; }
     const cand = terrs.filter((t) => t && !gone[t.id]);
     const t = cand[Math.floor(Math.random() * cand.length)] || home;
@@ -4927,6 +4938,7 @@
     if (firstTime) startOpening(); else { if (needFound) openFound('who'); maybeDoomPopup(); }
   }
   $('tStart').addEventListener('click', endTitle);
+  tMenuBtns().forEach((b, k) => b.addEventListener('pointerenter', () => tSelect(k)));
   $('title').addEventListener('click', (e) => { if (e.target === $('title') || e.target.classList.contains('tstart')) endTitle(); });
   $('tSettings').addEventListener('click', () => { $('tSet').hidden = !$('tSet').hidden; });
   $('tReplay').addEventListener('click', () => { // 오프닝 다시 보기 (이름은 묻지 않음)
@@ -5042,7 +5054,8 @@
     if (!$('gLogin').hidden || !$('rLogin').hidden) { if (!(e.target && e.target.tagName === 'INPUT')) e.stopImmediatePropagation(); return; } // 로그인 창이 떠 있으면 게임 키는 안 먹게
     if (!(TITLE.on || OP.on) || (e.target && e.target.tagName === 'INPUT')) return;
     e.stopImmediatePropagation(); // 타이틀·오프닝 중에는 게임 키(E, 채팅 등)가 안 먹게
-    if (TITLE.on && (e.key === 'Enter' || e.key === ' ') && $('coupon').hidden) { e.preventDefault(); endTitle(); return; }
+    if (TITLE.on && $('coupon').hidden && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'w' || e.key === 's')) { e.preventDefault(); tSelect((TITLE.sel | 0) + (e.key === 'ArrowUp' || e.key === 'w' ? -1 : 1)); SND.play('click'); return; }
+    if (TITLE.on && (e.key === 'Enter' || e.key === ' ') && $('coupon').hidden) { e.preventDefault(); const b = tMenuBtns()[TITLE.sel | 0]; if (b) b.click(); else endTitle(); return; }
     if (OP.on && OP.closetWait) return; // 생김새 고르는 중
     if (OP.on && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); opAdvance(); }
   }, true);
