@@ -170,6 +170,33 @@
     for (const k in skills || {}) { const M = MAGIC[k], lv = skills[k] | 0; if (!M || lv <= 0) continue; const add = (M.tier === 't1' ? 0.5 * lv : M.tier === 'ult' ? 2 : 1); n += lv;
       const st = EL_STAT[M.el] || []; for (const s of st) o[s] += add / Math.sqrt(st.length); }
     o.mag += n * 0.15; for (const k in o) o[k] = Math.min(10, Math.round(o[k] * 10) / 10); return o; }
+  // ---------------------------------------------------------- 제작대 (마크처럼 3×3 조합법)
+  // 글자 = 재료: W 목재 · S 돌 · O 광석 · F 풀 · L 꽃 · H 가죽 · '.' 빈칸. 모양 그대로 놓아야 해요 (칸 안 어디든 위치는 상관없음)
+  const GRID_KEY = { W: 'm_wood', S: 'm_stone', O: 'm_ore', F: 'm_fiber', L: 'm_flower', H: 'm_hide' };
+  const GRIDS = { // 도구·빛·가구 (만든 건 내 가방 / 도구)
+    axe: ['SS', 'SW', '.W'], pick: ['SSS', '.W.', '.W.'], shovel: ['S', 'W', 'W'], rod: ['..W', '.WF', 'W.F'],
+    f_torch: ['F', 'W'], f_campfire: ['.W.', 'WSW'], f_lamp: ['O', 'W', 'W'],
+    f_chair: ['W..', 'WWW', 'W.W'], f_table: ['WWW', 'W.W'], f_chest: ['WWW', 'W.W', 'WWW'], f_fence: ['WFW'], f_sign: ['WWW', '.W.'], f_pot: ['SLS', '.S.'], f_rug: ['LFL', 'FFF'],
+  };
+  // 건축 자재: 만든 건 나라 저장소로 → 설치 모드(G)에서 꺼내 놓음. give = 한 번에 나오는 개수
+  const BUILD_GRIDS = {
+    f_wood: [['WW'], 4], f_moss: [['WF'], 4], f_stone: [['SS'], 4], f_brick: [['SO'], 4], f_sand: [['SW'], 4], f_ice: [['SF'], 4], f_snow: [['FS'], 4], f_gold: [['OO'], 4], f_cloud: [['FF'], 4], f_sky: [['FL'], 4], f_amethyst: [['OL'], 4],
+    w_fence: [['WWW'], 2], w_brick: [['SOS'], 2], w_ice: [['SFS'], 2], w_marble: [['SLS'], 2],
+    p_wood: [['W', 'W', 'W'], 2], p_stone: [['S', 'S', 'S'], 2], p_ice: [['F', 'S', 'F'], 2], p_marble: [['O', 'S', 'O'], 2],
+    d_torch: [['O', 'W'], 1], d_lantern: [['L', 'O'], 1], d_urn: [['L', 'S'], 1], d_mush: [['L', 'W'], 1], d_snowman: [['F', 'F'], 1], d_crystal: [['O', 'F'], 1], d_flower: [['LL', 'FF'], 1],
+    trap: [['O.O', '.W.'], 1], b_wood: [['WWW', 'F.F'], 2], b_stone: [['SSS', 'S.S'], 2], farm: [['FF', 'WW'], 2], canal: [['S.S', 'SSS'], 2],
+  };
+  const gridMats = (g) => { const m = {}; for (const row of g) for (const c of row) if (GRID_KEY[c]) m[GRID_KEY[c]] = (m[GRID_KEY[c]] || 0) + 1; return m; };
+  for (const r of RECIPES) if (GRIDS[r.id]) { r.grid = GRIDS[r.id]; r.mats = gridMats(r.grid); }
+  for (const [id, [grid, give]] of Object.entries(BUILD_GRIDS)) { const B = BUILD.find((b) => b.id === id); if (!B) continue;
+    RECIPES.push({ id: 'b:' + id, cat: 'build', item: id, name: B.name, grid, give, mats: gridMats(grid), desc: '나라 저장소로 들어가요 · 설치 모드(G)에서 놓아요' }); }
+  const BUILD_RECIPE = Object.fromEntries(RECIPES.filter((r) => r.cat === 'build').map((r) => [r.item, r]));
+  // 3×3 칸(재료 키 9개, 빈칸 null) → 맞는 조합법. 놓인 재료를 둘러싼 네모만 잘라서 모양 비교
+  function gridKey(cells) { let x0 = 3, y0 = 3, x1 = -1, y1 = -1; for (let i = 0; i < 9; i++) if (cells[i]) { const x = i % 3, y = (i / 3) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    if (x1 < 0) return ''; const inv = Object.fromEntries(Object.entries(GRID_KEY).map(([k, v]) => [v, k])), rows = [];
+    for (let y = y0; y <= y1; y++) { let r = ''; for (let x = x0; x <= x1; x++) { const c = cells[y * 3 + x]; r += c ? (inv[c] || '?') : '.'; } rows.push(r); } return rows.join('/'); }
+  const GRID_INDEX = {}; for (const r of RECIPES) if (r.grid) { const k = r.grid.join('/'); if (GRID_INDEX[k]) throw new Error('조합법 겹침: ' + r.id + ' / ' + GRID_INDEX[k].id); GRID_INDEX[k] = r; }
+  const matchGrid = (cells) => GRID_INDEX[gridKey(cells)] || null;
   const RECIPE_BY = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
   function plantKind(t, x, y) {
     if (t !== T.GRASS) return null; const h = hash(x, y, 7);
@@ -851,5 +878,5 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

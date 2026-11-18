@@ -649,6 +649,35 @@ body #vitals .vbar.hp i { background: linear-gradient(#c45560 0 2px, transparent
 body #vitals .vbar.mp i { background: linear-gradient(#5b8cc0 0 2px, transparent 2px), repeating-linear-gradient(90deg, #3a6ea8 0 14px, #29507e 14px 16px); }
 body #vitals .vbar b { font-size: 10px; text-shadow: 0 1px 0 #2a1810, 1px 0 0 #2a1810, -1px 0 0 #2a1810, 0 -1px 0 #2a1810; }
 #skillBox:not([hidden]) .skWrap { animation: skIn .35s cubic-bezier(.2,.8,.25,1); } @keyframes skIn { from { transform: scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+/* ===== 제작대 (마크처럼 3×3 조합) — 설정과 같은 양피지 ===== */
+#craftBox .cfPanel, #storeBox .cfPanel { position: relative; width: min(980px, 94vw); height: min(640px, 90vh); border: solid; border-width: 27px 15px 27px 12px; border-image: url(assets/ui/scroll.png) 9 5 9 4 fill / 27px 15px 27px 12px round; image-rendering: pixelated; padding: 8px 14px 10px; color: #4a2610; display: flex; flex-direction: column; gap: 10px; animation: scrollIn .35s cubic-bezier(.2,.8,.25,1); transform-origin: top center; filter: drop-shadow(0 12px 20px rgba(0,0,0,.5)); }
+.cfCols { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px 1fr; gap: 12px; } .cfCols[hidden] { display: none; }
+.cfBook { min-height: 0; } .cfList { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 4px; scrollbar-width: thin; scrollbar-color: #c9a46a transparent; }
+.cfRec { all: unset; cursor: pointer; display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 8px; padding: 4px 6px; font-size: 13px; }
+.cfRec:hover, .cfRec[aria-pressed="true"] { background: rgba(255,248,230,.55); box-shadow: inset 0 0 0 2px rgba(143,82,38,.5); }
+.cfRec canvas { width: 36px; height: 36px; image-rendering: pixelated; } .cfRec small { color: #8a5a30; font-size: 11px; } .cfRec.no { opacity: .5; } .cfRec:focus-visible { outline: 2px solid #7a3e18; }
+.cfWork { align-items: center; } .cfWork h3 { align-self: stretch; margin-top: 6px; }
+.cfTable { display: flex; align-items: center; gap: 18px; margin-top: 6px; }
+.cfGrid { display: grid; grid-template-columns: repeat(3, 64px); gap: 4px; padding: 6px; background: #8a5a2e; box-shadow: inset 0 0 0 3px #4a2c16; }
+.cfCell, .cfOut, .cfMat { all: unset; box-sizing: border-box; position: relative; cursor: pointer; background: #c9a46a; box-shadow: inset 3px 3px 0 #9c7440, inset -3px -3px 0 #e6c890; display: grid; place-items: center; }
+.cfCell { width: 64px; height: 64px; } .cfCell canvas, .cfOut canvas, .cfMat canvas { width: 44px; height: 44px; image-rendering: pixelated; } .cfCell.ghost canvas { opacity: .35; } .cfCell:hover { filter: brightness(1.08); } .cfCell:focus-visible, .cfOut:focus-visible, .cfMat:focus-visible { outline: 2px solid #4a2610; outline-offset: 1px; }
+.cfArrow { width: 40px; height: 28px; background: #8a5a2e; clip-path: polygon(0 30%, 60% 30%, 60% 0, 100% 50%, 60% 100%, 60% 70%, 0 70%); }
+.cfOut { width: 84px; height: 84px; box-shadow: inset 3px 3px 0 #9c7440, inset -3px -3px 0 #e6c890, 0 0 0 4px #4a2c16; } .cfOut canvas { width: 60px; height: 60px; } .cfOut.ok { background: #e8cf95; animation: cfGlow 1.2s ease-in-out infinite; } @keyframes cfGlow { 50% { box-shadow: inset 3px 3px 0 #9c7440, inset -3px -3px 0 #f2deae, 0 0 0 4px #4a2c16, 0 0 14px #ffd27a; } }
+.cfOut i, .cfMat i { position: absolute; right: 4px; bottom: 2px; font-style: normal; font-weight: 700; font-size: 13px; color: #fff; text-shadow: 0 1px 0 #3a2616, 1px 0 0 #3a2616, -1px 0 0 #3a2616, 0 -1px 0 #3a2616; }
+.cfName { margin: 2px 0 0; font-family: var(--font-display); font-size: 16px; text-align: center; min-height: 22px; } .cfBtns { justify-content: center; }
+.cfMats { display: flex; flex-wrap: wrap; gap: 6px; align-self: stretch; } .cfMat { width: 56px; height: 56px; } .cfMat[aria-pressed="true"] { box-shadow: inset 0 0 0 3px #4a2610, inset 5px 5px 0 #f2deae; background: #e8cf95; } .cfMat.zero { opacity: .45; }
+.cfMagic { flex: 1; min-height: 0; overflow-y: auto; display: block; } .cfMagic[hidden] { display: none; }
+@media (max-width: 760px) { .cfCols { grid-template-columns: 1fr; overflow-y: auto; } .cfGrid { grid-template-columns: repeat(3, 54px); } .cfCell { width: 54px; height: 54px; } }
+/* 저장소 (양피지) */
+#storeBox .cfPanel { width: min(940px, 94vw); }
+.stSide { align-items: center; } .stSide #storeArt { width: 120px; height: 120px; image-rendering: pixelated; background: rgba(255,248,230,.5); box-shadow: inset 0 0 0 3px rgba(143,82,38,.45); } .stSide h3 { align-self: stretch; }
+#storeBox .stRes { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; align-self: stretch; }
+#storeBox .stR { display: grid; grid-template-columns: 1fr; grid-template-rows: auto; justify-items: center; gap: 2px; border: 0; color: #4a2610; writing-mode: horizontal-tb; padding: 4px; background: #c9a46a; box-shadow: inset 3px 3px 0 #9c7440, inset -3px -3px 0 #e6c890; font-size: 12px; } #storeBox .stR canvas { width: 36px; height: 36px; image-rendering: pixelated; } #storeBox .stR span { writing-mode: horizontal-tb; white-space: nowrap; color: #8a5a30; position: static; } #storeBox .stR b { font-size: 14px; }
+.stBtns { flex-direction: column; align-self: stretch; } .stBtns button { width: 100%; }
+.stMain { min-height: 0; } #storeBox .stGrid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); align-content: start; gap: 8px; padding-right: 4px; scrollbar-width: thin; scrollbar-color: #c9a46a transparent; }
+#storeBox .stItem { position: relative; display: grid; justify-items: center; gap: 2px; padding: 6px 4px; background: #c9a46a; box-shadow: inset 3px 3px 0 #9c7440, inset -3px -3px 0 #e6c890; font-size: 12px; text-align: center; color: #4a2610; } #storeBox .stItem canvas { width: 52px; height: 52px; image-rendering: pixelated; }
+#storeBox .stItem i { background: none; border: 0; padding: 0; min-width: 0; border-radius: 0; position: absolute; right: 5px; top: 3px; font-style: normal; font-weight: 700; font-size: 13px; color: #fff; text-shadow: 0 1px 0 #3a2616, 1px 0 0 #3a2616, -1px 0 0 #3a2616, 0 -1px 0 #3a2616; }
+#storeBox .stEmpty { grid-column: 1 / -1; color: #8a5a30; font-size: 13px; }
 /* ===== 설정 창 (나무 틀) ===== */
 .gearBtn { min-width: 44px; padding: 0 8px !important; display: grid; place-items: center; }
 /* 설정: 사용자 두루마리 그림을 다시 그린 픽셀 틀 (assets/ui/scroll.png) */
@@ -816,14 +845,14 @@ body:not(.building) #prompt { bottom: calc(10px + var(--chatH, 56px) + 10px + en
   <div class="bbHead"><b>🏗 설치</b><div class="bbTabs" id="bbTabs"></div><span class="bbShapes"><button data-shape="1" type="button">1칸</button><button data-shape="h3" type="button">가로3</button><button data-shape="v3" type="button">세로3</button><button data-shape="s3" type="button">3×3</button></span><button id="buildOff" type="button" title="끄기 (G)">✕</button></div>
   <div class="bbList" id="bbList"></div>
 </div></div>
-<div id="storeBox" class="modalbox" hidden><div class="hv storeHv"><div class="hvClouds"></div>
-  <div class="hvTop"><div class="hvFace"><canvas id="storeArt" width="120" height="120"></canvas></div><div class="hvSay"><b id="storeName">우리 저장소</b><p>우리 나라 모두가 같이 쓰는 저장소예요. 산 물건·수확한 작물이 다 여기 모여요.</p></div><button id="storeClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
-  <div class="stRes" id="storeRes"></div>
-  <button class="btn" id="storeCraft" type="button">🔨 작업대 열기 (도구·횃불·가구 만들기)</button>
-  <button class="btn" id="storeDeposit" type="button">🎒 내 가방의 목재·돌·광석 모두 넣기</button>
-  <div class="hvTabs" id="storeTabs"></div>
-  <div class="stGrid" id="storeBody"></div>
-  <div class="stFoot"><button id="storeBuild" type="button">🏗 설치 모드 켜기 (G)</button></div>
+<div id="storeBox" class="modalbox" hidden><div class="cfPanel stPanel">
+  <div class="pfTop"><b id="storeName">우리 저장소</b><div class="pfTabs" id="storeTabs"></div><button id="storeClose" class="scrX" type="button" aria-label="닫기"></button></div>
+  <div class="cfCols">
+    <section class="setCard stSide"><canvas id="storeArt" width="120" height="120" aria-hidden="true"></canvas><p class="setNote">나라 모두가 같이 쓰는 저장소예요. 제작대에서 만든 건축 자재와 수확한 작물이 여기 모여요.</p>
+      <h3>함께 쓰는 것</h3><div class="stRes" id="storeRes"></div>
+      <div class="setBtns stBtns"><button id="storeCraft" type="button">제작대 열기</button><button id="storeBuild" type="button">설치 모드 (G)</button><button id="storeDeposit" type="button">가방의 목재·돌·광석 넣기</button></div></section>
+    <section class="setCard stMain"><div class="stGrid" id="storeBody"></div></section>
+  </div>
 </div></div>
 <div id="bailBox" class="modalbox" hidden><div class="panel card"><h2>🔓 면회실 · 보석금</h2><div id="bailBody"></div><div class="seg"><button id="bailClose" type="button">닫기</button></div></div></div>
 <div id="reinBox" class="modalbox" hidden><div class="panel card"><h2>🪖 전선 진지</h2><div id="reinBody"></div><div class="seg"><button id="reinAdd" type="button">충원</button><button id="reinSub" type="button">빼기</button><button id="reinClose" type="button">닫기</button></div></div></div>
@@ -902,11 +931,20 @@ body:not(.building) #prompt { bottom: calc(10px + var(--chatH, 56px) + 10px + en
   <section class="setCard"><h3>기타</h3>
   <div class="setBtns"><button id="sReplay" type="button">오프닝 다시 보기</button></div></section>
 </div></div>
-<div id="craftBox" class="modalbox" hidden><div class="hv bagHv"><div class="hvClouds"></div>
-  <div class="hvTop"><h2>🔨 작업대</h2><span class="bagCoin" id="craftMats"></span><button id="craftClose" class="hvX" type="button" aria-label="닫기">✕</button></div>
-  <p class="msg">내 가방의 재료로 만들어요. 재료는 나무 베기·풀 뜯기·꽃 따기·산 캐기·금광으로 모아요.</p>
-  <div class="hvTabs" id="craftTabs"></div>
-  <div class="hvList" id="craftBody"></div>
+<div id="craftBox" class="modalbox" hidden><div class="cfPanel">
+  <div class="pfTop"><b>제작대</b><div class="pfTabs" id="craftTabs"></div><button id="craftClose" class="scrX" type="button" aria-label="닫기"></button></div>
+  <div class="cfCols" id="cfGridView">
+    <section class="setCard cfBook"><h3>조합법</h3><div class="cfList" id="cfList"></div></section>
+    <section class="setCard cfWork">
+      <div class="cfTable"><div class="cfGrid" id="cfGrid"></div><div class="cfArrow" aria-hidden="true"></div><button type="button" class="cfOut" id="cfOut" aria-label="만들기"><canvas width="64" height="64"></canvas><i></i></button></div>
+      <p class="cfName" id="cfName">재료를 칸에 놓아 보세요</p>
+      <div class="setBtns cfBtns"><button id="cfMake" type="button" disabled>만들기</button><button id="cfMax" type="button" disabled>최대로</button><button id="cfClear" type="button">칸 비우기</button></div>
+      <h3>내 재료 <small>누르고 → 칸을 눌러 놓기 · 놓인 칸을 누르면 빼기</small></h3>
+      <div class="cfMats" id="craftMats"></div>
+      <p class="setNote" id="cfNote"></p>
+    </section>
+  </div>
+  <div class="setCard cfMagic" id="craftBody" hidden></div>
 </div></div>
 <div id="fragBook" class="modalbox" hidden><div class="hv fbHv"><div class="hvClouds"></div>
   <div class="hvTop"><h2>📜 멸망 조각</h2><span class="bagCoin" id="fbCount"></span><button id="fbClose" class="hvX" type="button" aria-label="닫기">✕</button></div>

@@ -302,6 +302,17 @@
     g.fillStyle = '#c9c2b6'; for (let k = -2; k <= 2; k++) { g.beginPath(); g.moveTo(x + k * 5 - 2, y - 4); g.lineTo(x + k * 5, y - 12); g.lineTo(x + k * 5 + 2, y - 4); g.fill(); }
   }
   const STORE_ART = ['store2', 'store3', 'store4']; // 저장소 모습: 기본 → 목재 500 이상 → 1000 이상 (ninja/village.png 에서 자른 창고)
+  const BENCH_DX = -100; // 제작대: 저장소 왼쪽 (픽셀)
+  let BENCH_CV = null;
+  function benchArt() { if (BENCH_CV) return BENCH_CV; const c = document.createElement('canvas'); c.width = 22; c.height = 20; const g = c.getContext('2d'), R = (col, x, y, w, h) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+    const O = '#2b1a10'; R(O, 1, 4, 20, 9); R('#b9824a', 2, 5, 18, 3); R('#d9a566', 2, 5, 18, 1); R('#8a5a2e', 2, 8, 18, 4); // 상판 + 앞판
+    for (const x of [7, 13]) R('#7a4a22', x, 5, 1, 3); R('#7a4a22', 2, 6, 18, 1); // 상판 위 칸 무늬 (조합 칸)
+    R(O, 2, 12, 3, 7); R(O, 17, 12, 3, 7); R('#6e4422', 3, 12, 1, 6); R('#6e4422', 18, 12, 1, 6); // 다리
+    R('#5a3a1c', 5, 10, 12, 1); // 앞판 홈
+    R(O, 4, 0, 2, 5); R('#9a9a9a', 3, 0, 4, 2); R('#cfcfcf', 3, 0, 4, 1); // 망치
+    R(O, 15, 1, 5, 4); R('#c9c9c9', 15, 2, 4, 2); R('#8a5a2e', 18, 1, 2, 2); // 톱
+    return (BENCH_CV = c); }
+  function drawBench(g, x, y) { const prev = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.fillStyle = 'rgba(0,0,0,0.25)'; ell(g, x, y - 2, 22, 6); g.drawImage(benchArt(), x - 22, y - 40, 44, 40); g.imageSmoothingEnabled = prev; }
   function drawStore(g, x, y, nid) { // 수도 저장소 (크기에 맞춰 장작·코인·팻말 위치)
     const key = STORE_ART[(nationsPub[nid] && nationsPub[nid].storeLv) | 0], im = ART['x_' + key], w = im ? im.width * 2 : 96, h = im ? im.height * 2 : 80;
     pix(g, key, x, y + 4, 2); pix(g, 'woodpile', x + w / 2 + 12, y + 4, 2); pix(g, 'coinA', x - w / 2 - 8, y - 2, 0, 18);
@@ -1130,6 +1141,7 @@
   };
   let SHOP_KIND = 'build', SHOP_TAB = 'all', SHOP_NPC = 'build'; // 상점마다 자기 물건만 (건축 상점 안의 탭은 종류: 전체·바닥·방벽·덫, 나중에 테마)
   function openShop(tab = 'build', npcId) {
+    if (tab === 'build') { toast('건축 자재는 이제 우리 저장소 옆 제작대에서 재료로 만들어요 (만든 건 저장소로)'); return; }
     if (tab === 'craft' || (tab === 'weapon' && !MPRules.NUM.pvp.on)) { openCraft(); return; } // 작업대는 나라 없어도 됨
     const me = myView && myView.me;
     if (!me && tab !== 'hat' && tab !== 'weapon') { toast('나라가 있어야 살 수 있어요 (나라 공용 저장소에서 내요)'); return; } // 모자·무기는 내 코인이라 나라 없어도 됨
@@ -1163,7 +1175,7 @@
     else if (SHOP_KIND === 'hat') html = Object.entries(HATS).map(([k, H]) => { const owned = MY_HATS[k], wearing = player.look.hat === k, price = MPRules.HAT_PRICE[k]; return `<div class="hvCard"><canvas data-hat-ico="${k}" width="64" height="64"></canvas><div class="hvInfo"><b>${H.name}</b><small>머리 위에 써요 · 다른 사람에게도 보여요</small>${owned ? `<i>${wearing ? '✔ 쓰고 있어요' : '✔ 가지고 있어요'}</i>` : ''}</div><div class="hvBuy"><span class="price">👛 ${price}</span><div>${owned ? `<button type="button" data-wear="${wearing ? '' : k}">${wearing ? '벗기' : '쓰기'}</button>` : `<button type="button" data-buyhat="${k}" ${MY_PCOIN < price ? 'disabled' : ''}>사기</button>`}</div></div></div>`; }).join('');
     else if (SHOP_KIND === 'vaccine' && SHOP_TAB === 'tools') html = '<p class="stEmpty">🔨 도구는 이제 작업대에서 재료로 만들어요 · 상점가 오른쪽 아래 작업대, 또는 우리 저장소 옆</p>';
     else if (SHOP_KIND === 'vaccine') html = card('vaccine', '백신', '균열에서 영토 하나를 지켜요 · 살수록 비싸져요', me.vaccinePrice, null, me.vaccine);
-    else if (SHOP_TAB === 'buy') html = [['farm', '밭 1칸 · 설치 모드 농사 탭에서 발밑에 갈아요', [1, 5, 20]], ['canal', '수로 1칸 · 2칸 안의 작물이 20% 빨리 자라요 (사람은 못 지나감)', [1, 5]], ['fert', '심은 작물에 주면 남은 시간이 절반!', [1, 5]]].map(([id, d, c]) => card(id, BUILD_BY[id].name, d, BUILD_BY[id].price, c, me.items[id] || 0)).join('')
+    else if (SHOP_TAB === 'buy') html = '<p class="stEmpty">밭·수로는 우리 저장소 옆 제작대에서 재료로 만들어요</p>' + [['fert', '심은 작물에 주면 남은 시간이 절반!', [1, 5]]].map(([id, d, c]) => card(id, BUILD_BY[id].name, d, BUILD_BY[id].price, c, me.items[id] || 0)).join('')
       + Object.entries(CROPS).map(([k, c]) => card('s_' + k, c.name + ' 씨앗', `${fmtLeft(c.min * 60e3)} · ${c.yield}개 수확 · 1개 ${c.sell}코인에 팔림`, c.seed, [1, 5, 9], me.items['s_' + k] || 0)).join('');
     else { const owned = MPRules.BUILD.filter((b) => b.cat === 'crop' && (b.fish ? MY_BAG[b.id] > 0 : me.items[b.id] > 0)); html = owned.length ? owned.map((b) => { const n2 = b.fish ? MY_BAG[b.id] : me.items[b.id]; return `<div class="hvCard"><canvas data-ico="${b.id}" width="64" height="64"></canvas><div class="hvInfo"><b>${b.name}</b><small>1개 ${b.sell}코인 · ${b.fish ? '내 가방 → <b>100% 내 코인</b>' : '나라 저장소 → 나라 80% · 나 20%'}</small><i>가진 것 ${n2}개</i></div><div class="hvBuy"><span class="price"><span class="coinIco"></span>${(b.sell * n2).toLocaleString()}<small> 전부</small></span><div><button type="button" data-sell="${b.id}" data-n="1">1개</button><button type="button" data-sell="${b.id}" data-n="${n2}">전부</button></div></div></div>`; }).join('') : '<div class="hvSoon"><p><b>팔 작물·물고기가 없어요</b><br>밭에서 키우거나 물가에서 낚시해 보세요!<br><small>작물: 나라 80% · 판 사람 20% · 물고기: 100% 내 코인</small></p></div>'; }
     $('shopBody').innerHTML = html;
@@ -1910,21 +1922,62 @@
  on('pfCloset', () => { closeProfile(); $('btnCloset').click(); }); 
     for (const b of body.querySelectorAll('[data-hat]')) b.onclick = () => { player.look.hat = b.dataset.hat; relook(); };
   }
-  const CRAFT = { tab: 'tool' };
-  function openCraft() {
-    const tabs = [['tool', '🪓 도구'], ['light', '🔥 빛'], ['furniture', '🪑 가구'], ['magic', '✨ 마법석']];
-    $('craftTabs').innerHTML = tabs.map(([k, l]) => `<button type="button" data-ctab="${k}" aria-pressed="${k === CRAFT.tab}">${l}</button>`).join('');
-    for (const b of $('craftTabs').querySelectorAll('[data-ctab]')) b.onclick = () => { CRAFT.tab = b.dataset.ctab; openCraft(); };
+  const CRAFT = { tab: 'build', cells: null, brush: null, ghost: null, after: null };
+  function craftMagicList() { // 마법석 탭: 문제를 풀어 만드는 목록 (조합 칸 없음)
     const have = (k) => (k === 'fish' ? Object.entries(MY_BAG).filter(([q]) => q.startsWith('fi_')).reduce((a, [, v]) => a + v, 0) : MY_BAG[k] | 0), mname = (k) => (k === 'fish' ? '물고기' : (MPRules.MATS[k] || MPRules.RECIPE_BY[k] || { name: k }).name);
-    $('craftMats').textContent = Object.keys(MPRules.MATS).map((k) => `${MPRules.MATS[k].name} ${have(k)}`).join(' · ');
     $('craftBody').innerHTML = MPRules.RECIPES.filter((r) => r.cat === CRAFT.tab && (!r.hidden || MPRules.hiddenOpen(MY_SKILLS, r.el))).map((r) => { const owned = r.tool && MY_TOOLS[r.tool], ok = !owned && Object.entries(r.mats).every(([k, v]) => have(k) >= v);
       const need = Object.entries(r.mats).map(([k, v]) => `<span class="${have(k) >= v ? 'okm' : 'nom'}">${mname(k)} ${have(k)}/${v}</span>`).join(' ') + (r.quiz ? ` <span class="okm">+ ${r.quiz === 'hard' ? '어려운 ' : ''}수학 문제</span>` : '');
       return `<div class="hvCard"><canvas data-cr="${r.id}" width="64" height="64"></canvas><div class="hvInfo"><b>${r.name}${r.give > 1 ? ` ×${r.give}` : ''}</b><small>${r.desc || '내 가방에 들어가요 (놓기는 나중에)'}</small><i>${need}</i>${!r.tool && have(r.id) ? `<i>가진 것 ${have(r.id)}개</i>` : ''}</div><div class="hvBuy"><div><button type="button" data-craft="${r.id}" ${ok ? '' : 'disabled'}>${owned ? '✔ 있음' : '만들기'}</button></div></div></div>`; }).join('');
     for (const c of $('craftBody').querySelectorAll('[data-cr]')) { const r = MPRules.RECIPE_BY[c.dataset.cr], g = c.getContext('2d'); g.imageSmoothingEnabled = false; const T2 = r.tool && TOOL[r.tool];
       if (T2) { const k = Math.max(1, Math.min(56 / T2.cv.width, 56 / T2.cv.height) | 0); g.save(); g.translate(32, 32); g.rotate(0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); } else craftIcon(g, r.id); }
     for (const b of $('craftBody').querySelectorAll('[data-craft]')) b.onclick = () => { const r = MPRules.RECIPE_BY[b.dataset.craft]; if (!netOn) return; if (r.quiz) { $('craftBox').hidden = true; showQuiz(`✨ ${r.name} 만들기 · 맞히면 만들어져요`, r.quiz === 'hard' ? 5000 : 8000, (gr) => { if (gr !== 'miss') ws.send(JSON.stringify({ t: 'craft', id: r.id, n: 1, quiz: 'ok' })); else toast('문제를 틀려서 못 만들었어요 · 재료는 그대로예요'); setTimeout(openCraft, 900); }); return; } ws.send(JSON.stringify({ t: 'craft', id: b.dataset.craft, n: 1 })); };
+  }
+  // 제작대: 마크처럼 3×3 칸에 재료를 놓으면 조합법에 맞는 물건이 나옴
+  const CRAFT_TABS = [['build', '건축 자재'], ['tool', '도구'], ['deco', '빛·가구'], ['magic', '마법석']];
+  const recOfTab = (t) => MPRules.RECIPES.filter((r) => (t === 'deco' ? r.cat === 'light' || r.cat === 'furniture' : r.cat === t) && r.grid);
+  const cfPlaced = (k) => CRAFT.cells.filter((c) => c === k).length, cfFree = (k) => (MY_BAG[k] | 0) - cfPlaced(k);
+  const cfOwned = (r) => r.tool && MY_TOOLS[r.tool];
+  const cfTimes = (r) => Math.min(r.tool ? 1 : 20, ...Object.entries(r.mats).map(([k, v]) => Math.floor((MY_BAG[k] | 0) / v)));
+  function recIcon(cv, r) { const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); g.imageSmoothingEnabled = false; if (!r) return;
+    if (r.cat === 'build') { itemIcon(cv, r.item); return; }
+    const T2 = r.tool && TOOL[r.tool]; if (T2) { const k = Math.max(1, Math.min((cv.width - 8) / T2.cv.width, (cv.height - 8) / T2.cv.height) | 0); g.save(); g.translate(cv.width / 2, cv.height / 2); g.rotate(0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); return; }
+    g.save(); g.scale(cv.width / 64, cv.height / 64); craftIcon(g, r.id); g.restore(); }
+  function cfFill(r, force) { CRAFT.cells = Array(9).fill(null); CRAFT.ghost = r; if (!r) return; // 조합법을 누르면: 재료가 있으면 칸에 놓고, 없으면 흐린 모양만
+    const need = {}; r.grid.forEach((row, y) => [...row].forEach((c, x) => { const k = MPRules.GRID_KEY[c]; if (k) need[k] = (need[k] || 0) + 1; }));
+    if (!force && Object.entries(need).some(([k, v]) => (MY_BAG[k] | 0) < v)) return;
+    r.grid.forEach((row, y) => [...row].forEach((c, x) => { const k = MPRules.GRID_KEY[c]; if (k) CRAFT.cells[y * 3 + x] = k; })); }
+  function openCraft() {
+    if (!CRAFT.cells) CRAFT.cells = Array(9).fill(null);
+    $('craftTabs').innerHTML = CRAFT_TABS.map(([k, l]) => `<button type="button" data-ctab="${k}" aria-pressed="${k === CRAFT.tab}">${l}</button>`).join('');
+    for (const b of $('craftTabs').querySelectorAll('[data-ctab]')) b.onclick = () => { if (CRAFT.tab !== b.dataset.ctab) { CRAFT.tab = b.dataset.ctab; cfFill(null); } openCraft(); };
+    const magic = CRAFT.tab === 'magic'; $('cfGridView').hidden = magic; $('craftBody').hidden = !magic;
+    if (magic) { craftMagicList(); $('craftBox').hidden = false; return; }
+    for (const k of Object.keys(MPRules.MATS)) if (cfFree(k) < 0) { CRAFT.cells = Array(9).fill(null); break; } // 재료가 줄었으면 칸 비우기
+    // 조합법 목록
+    const recs = recOfTab(CRAFT.tab), mname = (k) => MPRules.MATS[k].name;
+    $('cfList').innerHTML = recs.map((r) => { const ok = cfTimes(r) > 0 && !cfOwned(r); return `<button type="button" class="cfRec${ok ? '' : ' no'}" data-rec="${r.id}" aria-pressed="${CRAFT.ghost === r}"><canvas width="40" height="40"></canvas><span>${r.name}${r.give > 1 ? ` ×${r.give}` : ''}<br><small>${cfOwned(r) ? '이미 있어요' : Object.entries(r.mats).map(([k, v]) => `${mname(k)} ${v}`).join(' · ')}</small></span><small>${ok ? '✓' : ''}</small></button>`; }).join('');
+    for (const b of $('cfList').querySelectorAll('[data-rec]')) { recIcon(b.querySelector('canvas'), MPRules.RECIPE_BY[b.dataset.rec]); b.onclick = () => { cfFill(MPRules.RECIPE_BY[b.dataset.rec]); openCraft(); }; }
+    // 3×3 칸
+    const ghostAt = (i) => { const r = CRAFT.ghost; if (!r) return null; const x = i % 3, y = (i / 3) | 0, row = r.grid[y]; return row && MPRules.GRID_KEY[row[x]] || null; };
+    $('cfGrid').innerHTML = CRAFT.cells.map((c, i) => `<button type="button" class="cfCell${!c && ghostAt(i) ? ' ghost' : ''}" data-cell="${i}" aria-label="칸 ${i + 1}${c ? ' · ' + mname(c) : ''}"><canvas width="48" height="48"></canvas></button>`).join('');
+    for (const b of $('cfGrid').querySelectorAll('[data-cell]')) { const i = +b.dataset.cell, k = CRAFT.cells[i] || ghostAt(i); if (k) persIcon(b.querySelector('canvas'), k);
+      b.onclick = () => { if (CRAFT.cells[i]) CRAFT.cells[i] = null; else { const k2 = CRAFT.brush && cfFree(CRAFT.brush) > 0 ? CRAFT.brush : (ghostAt(i) && cfFree(ghostAt(i)) > 0 ? ghostAt(i) : null); if (!k2) { toast(CRAFT.brush ? `${mname(CRAFT.brush)}이(가) 더 없어요` : '아래 내 재료를 먼저 골라요'); return; } CRAFT.cells[i] = k2; } openCraft(); };
+      b.oncontextmenu = (e) => { e.preventDefault(); CRAFT.cells[i] = null; openCraft(); }; }
+    // 결과
+    const r = MPRules.matchGrid(CRAFT.cells), can = r && !cfOwned(r) && !(r.cat === 'build' && !MY_NID), out = $('cfOut');
+    out.classList.toggle('ok', !!can); recIcon(out.querySelector('canvas'), r); out.querySelector('i').textContent = r && r.give > 1 ? r.give : '';
+    $('cfName').textContent = r ? `${r.name}${r.give > 1 ? ` ×${r.give}` : ''} → ${r.cat === 'build' ? '우리 저장소' : r.tool ? '내 도구' : '내 가방'}${cfOwned(r) ? ' (이미 있어요)' : ''}` : (CRAFT.cells.some(Boolean) ? '맞는 조합법이 없어요' : '재료를 칸에 놓아 보세요');
+    $('cfMake').disabled = !can; $('cfMax').disabled = !can || cfTimes(r) < 2; $('cfMax').textContent = can && cfTimes(r) > 1 ? `최대로 (${cfTimes(r)}번)` : '최대로';
+    // 내 재료
+    $('craftMats').innerHTML = Object.keys(MPRules.MATS).map((k) => `<button type="button" class="cfMat${cfFree(k) <= 0 ? ' zero' : ''}" data-mat="${k}" aria-pressed="${CRAFT.brush === k}" title="${mname(k)}"><canvas width="48" height="48"></canvas><i>${Math.max(0, cfFree(k))}</i></button>`).join('');
+    for (const b of $('craftMats').querySelectorAll('[data-mat]')) { persIcon(b.querySelector('canvas'), b.dataset.mat); b.onclick = () => { CRAFT.brush = CRAFT.brush === b.dataset.mat ? null : b.dataset.mat; openCraft(); }; }
+    $('cfNote').textContent = CRAFT.tab === 'build' ? (MY_NID ? '건축 자재는 우리 저장소로 들어가요 · 저장소 옆 제작대에서 만들고, 설치 모드(G)에서 꺼내 놓아요' : '건축 자재는 나라가 있어야 만들 수 있어요') : '도구·빛·가구는 내 가방으로 들어가요';
     $('craftBox').hidden = false;
   }
+  function cfMake(times) { const r = MPRules.matchGrid(CRAFT.cells); if (!r || !netOn) return; CRAFT.after = r; ws.send(JSON.stringify({ t: 'craft', id: r.id, n: times })); SND.play('coin'); }
+  $('cfMake').addEventListener('click', () => cfMake(1)); $('cfMax').addEventListener('click', () => { const r = MPRules.matchGrid(CRAFT.cells); if (r) cfMake(cfTimes(r)); });
+  $('cfOut').addEventListener('click', () => { if (!$('cfMake').disabled) cfMake(1); });
+  $('cfClear').addEventListener('click', () => { cfFill(null); openCraft(); });
   // 마법석 그림: 사용자 보석 그림(assets/ui/stone_1~3: Ⅰ 원석 · Ⅱ 결정 · Ⅲ 보석)을 속성 색으로 칠함
   const UIIMG = {}; for (const n of ['stone_1', 'stone_2', 'stone_3', 'mat_stone', 'mat_ore']) { const im = new Image(); im.src = 'assets/ui/' + n + '.png'; UIIMG[n] = im; }
   const stoneCache = {};
@@ -2726,6 +2779,7 @@
       if (b.att === MY_NID) return { kind: 'reinforce', battle: b.id, text: '전선 진지 · 병력 충원·빼기 (E)' };
       return { kind: 'info', text: '우리가 막는 전선 진지 · 방어 배치는 왕이 전쟁 창(B)에서 정해요' };
     }
+    for (const [i, nid] of STORE_AT) if (nid === MY_NID && Math.hypot((i % W) + 0.5 + BENCH_DX / TILE - ptx, Math.floor(i / W) + 0.5 - pty) < 1.4) return { kind: 'bench', text: '제작대 · 조합해서 만들기' };
     for (const [i, nid] of STORE_AT) if (Math.hypot((i % W) + 0.5 - ptx, Math.floor(i / W) + 0.5 - pty) < 1.9) {
       if (nid === MY_NID) return player.carry ? { kind: 'deposit', text: '훔쳐 온 것 저장소에 넣기' } : { kind: 'store', text: '우리 저장소 열기' };
       if (!MY_NID) return { kind: 'info', text: `${natName(nid)} 저장소` };
@@ -2828,12 +2882,12 @@
     $('storeName').textContent = `${natName(MY_NID)} 저장소`;
     $('storeRes').innerHTML = [['army', '병력', me.army], ['wood', '목재', me.wood], ['stone', '돌', me.stone], ['ore', '광석', me.ore], ['vaccine', '백신', me.vaccine]].map(([k, l, v]) => `<div class="stR"><canvas data-res="${k}" width="56" height="56"></canvas><span>${l}</span><b>${(v || 0).toLocaleString()}</b></div>`).join('');
     for (const c of $('storeRes').querySelectorAll('[data-res]')) resIcon(c, c.dataset.res);
-    const TABS = [['all', '전체'], ['build', '🏗 건축'], ['farm', '🌱 농사'], ['crop', '🧺 작물·물고기']];
-    const inTab = (b) => STORE_TAB === 'all' || (STORE_TAB === 'build' ? ['floor', 'wall', 'deco', 'trap'].includes(b.cat) : STORE_TAB === 'farm' ? FARM_CATS.has(b.cat) : b.cat === 'crop');
+    const TABS = [['all', '전체'], ['build', '건축 자재'], ['farm', '농사'], ['crop', '작물·물고기']];
+    const inTab = (b) => STORE_TAB === 'all' || (STORE_TAB === 'build' ? ['floor', 'wall', 'deco', 'trap', 'bridge'].includes(b.cat) : STORE_TAB === 'farm' ? FARM_CATS.has(b.cat) : b.cat === 'crop');
     $('storeTabs').innerHTML = TABS.map(([k, l]) => `<button type="button" data-st="${k}" aria-pressed="${k === STORE_TAB}">${l}</button>`).join('');
     for (const b of $('storeTabs').querySelectorAll('[data-st]')) b.onclick = () => { STORE_TAB = b.dataset.st; openStore(); };
     const own = MPRules.BUILD.filter((b) => (me.items[b.id] || 0) > 0 && inTab(b));
-    $('storeBody').innerHTML = own.length ? own.map((b) => `<div class="stItem"><canvas data-ico="${b.id}" width="64" height="64"></canvas><span>${b.name}</span><i>${me.items[b.id]}</i></div>`).join('') : `<p class="stEmpty">${STORE_TAB === 'crop' ? '아직 수확한 작물이 없어요 · 밭에서 키워 보세요' : '아직 없어요 · 하늘 천상 상점가에서 사요'}</p>`;
+    $('storeBody').innerHTML = own.length ? own.map((b) => `<div class="stItem"><canvas data-ico="${b.id}" width="64" height="64"></canvas><span>${b.name}</span><i>${me.items[b.id]}</i></div>`).join('') : `<p class="stEmpty">${STORE_TAB === 'crop' ? '아직 수확한 작물이 없어요 · 밭에서 키워 보세요' : '아직 없어요 · 옆 제작대에서 재료로 만들어요'}</p>`;
     for (const c of $('storeBody').querySelectorAll('[data-ico]')) itemIcon(c, c.dataset.ico);
     $('storeBox').hidden = false;
   }
@@ -2859,6 +2913,7 @@
   function interact() {
     if (!near) return;
     if (near.kind === 'store') { openStore(); return; }
+    if (near.kind === 'bench') { CRAFT.tab = 'build'; openCraft(); return; }
     if (near.kind === 'shop') { openShop(); return; }
     if (near.kind === 'npc') { openTalk(near.npc); return; }
     if (near.kind === 'fish') { startFishing(near.x, near.y); return; }
@@ -3245,7 +3300,7 @@
       case 'cast': playCast(m); break;
       case 'stats': PF.stats = m.stats || {}; if (!$('profile').hidden) renderProfile(); break;
       case 'castOk': { if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); } if (m.cd) { SKCD[m.slot] = performance.now() + m.cd * 1000; SKCDLEN[m.slot] = m.cd * 1000; } if (m.text) toast(m.text); break; }
-      case 'bag': MY_BAG = m.bag || {}; if (!$('profile').hidden) renderProfile(); if (!$('bagBox').hidden) openBag(); if (!$('shopBox').hidden) renderShop(); if (!$('craftBox').hidden) openCraft(); break;
+      case 'bag': MY_BAG = m.bag || {}; if (!$('profile').hidden) renderProfile(); if (!$('bagBox').hidden) openBag(); if (!$('shopBox').hidden) renderShop(); if (CRAFT.after) { cfFill(CRAFT.after); CRAFT.after = null; } if (!$('craftBox').hidden) openCraft(); break;
       case 'tradeReq': $('trqText').textContent = `${m.name}님이 거래를 신청했어요`; $('tradeReq').hidden = false; $('tradeReq').dataset.from = m.from; SND.play('ok'); clearTimeout(window.__trq); window.__trq = setTimeout(() => { $('tradeReq').hidden = true; }, 25000); break;
       case 'tradeOpen': $('tradeReq').hidden = true; openTrade(m); break;
       case 'tradeState': if (m.tid === TRADE.tid) { TRADE.offer = m.offer; TRADE.ready = m.ready; TRADE.go = m.go; renderTrade(); } break;
@@ -3731,7 +3786,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), face: (f) => { if (testMode) player.face = f; }, near: () => (testMode ? JSON.stringify(near && { kind: near.kind, text: near.text }) + ' ft=' + facingTile() + ' ga=' + JSON.stringify(groundAction()) + ' tA=' + treeAt(...facingTile()) + ' on=' + ONLINE : null), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { benchPos: () => { for (const [i, nid] of STORE_AT) if (nid === MY_NID) return [(i % W) + 0.5 + BENCH_DX / TILE, Math.floor(i / W) + 0.5]; return null; }, playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), face: (f) => { if (testMode) player.face = f; }, near: () => (testMode ? JSON.stringify(near && { kind: near.kind, text: near.text }) + ' ft=' + facingTile() + ' ga=' + JSON.stringify(groundAction()) + ' tA=' + treeAt(...facingTile()) + ' on=' + ONLINE : null), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
@@ -4319,7 +4374,7 @@
       const pr = GPROPS.get(i); if (pr) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawProp(g, pr.r, X, Y) });
     }
     for (const n of nodes) if (!gone[n.id] && n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1 && !(build.moving && build.moving.kind === 'mine' && build.moving.terr === n.id)) list.push({ x: n.x, y: n.y, draw: (g, X, Y) => drawOre(g, X, Y, mined.has(n.id)) });
-    for (const [i, nid] of STORE_AT) { if (build.moving && build.moving.kind === 'store' && nid === MY_NID) continue; const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); }
+    for (const [i, nid] of STORE_AT) { if (build.moving && build.moving.kind === 'store' && nid === MY_NID) continue; const X = (i % W) * TILE + 16, Y = Math.floor(i / W) * TILE + 30; if (X > x0 && X < x1 && Y > y0 && Y < y1) list.push({ x: X, y: Y, draw: (g, a, b) => drawStore(g, a, b, nid) }); if (nid === MY_NID) { const bx = X + BENCH_DX; list.push({ x: bx, y: Y, draw: (g, a, b) => { drawBench(g, a, b); sign(g, a, b - 58, '제작대'); } }); } }
     { // 무너진 땅 위로 피어오르는 보라 기운
       const now2 = performance.now() / 1000;
       for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) { const q = terrAt(tx, ty); if (!(q > 0 && gone[q])) continue; const hh = hash(tx, ty, 77); if (hh > 0.14) continue; const k = (now2 * (0.3 + hh * 2) + hh * 9) % 1; ctx.globalAlpha = 0.8 * (1 - k); ctx.fillStyle = hh < 0.05 ? '#ff9cff' : '#b45cf0'; ctx.fillRect(tx * TILE + 8 + Math.sin(now2 * 2 + hh * 20) * 6, ty * TILE + 28 - k * 46, 4, 4); }

@@ -802,6 +802,7 @@ wss.on('connection', (ws) => {
         if (item.startsWith('tool_')) return send(ws, { t: 'err', text: '도구는 작업대에서 재료로 만들어요' });
         if (item.startsWith('tool_') && TOOLS[item.slice(5)]) { const k = item.slice(5); if (needTool(s, k)) return send(ws, { t: 'err', text: `이미 ${TOOLS[k].name}이(가) 있어요` }); if ((s.acc.pcoin || 0) < TOOLS[k].price) return send(ws, { t: 'err', text: `내 코인이 ${TOOLS[k].price - (s.acc.pcoin || 0)} 모자라요` }); s.acc.pcoin -= TOOLS[k].price; s.acc.tools = Object.assign({}, s.acc.tools, { [k]: 1 }); dirty = true; send(ws, { t: 'tools', tools: s.acc.tools, pcoin: s.acc.pcoin, text: `${TOOLS[k].name}을(를) 샀어요! 이제 ${TOOLS[k].use}을(를) 할 수 있어요` }); return; } // 도구: 사람마다
         const B = BUILD_BY[item], mc = MPRules.costOf(B);
+        if (B && MPRules.BUILD_RECIPE[item]) return send(ws, { t: 'err', text: '건축 자재는 이제 우리 저장소 옆 제작대에서 재료로 만들어요' });
         if (B && B.cat !== 'crop' && mc) { // 건축물: 나라 저장소의 목재·돌·광석으로 만들기 (나라 코인 없음)
           const lack = Object.entries(mc).filter(([k, v]) => (n[k] || 0) < v * cnt).map(([k, v]) => `${MPRules.MAT_NAME[k]} ${v * cnt - (n[k] || 0)}`);
           if (lack.length) return send(ws, { t: 'err', text: `우리 저장소 재료가 모자라요: ${lack.join(', ')} · 채집해서 저장소에 넣어요` });
@@ -980,8 +981,9 @@ wss.on('connection', (ws) => {
       case 'stats': { send(ws, { t: 'stats', stats: s.acc.stats || {} }); break; } // 프로필 통계
       case 'craft': { // 작업대: 내 가방 재료로 도구·횃불·가구 만들기 (하늘 상점가 작업대, 또는 우리 저장소 옆)
         const R = MPRules.RECIPE_BY[String(m.id || '')], cnt = Math.max(1, Math.min(20, m.n | 0)); if (!R) return;
-        const n = world.nationOfPlayer(s.token), here = (s.scene === 'sky' && s.room === 'market') || (s.scene === 'ground' && n && nearStore(s, n, 3));
+        const n = world.nationOfPlayer(s.token), here = (s.scene === 'sky' && s.room === 'market') || (s.scene === 'ground' && n && nearStore(s, n, 4.6)); // 저장소 옆 제작대 (저장소에서 3칸 왼쪽)
         if (!here) return send(ws, { t: 'err', text: '작업대 앞에서 만들어요 (하늘 상점가, 또는 우리 저장소 옆)' });
+        if (R.cat === 'build' && !(n && s.scene === 'ground' && nearStore(s, n, 4.6))) return send(ws, { t: 'err', text: '건축 자재는 우리 저장소 옆 제작대에서 만들어요 (나라가 있어야 해요)' });
         if (R.tool && needTool(s, R.tool)) return send(ws, { t: 'err', text: `이미 ${R.name}이(가) 있어요` });
         const k2 = R.tool || R.cat === 'magic' ? 1 : cnt; s.acc.bag = s.acc.bag || {};
         if (R.hidden && !MPRules.hiddenOpen(s.acc.skills || {}, R.el)) return send(ws, { t: 'err', text: '아직 알 수 없는 힘이에요' });
@@ -993,7 +995,9 @@ wss.on('connection', (ws) => {
         if (lack.length) return send(ws, { t: 'err', text: `재료가 모자라요: ${lack.join(', ')}` });
         for (const [k, v] of Object.entries(R.mats)) { if (k === 'fish') { let left = v * k2; for (const fk of Object.keys(s.acc.bag)) { if (!fk.startsWith('fi_') || left <= 0) continue; const t2 = Math.min(left, s.acc.bag[fk]); s.acc.bag[fk] -= t2; left -= t2; if (!s.acc.bag[fk]) delete s.acc.bag[fk]; } continue; } s.acc.bag[k] -= v * k2; if (!s.acc.bag[k]) delete s.acc.bag[k]; }
         if (R.daily) s.acc.ms3Day = gameDayKey(); stat(s.acc, 'craft');
-        if (R.tool) { s.acc.tools = s.acc.tools || {}; s.acc.tools[R.tool] = 1; send(ws, { t: 'tools', tools: s.acc.tools, text: `🔨 ${R.name}을(를) 만들었어요!` }); }
+        if (R.cat === 'build') { const g = (R.give || 1) * k2; n.items = normItems(n.items); n.items[R.item] = (n.items[R.item] || 0) + g; sendViews([n.id]); // 건축 자재 → 나라 저장소
+          send(ws, { t: 'ok', text: `🔨 ${R.name} ${g}개 → 우리 저장소` }); notifyNation(n.id, `🔨 ${s.acc.name}님이 ${R.name} ${g}개를 만들어 저장소에 넣었어요`); }
+        else if (R.tool) { s.acc.tools = s.acc.tools || {}; s.acc.tools[R.tool] = 1; send(ws, { t: 'tools', tools: s.acc.tools, text: `🔨 ${R.name}을(를) 만들었어요!` }); }
         else { const g = (R.give || 1) * k2; s.acc.bag[R.id] = (s.acc.bag[R.id] || 0) + g; send(ws, { t: 'ok', text: `🔨 ${R.name} ${g}개를 만들었어요 (내 가방)` }); }
         dirty = true; send(ws, { t: 'bag', bag: s.acc.bag }); break;
       }
