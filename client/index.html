@@ -599,79 +599,67 @@ body.building #prompt { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); 
 .trPick { display: flex; flex-direction: column; align-items: center; width: 64px; min-height: 0; padding: 2px; background: #fff !important; color: #2b2340 !important; border: 2px solid #c9cfdc !important; border-image: none !important; box-shadow: none !important; text-shadow: none !important; } .trPick canvas { width: 36px; height: 36px; image-rendering: pixelated; } .trPick small { font-size: 10px; line-height: 1.1; text-align: center; } .trPick:disabled { opacity: 0.35; }
 #pmenu { position: fixed; z-index: 29; min-width: 170px; background: #fffaf0; border: 3px solid #b8862b; box-shadow: 0 0 0 2px #2b2340, 0 6px 16px rgba(0,0,0,0.3); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; color: #2b2340; } #pmenu[hidden] { display: none; } #pmenu b { font-size: 13px; } #pmenu small { font-size: 11px; } #pmenu button { min-height: 32px; font-size: 13px; } #pmenu button:disabled { opacity: 0.55; }
 .bagJob { font-size: 12px; color: #6b4fb3; margin-right: 10px; }
-/* ===== 프로필: 어두운 마법서 (스킬 트리와 같은 밤하늘 색 · 고운 바탕 글꼴 · 책장 넘김) ===== */
-@font-face { font-family: 'Gowun Batang'; src: url(assets/fonts/GowunBatang-Regular.sub.woff2) format('woff2'); font-display: swap; }
-@font-face { font-family: 'Gowun Batang'; src: url(assets/fonts/GowunBatang-Bold.sub.woff2) format('woff2'); font-weight: 700; font-display: swap; }
-#profile { z-index: 40; background: rgba(4,8,11,.62); --bk-serif: 'Gowun Batang', 'Nanum Myeongjo', 'AppleMyungjo', 'Batang', serif; --bk-ink: #ece4cf; --bk-soft: #9aa7ad; --bk-gold: #d2b06a; --bk-glow: #6fe3ff; --bk-line: rgba(210,176,106,.32); perspective: 2200px; }
-#profile .book { position: relative; width: min(1040px, 94vw); height: min(660px, 90vh); display: grid; grid-template-columns: 0.85fr 1.15fr; padding: 0; filter: drop-shadow(0 18px 30px rgba(0,0,0,.55)) drop-shadow(0 0 30px rgba(60,170,220,.12));
-  background: radial-gradient(120% 90% at 30% 15%, #1d2f38 0%, #0f1a20 55%, #060b0e 100%); box-shadow: inset 0 0 0 1px rgba(111,227,255,.12), inset 0 0 0 7px rgba(0,0,0,.35), inset 0 0 0 8px rgba(210,176,106,.45), 0 0 40px rgba(60,170,220,.18), 0 30px 60px rgba(0,0,0,.6);
-  transform-style: preserve-3d; animation: bookIn .5s cubic-bezier(.2,.8,.25,1); font-family: var(--bk-serif); color: var(--bk-ink); transition: transform .45s cubic-bezier(.5,0,.7,.4), opacity .45s, filter .45s; }
-#profile .book.toMagic { transform: scale(1.12); opacity: 0; filter: blur(6px) brightness(1.8) hue-rotate(-10deg); }
-@keyframes bookIn { from { transform: translateY(24px) scale(.92); opacity: 0; } to { transform: none; opacity: 1; } }
-/* 사용자 도감 그림을 어둡게 다시 그린 픽셀 틀 (assets/ui/book_*.png, 9조각 늘이기) */
-#profile .page, .pfLeaf > div { border-style: solid; image-rendering: pixelated; background: none; }
-#profile .page.left, .pfLeaf > .pgL { border-width: 27px 12px 36px 30px; border-image: url(assets/ui/book_l.png) 9 4 12 10 fill / 27px 12px 36px 30px round; }
-#profile .page.right, .pfLeaf > .pgR { border-width: 27px 30px 36px 12px; border-image: url(assets/ui/book_r.png) 9 10 12 4 fill / 27px 30px 36px 12px round; }
-#profile .page { position: relative; z-index: 1; min-width: 0; overflow: hidden; padding: 8px 14px 4px; color: var(--bk-ink); }
-#profile .page.left { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-#profile .page.right { display: flex; flex-direction: column; overflow: visible; }
+/* ===== 프로필: 도감 책 (게임과 같은 나무·양피지 색, 사용자 도감 그림을 다시 그린 픽셀 틀) ===== */
+#profile { z-index: 40; --bk-ink: #4a2c16; --bk-soft: #8a6238; --bk-gold: #a8742c; --bk-line: rgba(168,116,44,.35); }
+#profile .book { position: relative; width: min(1040px, 94vw); height: min(660px, 90vh); display: grid; grid-template-columns: 0.85fr 1.15fr; padding: 0; filter: drop-shadow(0 16px 26px rgba(0,0,0,.5));
+  animation: bookIn .3s cubic-bezier(.2,.8,.25,1); font-family: var(--font-body); color: var(--bk-ink); transition: transform .35s cubic-bezier(.5,0,.7,.4), opacity .35s; perspective: 2000px; }
+#profile .book.toMagic { transform: scale(1.08); opacity: 0; }
+@keyframes bookIn { from { transform: translateY(18px) scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+#profile .page { position: relative; z-index: 1; min-width: 0; overflow: hidden; padding: 6px 14px 4px; color: var(--bk-ink); border-style: solid; image-rendering: pixelated; }
+#profile .page.left { border-width: 27px 12px 36px 30px; border-image: url(assets/ui/book_l.png) 9 4 12 10 fill / 27px 12px 36px 30px round; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+#profile .page.right { border-width: 27px 30px 36px 12px; border-image: url(assets/ui/book_r.png) 9 10 12 4 fill / 27px 30px 36px 12px round; display: flex; flex-direction: column; }
 .pfClasp { position: absolute; left: calc(42.5% - 12px); bottom: -9px; width: 24px; height: 15px; z-index: 3; background: url(assets/ui/book_clasp.png) 0 0 / 100% 100%; image-rendering: pixelated; pointer-events: none; }
-.pfTitle { font-size: 12px; letter-spacing: .35em; color: var(--bk-gold); margin-top: 2px; display: flex; align-items: center; gap: 10px; }
-.pfTitle::before, .pfTitle::after { content: ''; width: 40px; height: 1px; background: linear-gradient(90deg, transparent, var(--bk-gold)); } .pfTitle::after { transform: scaleX(-1); }
-#pfChar { width: 168px; height: 168px; image-rendering: pixelated; flex: none; background: radial-gradient(closest-side, rgba(111,227,255,.16), transparent); border-radius: 50%; }
-.pfName { font-size: 26px; font-weight: 700; letter-spacing: .02em; } .pfSub { font-size: 13px; color: var(--bk-soft); text-align: center; }
-#pfRadar { width: 100%; max-width: 300px; flex: none; margin-top: 14px; overflow: visible; }
-#pfRadar text { font-family: var(--bk-serif); fill: var(--bk-soft); font-size: 11px; } #pfRadar text.v { fill: var(--bk-ink); font-size: 11px; font-weight: 700; }
-.pfStatline { display: flex; gap: 18px; font-size: 13px; color: var(--bk-soft); margin-top: auto; padding-top: 8px; border-top: 1px solid var(--bk-line); width: 100%; max-width: 260px; justify-content: center; } .pfStatline b { color: var(--bk-ink); font-weight: 700; margin-left: 6px; }
-/* 책갈피 리본: 사용자 도감 그림의 리본 (오른쪽 옆) */
+/* 왼쪽: 명찰 + 캐릭터 + 오각형 */
+.pfPlate { position: relative; width: min(100%, 300px); aspect-ratio: 400 / 110; background: url(assets/ui/nameplate.png) 0 0 / 100% 100% no-repeat; display: grid; place-items: center; margin-top: 4px; flex: none; }
+.pfPlate b { font-family: var(--font-display); font-weight: 400; font-size: 22px; color: #fff3d6; text-shadow: 0 2px 0 #4a2c16; letter-spacing: .04em; transform: translateX(-6%); }
+.pfSub { font-size: 13px; color: var(--bk-soft); text-align: center; }
+#pfChar { width: 144px; height: 144px; image-rendering: pixelated; flex: none; }
+#pfRadar { width: 100%; max-width: 270px; flex: none; margin-top: 2px; overflow: visible; }
+#pfRadar text { font-family: var(--font-body); fill: var(--bk-soft); font-size: 11px; } #pfRadar text.v { fill: var(--bk-ink); font-weight: 700; }
+.pfStatline { display: flex; gap: 18px; font-size: 13px; color: var(--bk-soft); margin-top: auto; padding-top: 6px; border-top: 2px dotted var(--bk-line); width: 100%; max-width: 260px; justify-content: center; } .pfStatline b { color: var(--bk-ink); margin-left: 6px; }
+.pfCoinIco { width: 18px; height: 19px; image-rendering: pixelated; vertical-align: -4px; margin-right: 5px; }
+/* 책갈피 리본 (오른쪽 옆) */
 .bmarks { position: absolute; top: 40px; right: -62px; display: flex; flex-direction: column; gap: 4px; z-index: 0; }
-.bmarks button { all: unset; cursor: pointer; width: 72px; height: 63px; background: var(--rib) 0 0 / 100% 100% no-repeat; image-rendering: pixelated; transform: translateX(-10px); transition: transform .18s ease, filter .18s; filter: brightness(.62) saturate(.7); position: relative; }
-.bmarks button span { position: absolute; left: 100%; top: 50%; transform: translate(6px, -50%); white-space: nowrap; font-family: var(--bk-serif); font-size: 13px; color: var(--bk-ink); background: rgba(6,12,16,.85); padding: 3px 8px; border-radius: 4px; opacity: 0; pointer-events: none; transition: opacity .15s; } .bmarks button:hover span, .bmarks button:focus-visible span { opacity: 1; }
+.bmarks button { all: unset; cursor: pointer; width: 72px; height: 63px; background: var(--rib) 0 0 / 100% 100% no-repeat; image-rendering: pixelated; transform: translateX(-12px); transition: transform .15s ease, filter .15s; filter: brightness(.82); position: relative; }
+.bmarks button span { position: absolute; left: 100%; top: 50%; transform: translate(6px, -50%); white-space: nowrap; font-size: 13px; color: #fff3d6; background: rgba(58,38,22,.92); padding: 3px 8px; opacity: 0; pointer-events: none; transition: opacity .15s; } .bmarks button:hover span, .bmarks button:focus-visible span { opacity: 1; }
 .bmarks button[data-pf=bag] { --rib: url(assets/ui/rib_bag.png); } .bmarks button[data-pf=magic] { --rib: url(assets/ui/rib_magic.png); } .bmarks button[data-pf=look] { --rib: url(assets/ui/rib_look.png); } .bmarks button[data-pf=stats] { --rib: url(assets/ui/rib_stats.png); }
-.bmarks button:hover { transform: translateX(-4px); filter: brightness(.85); } .bmarks button[aria-pressed="true"] { transform: translateX(0); filter: drop-shadow(0 0 6px rgba(111,227,255,.35)); }
-.bmarks button:focus-visible { outline: 2px solid var(--bk-glow); outline-offset: 2px; }
-.pfBody { flex: 1; overflow-y: auto; min-height: 0; padding: 4px 6px 4px 2px; position: relative; z-index: 1; scrollbar-width: thin; scrollbar-color: #2e4650 transparent; }
-.pfGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 10px; }
-.pfSlot { all: unset; box-sizing: border-box; position: relative; aspect-ratio: 1; border-radius: 12px; background: linear-gradient(#18282f, #111d23); box-shadow: inset 0 0 0 1px rgba(111,227,255,.1), inset 0 2px 6px rgba(0,0,0,.5); display: grid; place-items: center; transition: transform .15s, box-shadow .15s; }
-button.pfSlot { cursor: pointer; } button.pfSlot:hover { transform: translateY(-2px); box-shadow: inset 0 0 0 1px rgba(111,227,255,.35), 0 6px 14px rgba(0,0,0,.4); }
-.pfSlot[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--bk-gold), 0 0 12px rgba(210,176,106,.35); background: linear-gradient(#22343b, #172429); }
-.pfSlot canvas { width: 66%; height: 66%; image-rendering: pixelated; } .pfSlot i { position: absolute; right: 6px; bottom: 3px; font-style: normal; font-weight: 700; font-size: 13px; color: var(--bk-ink); }
-.pfSlot.empty { opacity: .4; } .pfSlot span { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font-size: 11px; color: var(--bk-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pfSlot.face canvas { width: 62%; height: 62%; margin-bottom: 12px; } .pfSlot.x { color: var(--bk-soft); font-size: 20px; }
-.pfSec { font-size: 15px; font-weight: 700; color: var(--bk-gold); margin: 18px 0 10px; display: flex; align-items: center; gap: 10px; letter-spacing: .05em; } .pfSec::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--bk-line), transparent); }
-.pfSec:first-child { margin-top: 0; } .pfSec small { font-weight: 400; color: var(--bk-soft); }
+.bmarks button:hover { transform: translateX(-6px); filter: none; } .bmarks button[aria-pressed="true"] { transform: translateX(0); filter: none; }
+.bmarks button:focus-visible { outline: 2px solid #fff3d6; outline-offset: 2px; }
+/* 오른쪽 내용 */
+.pfBody { flex: 1; overflow-y: auto; min-height: 0; padding: 4px 6px 4px 2px; scrollbar-width: thin; scrollbar-color: #c9a46a transparent; }
+.pfGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; } .pfGrid.faces { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
+.pfSlot { all: unset; box-sizing: border-box; position: relative; aspect-ratio: 1; background: #e3c48e; box-shadow: inset 0 0 0 2px #a8824e, inset 2px 2px 0 2px #f5e3bb, inset -2px -2px 0 2px #c9a46a; display: grid; place-items: center; }
+button.pfSlot { cursor: pointer; } button.pfSlot:hover { background: #ecd09e; }
+.pfSlot[aria-pressed="true"] { background: #f6e2b0; box-shadow: inset 0 0 0 3px #7a4a1c, inset 3px 3px 0 3px #fff3d6; }
+.pfSlot canvas { width: 70%; height: 70%; image-rendering: pixelated; } .pfSlot i { position: absolute; right: 5px; bottom: 2px; font-style: normal; font-weight: 700; font-size: 13px; color: #fff; text-shadow: 0 1px 0 #3a2616, 1px 0 0 #3a2616, -1px 0 0 #3a2616, 0 -1px 0 #3a2616; }
+.pfSlot.empty { opacity: .55; } .pfSlot.face canvas { width: 82%; height: 82%; } .pfSlot.x { color: var(--bk-soft); font-size: 20px; }
+.pfSec { font-family: var(--font-display); font-size: 16px; color: #7a4a1c; margin: 16px 0 8px; display: flex; align-items: center; gap: 10px; } .pfSec::after { content: ''; flex: 1; border-bottom: 2px dotted var(--bk-line); }
+.pfSec:first-child { margin-top: 2px; } .pfSec small { font-family: var(--font-body); font-size: 12px; color: var(--bk-soft); }
 .pfMsg { font-size: 13px; color: var(--bk-soft); margin: 4px 0; }
-.pfRow { display: flex; justify-content: space-between; padding: 9px 4px; border-bottom: 1px solid rgba(111,227,255,.08); font-size: 15px; } .pfRow b { font-variant-numeric: tabular-nums; color: var(--bk-gold); } .pfRow span { color: var(--bk-ink); }
-.pfBtn { all: unset; cursor: pointer; display: inline-block; font-family: var(--bk-serif); font-size: 14px; color: #061014; background: linear-gradient(#e6c987, #b8914f); padding: 9px 20px; border-radius: 999px; margin: 6px 6px 4px 0; box-shadow: 0 2px 10px rgba(210,176,106,.25); transition: transform .15s, box-shadow .15s; font-weight: 700; }
-.pfBtn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(210,176,106,.4); } .pfBtn:disabled { opacity: .45; cursor: default; } .pfBtn:focus-visible { outline: 2px solid var(--bk-glow); outline-offset: 2px; }
-.pfBtn.magic { color: #e9fbff; background: linear-gradient(#1f5d73, #123a49); box-shadow: 0 0 0 1px rgba(111,227,255,.45), 0 0 18px rgba(111,227,255,.25); }
-.pfSw { display: flex; flex-wrap: wrap; gap: 10px; } .pfSw button { all: unset; cursor: pointer; width: 32px; height: 32px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255,255,255,.25), 0 1px 4px rgba(0,0,0,.5); transition: transform .15s; }
-.pfSw button:hover { transform: scale(1.1); } .pfSw button[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #fff, 0 0 0 3px var(--bk-gold); }
-.pfName2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; } .pfName2 b { font-size: 18px; } .pfName2 input { font-family: var(--bk-serif); font-size: 16px; padding: 7px 12px; border-radius: 8px; border: 1px solid #2e4650; background: #0b1418; width: 160px; color: var(--bk-ink); }
-#profile .bookX { all: unset; cursor: pointer; position: absolute; right: -8px; top: -12px; z-index: 6; width: 33px; height: 33px; background: url(assets/ui/book_x.png) 0 0 / 100% 100%; image-rendering: pixelated; font-size: 0; filter: drop-shadow(0 3px 4px rgba(0,0,0,.5)); } #profile .bookX:hover { filter: brightness(1.25) drop-shadow(0 3px 4px rgba(0,0,0,.5)); }
-/* 책장 넘김: 페이지 한 장이 책등을 축으로 넘어감 */
-.pfLeaf { position: absolute; z-index: 5; transform-style: preserve-3d; pointer-events: none; }
-.pfLeaf > div { position: absolute; inset: 0; backface-visibility: hidden; overflow: hidden; padding: 8px 14px 4px; display: flex; flex-direction: column; color: var(--bk-ink); }
-.pfLeaf > .back { transform: rotateY(180deg); }
-.pfLeaf.fwd { transform-origin: left center; animation: leafFwd .62s cubic-bezier(.45,.05,.3,1) forwards; }
-.pfLeaf.bwd { transform-origin: right center; animation: leafBwd .62s cubic-bezier(.45,.05,.3,1) forwards; }
-@keyframes leafFwd { 0% { transform: rotateY(0); } 100% { transform: rotateY(-180deg); } }
-@keyframes leafBwd { 0% { transform: rotateY(0); } 100% { transform: rotateY(180deg); } }
-.pfLeaf.fwd > .front, .pfLeaf.bwd > .front { animation: leafShade .62s ease-in forwards; }
-@keyframes leafShade { to { filter: brightness(.6); } }
-/* 처음 열 때: 표지가 넘어가며 펼쳐짐 */
-.pfCover { position: absolute; z-index: 7; transform-origin: left center; transform-style: preserve-3d; animation: coverOpen .85s cubic-bezier(.5,0,.25,1) .08s forwards; pointer-events: none; }
-.pfCover > div { position: absolute; inset: 0; backface-visibility: hidden; image-rendering: pixelated; }
-.pfCover > .front { border: 15px solid; border-image: url(assets/ui/book_cover.png) 5 fill / 15px round; display: grid; place-items: center; }
-.pfCover > .front svg { width: 46%; max-width: 230px; filter: drop-shadow(0 0 10px rgba(111,227,255,.45)); }
-.pfCover > .back { transform: rotateY(180deg); background: #0f1a1f; box-shadow: inset 0 0 0 3px #05090b; }
-@keyframes coverOpen { 70% { opacity: 1; } to { transform: rotateY(-180deg); opacity: .0; } }
-#skillBox:not([hidden]) .skWrap { animation: skIn .45s cubic-bezier(.2,.8,.25,1); } @keyframes skIn { from { transform: scale(.88); opacity: 0; filter: blur(6px) brightness(1.8); } to { transform: none; opacity: 1; filter: none; } }
-@media (prefers-reduced-motion: reduce) { #profile .book, #skillBox .skWrap { animation: none !important; transition: none; } .pfLeaf, .pfCover { display: none; } }
-@media (max-width: 760px) { #profile .book { grid-template-columns: 1fr; height: 92vh; overflow-y: auto; } .pfLeaf, .pfCover, .pfClasp { display: none; } .bmarks { position: static; flex-direction: row; margin: 0 0 8px; } .bmarks button { transform: none; width: 56px; height: 49px; } .bmarks button span { display: none; } #profile .page.right { overflow: hidden; } }
+.pfRow { display: flex; justify-content: space-between; padding: 8px 4px; border-bottom: 2px dotted var(--bk-line); font-size: 14px; } .pfRow b { font-variant-numeric: tabular-nums; color: #7a4a1c; }
+.pfBtn { font-size: 14px; min-height: 40px; padding: 0 14px; margin: 6px 6px 4px 0; }
+.pfSw { display: flex; flex-wrap: wrap; gap: 8px; } .pfSw button { all: unset; cursor: pointer; width: 30px; height: 30px; box-shadow: inset 0 0 0 2px #3a2616, inset 0 0 0 4px rgba(255,255,255,.35); }
+.pfSw button[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #3a2616, inset 0 0 0 4px #fff3d6, 0 0 0 3px #7a4a1c; }
+.pfName2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; } .pfName2 b { font-size: 16px; } .pfName2 input { font-family: var(--font-body); font-size: 15px; padding: 6px 10px; border: 2px solid #a8824e; background: #fff8e6; width: 160px; color: var(--bk-ink); }
+#profile .bookX { all: unset; cursor: pointer; position: absolute; right: -8px; top: -12px; z-index: 6; width: 33px; height: 33px; background: url(assets/ui/book_x.png) 0 0 / 100% 100%; image-rendering: pixelated; font-size: 0; filter: drop-shadow(0 3px 3px rgba(0,0,0,.45)); } #profile .bookX:hover { filter: brightness(1.15) drop-shadow(0 3px 3px rgba(0,0,0,.45)); }
+/* 책장 넘김: 오른쪽 장만 책등 쪽으로 반 바퀴 (옛 내용이 넘어가며 새 내용이 드러남) */
+.pfLeaf { position: absolute; z-index: 5; pointer-events: none; transform-origin: left center; border-style: solid; image-rendering: pixelated; border-width: 27px 30px 36px 12px; border-image: url(assets/ui/book_r.png) 9 10 12 4 fill / 27px 30px 36px 12px round; padding: 6px 14px 4px; overflow: hidden; display: flex; flex-direction: column; color: var(--bk-ink); animation: leafTurn .38s cubic-bezier(.55,0,.75,.5) forwards; }
+.pfLeaf.bwd { animation: leafBack .38s cubic-bezier(.25,.5,.45,1) forwards; }
+@keyframes leafTurn { from { transform: rotateY(0); filter: brightness(1); } to { transform: rotateY(-90deg); filter: brightness(.7); } }
+@keyframes leafBack { from { transform: rotateY(-90deg); filter: brightness(.7); } to { transform: rotateY(0); filter: brightness(1); } }
+@media (prefers-reduced-motion: reduce) { #profile .book { animation: none; transition: none; } .pfLeaf { display: none; } }
+@media (max-width: 760px) { #profile .book { grid-template-columns: 1fr; height: 92vh; overflow-y: auto; } .pfLeaf, .pfClasp { display: none; } .bmarks { position: static; flex-direction: row; margin: 0 0 8px; } .bmarks button { transform: none; width: 56px; height: 49px; } .bmarks button span { display: none; } }
 .bookX { position: absolute; right: -10px; top: -10px; z-index: 3; width: 36px; height: 36px; min-height: 0; padding: 0; border-image: none !important; border: 3px solid #3a2616; background: #e7d3a8; color: #3a2616; text-shadow: none; border-radius: 50%; font-size: 16px; }
 .icoBtn { display: inline-flex; align-items: center; gap: 6px; } .icoBtn img, .pxIco { image-rendering: pixelated; vertical-align: middle; } #miniCap .pxIco { margin-right: 4px; }
-.pfCoinIco { width: 18px; height: 19px; image-rendering: pixelated; vertical-align: -4px; margin-right: 5px; }
+/* 체력·마나: 사용자 하트 그림을 차분한 색으로 다시 그림 */
+body #vitals .vic { width: 26px; height: 24px; border: 0; background: none; font-size: 0; image-rendering: pixelated; position: relative; z-index: 1; margin-right: -10px; }
+body #vitals .vic.hp { background: url(assets/ui/hp_heart.png) 0 0 / 100% 100%; } body #vitals .vic.mp { background: url(assets/ui/mp_gem.png) 0 0 / 100% 100%; height: 26px; }
+body #vitals .vbar { width: 200px; height: 16px; border-radius: 0; background: none; border: 4px solid; border-image: url(assets/ui/vbar.png) 2 fill / 4px stretch; image-rendering: pixelated; overflow: visible; padding: 0; }
+body #vitals .vbar i { left: 0; top: 0; bottom: 0; }
+body #vitals .vbar.hp i { background: linear-gradient(#c45560 0 2px, transparent 2px), repeating-linear-gradient(90deg, #a8323e 0 14px, #7c2430 14px 16px); }
+body #vitals .vbar.mp i { background: linear-gradient(#5b8cc0 0 2px, transparent 2px), repeating-linear-gradient(90deg, #3a6ea8 0 14px, #29507e 14px 16px); }
+body #vitals .vbar b { font-size: 10px; text-shadow: 0 1px 0 #2a1810, 1px 0 0 #2a1810, -1px 0 0 #2a1810, 0 -1px 0 #2a1810; }
+#skillBox:not([hidden]) .skWrap { animation: skIn .35s cubic-bezier(.2,.8,.25,1); } @keyframes skIn { from { transform: scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
 /* ===== 설정 창 (나무 틀) ===== */
 .gearBtn { min-width: 44px; padding: 0 8px !important; display: grid; place-items: center; }
 /* 설정: 사용자 두루마리 그림을 다시 그린 픽셀 틀 (assets/ui/scroll.png) */
@@ -752,7 +740,7 @@ body.padEdit #skillPad { outline: 3px dashed #ffd34d; outline-offset: 8px; curso
 <div id="tools" class="hud">
   <button id="btnWar" type="button">나라 (B)</button><button id="btnCast" type="button">⚔ 영역전</button>
   <button id="btnHome" type="button">수도 (T)</button>
-  <button id="btnCoupon" type="button">쿠폰</button>
+  <button id="btnCoupon" type="button" hidden>쿠폰</button>
   <button id="btnBag" type="button" class="icoBtn"><img src="assets/ui/icon_bag.png" alt="" width="20" height="23">프로필 (I)</button>
   <button id="btnSet" type="button" class="gearBtn" title="설정" aria-label="설정"><img src="assets/ui/icon_gear.png" alt="" width="24" height="24" class="pxIco"></button>
   <button id="btnSkill" type="button" hidden>마법 (K)</button>
@@ -908,7 +896,7 @@ body.padEdit #skillPad { outline: 3px dashed #ffd34d; outline-offset: 8px; curso
 </div></div>
 <div id="profile" class="modalbox" hidden><div class="book">
   <button id="pfClose" class="bookX" type="button" aria-label="닫기">✕</button><i class="pfClasp"></i><div class="bmarks" id="pfTabs"><button type="button" data-pf="bag" aria-label="주머니"><span>주머니</span></button><button type="button" data-pf="magic" aria-label="마법"><span>마법</span></button><button type="button" data-pf="look" aria-label="꾸미기"><span>꾸미기</span></button><button type="button" data-pf="stats" aria-label="통계"><span>통계</span></button></div>
-  <div class="page left"><div class="pfTitle">모험가의 기록</div><canvas id="pfChar" width="168" height="168" aria-label="내 캐릭터"></canvas><div class="pfName" id="pfName"></div><div class="pfSub" id="pfSub"></div><svg id="pfRadar" viewBox="-130 -112 260 222" role="img" aria-label="스탯"></svg><div class="pfStatline" id="pfLine"></div></div>
+  <div class="page left"><div class="pfPlate"><b id="pfName"></b></div><canvas id="pfChar" width="144" height="144" aria-label="내 캐릭터"></canvas><div class="pfSub" id="pfSub"></div><svg id="pfRadar" viewBox="-130 -112 260 222" role="img" aria-label="스탯"></svg><div class="pfStatline" id="pfLine"></div></div>
   <div class="page right"><div class="pfBody" id="pfBody"></div></div>
 </div></div>
 <div id="setBox" class="modalbox" hidden><div class="setPanel">
@@ -920,6 +908,7 @@ body.padEdit #skillPad { outline: 3px dashed #ffd34d; outline-offset: 8px; curso
   <label class="setRow"><span>크기</span><input id="sPad" type="range" min="70" max="160" value="100"><output id="sPadV">100%</output></label>
   <div class="setBtns"><button id="sPadMove" type="button">위치 옮기기</button><button id="sPadReset" type="button">처음 자리로</button></div>
   <p class="setNote" id="sPadNote">위치 옮기기를 누르고 화면의 마법 버튼을 끌어다 놓으세요. 다 놓으면 다시 눌러 끝내요.</p></section>
+  <section class="setCard"><h3>쿠폰</h3><p class="setNote">점심시간에 받은 코드를 넣으면 선물을 받아요.</p><div class="setBtns"><button id="sCoupon" type="button">쿠폰 코드 넣기</button></div></section>
   <section class="setCard"><h3>기타</h3>
   <div class="setBtns"><button id="sReplay" type="button">오프닝 다시 보기</button></div></section>
 </div></div>

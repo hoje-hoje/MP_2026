@@ -1846,16 +1846,15 @@
   function pfRadar() { // 오각형 스탯: 속도·체력·방어·마력·행운 (0~10)
     const st = MPRules.statsOf(MY_SKILLS), R = 78, N = MPRules.STATS.length, pt = (i, r) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N; return [Math.cos(a) * r, Math.sin(a) * r]; };
     const poly = (r) => MPRules.STATS.map((_, i) => pt(i, typeof r === 'function' ? r(i) : r).map((v) => v.toFixed(1)).join(',')).join(' ');
-    let h = '<defs><radialGradient id="pfRg"><stop offset="0" stop-color="#6fe3ff" stop-opacity=".15"/><stop offset="1" stop-color="#6fe3ff" stop-opacity=".45"/></radialGradient></defs>';
-    for (const f of [1, .75, .5, .25]) h += `<polygon points="${poly(R * f)}" fill="${f === 1 ? 'rgba(111,227,255,.04)' : 'none'}" stroke="rgba(210,176,106,${f === 1 ? .55 : .2})" stroke-width="1"/>`;
-    MPRules.STATS.forEach((_, i) => { const [x, y] = pt(i, R); h += `<line x1="0" y1="0" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(210,176,106,.18)"/>`; });
-    h += `<polygon points="${poly((i) => R * st[MPRules.STATS[i][0]] / 10)}" fill="url(#pfRg)" stroke="#6fe3ff" stroke-width="1.6" stroke-linejoin="round" style="filter:drop-shadow(0 0 4px rgba(111,227,255,.6))"/>`;
-    MPRules.STATS.forEach(([k, nm], i) => { const [x, y] = pt(i, R * st[k] / 10); h += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.6" fill="#e9fbff"/>`; const [lx, ly] = pt(i, R + 18), anc = Math.abs(lx) < 8 ? 'middle' : lx > 0 ? 'start' : 'end';
+    let h = '<defs><radialGradient id="pfRg"><stop offset="0" stop-color="#e0a040" stop-opacity=".25"/><stop offset="1" stop-color="#c9772a" stop-opacity=".55"/></radialGradient></defs>';
+    for (const f of [1, .75, .5, .25]) h += `<polygon points="${poly(R * f)}" fill="${f === 1 ? 'rgba(255,248,230,.45)' : 'none'}" stroke="rgba(122,74,28,${f === 1 ? .6 : .22})" stroke-width="1"/>`;
+    MPRules.STATS.forEach((_, i) => { const [x, y] = pt(i, R); h += `<line x1="0" y1="0" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(122,74,28,.18)"/>`; });
+    h += `<polygon points="${poly((i) => R * st[MPRules.STATS[i][0]] / 10)}" fill="url(#pfRg)" stroke="#a0561e" stroke-width="1.6" stroke-linejoin="round"/>`;
+    MPRules.STATS.forEach(([k, nm], i) => { const [x, y] = pt(i, R * st[k] / 10); h += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.6" fill="#7a3e14"/>`; const [lx, ly] = pt(i, R + 18), anc = Math.abs(lx) < 8 ? 'middle' : lx > 0 ? 'start' : 'end';
       h += `<text x="${lx.toFixed(1)}" y="${(ly + (ly < -40 ? -4 : 4)).toFixed(1)}" text-anchor="${anc}">${nm} <tspan class="v">${st[k] % 1 ? st[k].toFixed(1) : st[k]}</tspan></text>`; });
     $('pfRadar').innerHTML = h; }
   // 고른 캐릭터만 (88명 → 16명). 숫자는 chars.json 순서 그대로라 저장된 모습과 맞음
-  const PICK_CHARS = [[3, '소년'], [87, '소녀'], [61, '공주'], [25, '기사'], [2, '사무라이'], [0, '닌자'], [35, '수도승'], [23, '사냥꾼'], [16, '에스키모'], [71, '마법사'], [67, '주술사'], [56, '귀족'], [81, '마을 사람'], [79, '뱀파이어'], [69, '해골'], [28, '사자 소년']];
-  const pickChars = () => { const cur = (player.look.char | 0) - USER.chars.length, l = PICK_CHARS.slice(); if (cur >= 0 && CHARS.names[cur] && !l.some(([j]) => j === cur)) l.unshift([cur, '지금 모습']); return l.filter(([j]) => CHARS.names[j]); };
+  const pickChars = () => CHARS.names.map((n, j) => [j, n]); // 캐릭터 전부 (88명)
   const PF_ORDER = ['bag', 'magic', 'look', 'stats'];
   const noFlip = () => matchMedia('(max-width: 760px), (prefers-reduced-motion: reduce)').matches;
   function pfClone(el, skip) { // 페이지 모습 그대로 복사 (캔버스 그림까지)
@@ -1863,26 +1862,26 @@
     for (const ch of el.children) { if (skip && ch.matches(skip)) continue; const c = ch.cloneNode(true); const a = ch.querySelectorAll('canvas'), b = c.querySelectorAll('canvas'); if (ch.tagName === 'CANVAS') c.getContext('2d').drawImage(ch, 0, 0); const fix = (o, n) => { const r = o.getBoundingClientRect(); n.style.width = r.width + 'px'; n.style.height = r.height + 'px'; n.style.flex = 'none'; }; if (ch.tagName === 'CANVAS' || ch.tagName === 'svg') fix(ch, c); a.forEach((cv, i) => { try { b[i].getContext('2d').drawImage(cv, 0, 0); fix(cv, b[i]); } catch (e) {} }); for (const x of [c, ...c.querySelectorAll('[id]')]) x.removeAttribute('id'); if (ch.classList.contains('pfBody')) c.scrollTop = 0; d.appendChild(c); }
     return d; }
   function pfBox(book, el, cls) { const bk = book.getBoundingClientRect(), r = el.getBoundingClientRect(), d = document.createElement('div'); d.className = cls; Object.assign(d.style, { left: r.left - bk.left + 'px', top: r.top - bk.top + 'px', width: r.width + 'px', height: r.height + 'px' }); return d; }
-  function pfFlip(from, to, oldRight) { // 다음 탭 → 오른쪽 장이 왼쪽으로, 앞 탭 → 왼쪽 장이 오른쪽으로 넘어감
-    if (noFlip()) return; const book = $('profile').querySelector('.book'), L = book.querySelector('.page.left'), R = book.querySelector('.page.right');
+  function pfFlip(from, to, oldRight) { // 다음 탭: 옛 장이 책등 쪽으로 넘어감 / 앞 탭: 새 장이 책등에서 펼쳐짐
+    if (noFlip()) return; const book = $('profile').querySelector('.book'), R = book.querySelector('.page.right');
     for (const o of book.querySelectorAll('.pfLeaf')) o.remove();
-    const fwd = PF_ORDER.indexOf(to) > PF_ORDER.indexOf(from), leaf = pfBox(book, fwd ? R : L, 'pfLeaf ' + (fwd ? 'fwd' : 'bwd'));
-    const front = fwd ? oldRight : pfClone(L), back = fwd ? pfClone(L) : pfClone(R, '.bmarks'); front.className = 'front ' + (fwd ? 'pgR' : 'pgL'); back.className = 'back ' + (fwd ? 'pgL' : 'pgR'); leaf.append(front, back);
-    if (!fwd) { const stay = pfBox(book, R, 'pfLeaf'); oldRight.className = 'front pgR'; stay.appendChild(oldRight); book.appendChild(stay); setTimeout(() => stay.remove(), 330); }
-    book.appendChild(leaf); leaf.addEventListener('animationend', (e) => { if (e.target === leaf) leaf.remove(); }); setTimeout(() => leaf.remove(), 900); }
+    const fwd = PF_ORDER.indexOf(to) > PF_ORDER.indexOf(from), leaf = pfBox(book, R, 'pfLeaf' + (fwd ? '' : ' bwd'));
+    leaf.appendChild(fwd ? oldRight : pfClone(R, '.bmarks')); book.appendChild(leaf);
+    let stay = null; if (!fwd) { stay = pfBox(book, R, 'pfLeaf'); stay.style.animation = 'none'; stay.style.zIndex = 4; stay.appendChild(oldRight); book.appendChild(stay); }
+    setTimeout(() => { leaf.remove(); if (stay) stay.remove(); }, 400); }
   function openProfile(tab, noCover) {
     const was = !$('profile').hidden, from = PF.tab, book = $('profile').querySelector('.book'); tab = tab || PF.tab;
     const oldRight = was && tab !== from && !noFlip() ? pfClone(book.querySelector('.page.right'), '.bmarks') : null;
     PF.tab = tab; $('profile').hidden = false; if (PF.tab === 'stats' && netOn) ws.send(JSON.stringify({ t: 'stats' })); renderProfile(); if (!PF.raf) PF.raf = requestAnimationFrame(pfLoop);
     if (oldRight) pfFlip(from, tab, oldRight);
-    else if (!was && !noFlip() && !noCover) { for (const o of book.querySelectorAll('.pfCover, .pfLeaf')) o.remove(); // 처음 열 때: 표지가 넘어가며 펼쳐짐
-      book.style.animation = 'none'; void book.offsetWidth; book.style.animation = '';
-      const cv = pfBox(book, book.querySelector('.page.right'), 'pfCover'); cv.style.left = parseFloat(cv.style.left) - 2 + 'px'; cv.style.top = parseFloat(cv.style.top) - 8 + 'px'; cv.style.width = parseFloat(cv.style.width) + 10 + 'px'; cv.style.height = parseFloat(cv.style.height) + 16 + 'px';
-      cv.innerHTML = '<div class="front"><svg viewBox="-50 -50 100 100" fill="none" stroke="#d2b06a" stroke-width="1.2"><circle r="44"/><circle r="38" stroke="#6fe3ff" stroke-opacity=".6"/><path d="M0-38L22.3 30.7-36.1-11.7H36.1L-22.3 30.7Z"/><circle r="12" stroke="#6fe3ff"/></svg></div><div class="back"></div>'; book.appendChild(cv); setTimeout(() => cv.remove(), 1000); }
   }
   function closeProfile() { $('profile').hidden = true; cancelAnimationFrame(PF.raf); PF.raf = 0; }
   function pfLoop(now) { if ($('profile').hidden) { PF.raf = 0; return; } const cv = $('pfChar'), g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); g.imageSmoothingEnabled = false;
-    const face = [0, 3, 1, 2][Math.floor(now / 1400) % 4]; g.save(); g.translate(84, 132); g.scale(2, 2); drawSprite(g, 0, 0, Object.assign({}, player.look, { me: false }), now / 1000, true, face, false); g.restore(); // 제자리에서 빙글 돌며 걷기
+    const look = player.look, c = (look.char | 0) - USER.chars.length, t = now / 1000;
+    g.fillStyle = 'rgba(74,44,22,.22)'; g.beginPath(); g.ellipse(72, 132, 36, 8, 0, 0, 7); g.fill(); // 발밑 그림자
+    if (c >= 0 && CHARS.names[c]) { const sheet = charSheet(c, look.hue | 0, look.sk | 0), ph = Math.floor(t / 2.4) % 4, dir = [0, 0, 3, 2][ph] /* 앞 → 앞 → 옆 → 옆 */, row = Math.floor(t * 6) % 4;
+      g.drawImage(sheet, dir * 16, row * 16, 16, 16, 8, 4, 128, 128); if (look.hat) drawHat(g, 72, 4 + 8 * 3, look.hat, 8, dir === 2); }
+    else { g.save(); g.translate(72, 128); g.scale(3, 3); drawSprite(g, 0, 0, Object.assign({}, look, { me: false }), t, true, 0, false); g.restore(); }
     PF.raf = requestAnimationFrame(pfLoop); }
   function renderProfile() {
     for (const b of document.querySelectorAll('#pfTabs [data-pf]')) b.setAttribute('aria-pressed', String(b.dataset.pf === PF.tab));
@@ -1894,9 +1893,9 @@
       h += `<div class="pfSec">도구</div>` + (tools.length ? `<div class="pfGrid">${tools.map((k) => `<div class="pfSlot" title="${esc(MPRules.TOOLS[k].name)}"><canvas data-pk="tool:${k}" width="56" height="56"></canvas></div>`).join('')}</div>` : '<p class="pfMsg">아직 도구가 없어요 · 작업대에서 만들어요</p>'); }
     else if (PF.tab === 'magic') { h += `<div class="pfSec">마법 2칸 <small>R · F</small></div><div class="pfGrid" style="grid-template-columns:repeat(2,1fr);max-width:220px">${MY_SLOTS.map((k, i) => `<div class="pfSlot" title="${k ? esc(MPRules.MAGIC[k].name) : '빈 칸'}"><canvas data-sk="${k || ''}" width="56" height="56"></canvas><i>${i ? 'F' : 'R'}</i></div>`).join('')}</div>`;
       const learned = Object.keys(MY_SKILLS).filter((k) => MY_SKILLS[k] > 0 && MPRules.MAGIC[k]); h += `<div class="pfSec">배운 마법 <small>${learned.length}</small></div>` + (learned.length ? learned.map((k) => `<div class="pfRow"><span><span style="color:${MPRules.magicEl(MPRules.MAGIC[k].el).ring || MPRules.magicEl(MPRules.MAGIC[k].el).hex}">●</span> ${MPRules.magicEl(MPRules.MAGIC[k].el).name} · ${MPRules.MAGIC[k].name}</span><b>${MY_SKILLS[k]}/${MPRules.MAGIC_TIER[MPRules.MAGIC[k].tier].max}</b></div>`).join('') : '<p class="pfMsg">아직 배운 마법이 없어요 · 작업대에서 마법석을 만들어요</p>');
-      h += `<button class="pfBtn magic" id="pfTree" type="button">스킬 트리 펼치기 · K</button>`; }
+      h += `<button class="pfBtn" id="pfTree" type="button">스킬 트리 펼치기 · K</button>`; }
     else if (PF.tab === 'look') { const cur = player.look.char | 0;
-      h += `<div class="pfSec">캐릭터</div><div class="pfGrid">${pickChars().map(([j, nm]) => `<button class="pfSlot face" type="button" data-ch="${j + USER.chars.length}" aria-pressed="${cur === j + USER.chars.length}" title="${nm}"><canvas data-face="${j}" width="38" height="38"></canvas><span>${nm}</span></button>`).join('')}</div>`;
+      h += `<div class="pfSec">캐릭터 <small>${CHARS.names.length}명</small></div><div class="pfGrid faces">${pickChars().map(([j, nm]) => `<button class="pfSlot face" type="button" data-ch="${j + USER.chars.length}" aria-pressed="${cur === j + USER.chars.length}" title="${nm}" aria-label="${nm}"><canvas data-face="${j}" width="38" height="38"></canvas></button>`).join('')}</div>`;
       h += `<div class="pfSec">옷 색</div><div class="pfSw">${HUES.map((deg, i) => `<button type="button" data-hue="${i}" aria-label="옷 색 ${i + 1}" aria-pressed="${(player.look.hue | 0) === i}" style="background:hsl(${(200 + deg) % 360},55%,55%)"></button>`).join('')}</div>`;
       h += `<div class="pfSec">피부색</div><div class="pfSw">${SKINS_PAL.map((c, i) => `<button type="button" data-skn="${i}" title="${SKIN_NAME[i]}" aria-label="${SKIN_NAME[i]}" aria-pressed="${(player.look.sk | 0) === i}" style="background:${c || 'conic-gradient(#ffe2c8, #e9a879, #7a4a2c, #ffe2c8)'}"></button>`).join('')}</div>`;
       const hats = Object.keys(MY_HATS); h += `<div class="pfSec">모자</div>` + (hats.length ? `<div class="pfGrid">${hats.map((k) => `<button class="pfSlot" type="button" data-hat="${k}" title="${esc(HATS[k].name)}" aria-pressed="${player.look.hat === k}"><canvas data-pk="hat:${k}" width="56" height="56"></canvas></button>`).join('')} <button class="pfSlot x" type="button" data-hat="" title="모자 벗기" aria-pressed="${!player.look.hat}">✕</button></div>` : '<p class="pfMsg">하늘 꾸미기 상점에서 모자를 살 수 있어요</p>');
@@ -3119,6 +3118,7 @@
   }
   $('btnCoupon').addEventListener('click', () => { $('couponMsg').textContent = '점심시간에 받은 코드를 입력하세요. 코드는 한 번만 쓸 수 있어요.'; $('coupon').hidden = false; $('couponIn').focus(); });
   $('btnCouponUse').addEventListener('click', redeem);
+  $('sCoupon').addEventListener('click', () => { $('setClose').click(); $('btnCoupon').click(); }); // 쿠폰은 설정 안에서
   $('couponIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') redeem(); });
   $('btnCouponClose').addEventListener('click', () => { $('coupon').hidden = true; });
 
