@@ -5284,7 +5284,7 @@
   const tMenuBtns = () => [...document.querySelectorAll('#tMenu button:not([hidden])')];
   function tSelect(i) { const b = tMenuBtns(); TITLE.sel = (i + b.length) % b.length; b.forEach((x, k) => x.classList.toggle('sel', k === TITLE.sel)); }
   function startTitle() {
-    pickTitle(); tSelect(0);
+    pickTitle(new URLSearchParams(location.search).get('title') ? undefined : 0); tSelect(0); // 처음은 메인 로고 · 15초마다 랜덤으로 바뀜
     for (const cv of document.querySelectorAll('canvas.logoCv')) if (!cv.dataset.done) { makeLogo(cv); cv.dataset.done = 1; }
     const cand = terrs.filter((t) => t && !gone[t.id]);
     const t = cand[Math.floor(Math.random() * cand.length)] || home;
@@ -5323,6 +5323,9 @@
   applyPad();
   function openSettings() { const vb = store('mp2026.bgm') ?? 60, vs = store('mp2026.sfx') ?? 70; $('sBgm').value = vb; $('sBgmV').textContent = vb + '%'; $('sSfx').value = vs; $('sSfxV').textContent = vs + '%'; $('sPad').value = PAD.s; $('sPadV').textContent = PAD.s + '%'; $('setBox').hidden = false; }
   $('btnSet').addEventListener('click', openSettings);
+  { let lastInput = Date.now(); const IDLE_MS = 30 * 60e3; // 30분 동안 아무것도 안 하면 시작 화면으로
+    for (const ev of ['keydown', 'pointerdown', 'touchstart', 'wheel', 'mousemove']) addEventListener(ev, () => { lastInput = Date.now(); }, { passive: true, capture: true });
+    setInterval(() => { if (TITLE.on || EDIT_MODE || Date.now() - lastInput < IDLE_MS) return; lastInput = Date.now(); if (typeof stopFishing === 'function') stopFishing(); $('setHome').click(); }, 30e3); }
   $('setHome').addEventListener('click', () => { $('setClose').click(); for (const m of document.querySelectorAll('.modalbox:not([hidden])')) m.hidden = true; startTitle(); }); // 집 버튼: 타이틀 화면으로 $('setClose').addEventListener('click', () => { document.body.classList.remove('padEdit'); $('sPadMove').textContent = '위치 옮기기'; $('setBox').hidden = true; });
   const rangeFill = () => { for (const r of document.querySelectorAll('#setBox input[type=range]')) r.style.setProperty('--v', (r.value - r.min) / (r.max - r.min) * 100 + '%'); }; // 슬라이더 채움 색
   for (const r of document.querySelectorAll('#setBox input[type=range]')) r.addEventListener('input', rangeFill);
