@@ -100,6 +100,7 @@ tr.editing td { background: #fff1b8; }
       <label>일차 <select id="ckDay"></select></label>
       <label>시간대 <select id="ckSlot"><option value="morning">아침 9시</option><option value="lunch">점심 1시 (전투)</option><option value="night">밤 10시 (전투)</option></select></label>
       <button id="ckGo" class="primary">이 시간으로 이동</button>
+      <button id="mapReset" type="button" title="베인 나무·풀꽃·설치물·덫을 처음으로">🌍 맵 초기화</button>
       <button id="ckNext">다음 시간대 ▶</button>
       <button id="ckAuto">실제 시간으로 (자동)</button>
       <label>날씨 <select id="ckWeather"><option value="auto">자동 (가끔 30분씩 비)</option><option value="rain">🌧 비</option><option value="clear">☀ 맑음</option></select></label>
@@ -471,9 +472,11 @@ tr.editing td { background: #fff1b8; }
   async function clockTo(day, slot) {
     const cur = S.clock, fwd = (day - 1) * 3 + ['morning', 'lunch', 'night'].indexOf(slot) - ((cur.day - 1) * 3 + ['morning', 'lunch', 'night'].indexOf(cur.slot));
     if (fwd > 1 && !confirm(`${fwd}칸 앞으로 갑니다. 그 사이의 전투·균열이 모두 처리돼요. 갈까요?`)) return;
+    if (day === 1 && !confirm('1일차로 돌리면 맵이 처음 상태로 초기화돼요 (베인 나무·풀꽃·설치물·덫). 나라·계정은 그대로예요. 할까요?')) return;
     S = await api('clock', { mode: 'manual', day, slot }); render(); say(`${day}일차 ${{ morning: '아침', lunch: '점심', night: '밤' }[slot]}로 이동했어요`);
   }
   $('ckGo').onclick = () => clockTo(+$('ckDay').value, $('ckSlot').value);
+  document.addEventListener('click', async (e) => { if (e.target.id !== 'mapReset') return; if (!confirm('맵을 처음 상태로 초기화할까요? (베인 나무·풀꽃·설치물·덫) 나라·계정은 그대로예요.')) return; S = await api('resetMap'); render(); say('맵을 초기화했어요'); });
   $('ckNext').onclick = () => { const k = (S.clock.day - 1) * 3 + ['morning', 'lunch', 'night'].indexOf(S.clock.slot) + 1; if (k > 44) return say('마지막 시간대예요'); clockTo(Math.floor(k / 3) + 1, ['morning', 'lunch', 'night'][k % 3]); };
   $('ckAuto').onclick = async () => { if (!confirm('실제 한국 시간으로 돌아갈까요? 지금보다 앞이면 그 사이 일이 처리돼요.')) return; S = await api('clock', { mode: 'auto' }); render(); say('자동(실제 시간)으로 바꿨어요'); };
   $('ckDoom').onchange = async () => { S = await api('doomDay', { day: +$('ckDoom').value }); render(); say(`멸망 선포일을 ${S.doomDay}일차로 바꿨어요`); };

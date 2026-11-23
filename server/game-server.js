@@ -239,6 +239,10 @@ function magicTrees(s, M, tx, ty, D) {
   dirty = true; addMat(s, 'm_wood', hit.length * give);
   return `${{ burn: '🔥 나무', bolt: '⚡ 나무', wind: '🌪 나무', break: '🌑 나무' }[how]} ${hit.length}그루 → 목재 +${hit.length * give}`;
 }
+// 맵 초기화 (1일차로 돌릴 때): 베인 나무·뜯은 풀꽃·설치물·덫·판 땅을 처음으로. 나라·계정은 그대로
+function resetMap() { world.s.chopped = {}; world.s.picked = {}; world.s.tiles = {}; world.s.traps = {}; world.s.dug = {}; dirty = true; console.log('[관리자] 맵 초기화');
+  for (const n of Object.values(world.s.nations || {})) sendViews([n.id]);
+  const msg = JSON.stringify({ t: 'mapReset' }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); }
 function addMat(s, k, v) { s.acc.bag = s.acc.bag || {}; s.acc.bag[k] = (s.acc.bag[k] || 0) + v; send(s.ws, { t: 'bag', bag: s.acc.bag }); } // 채집 재료 → 내 가방
 function tradables(acc) { const out = []; for (const [k, v] of Object.entries(acc.bag || {})) if (v > 0) out.push({ k, n: v }); for (const k of Object.keys(acc.hats || {})) out.push({ k: 'hat:' + k, n: 1 }); for (const k of Object.keys(acc.tools || {})) out.push({ k: 'tool:' + k, n: 1 }); return out; }
 function okOffer(acc, items) { const need = {}; for (const q of items) need[q.k] = (need[q.k] || 0) + q.n; return Object.entries(need).every(([k, n]) => k.startsWith('hat:') ? n === 1 && (acc.hats || {})[k.slice(4)] : k.startsWith('tool:') ? n === 1 && (acc.tools || {})[k.slice(5)] : (BUILD_BY[k] && BUILD_BY[k].fish && (acc.bag || {})[k] >= n)); }
@@ -1659,9 +1663,10 @@ async function adminOp(m) {
       const msg = JSON.stringify({ t: 'roomEdit', id, diff: { set, walls, props, hideProps: R.hideProps, reset: !!m.reset } }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
       return { ok: true, floor: Object.keys(R.floor).length, walls: Object.keys(R.walls).length, props: Object.keys(R.props).length };
     }
+    case 'resetMap': { resetMap(); return adminStatus(); }
     case 'clock': { // 게임 시계: auto(실제 시간) / manual(일차·시간대). 앞으로 가면 그 사이 전투·균열이 차례로 일어남
       if (m.mode === 'auto') state.clock = { mode: 'auto' };
-      else { const day = Math.max(1, Math.min(LAST_DAY, m.day | 0)); const slot = SLOTS.includes(m.slot) ? m.slot : 'morning'; state.clock = { mode: 'manual', day, slot }; }
+      else { const day = Math.max(1, Math.min(LAST_DAY, m.day | 0)); const slot = SLOTS.includes(m.slot) ? m.slot : 'morning'; state.clock = { mode: 'manual', day, slot }; if (day === 1) resetMap(); } // 1일차로 돌리면 맵 초기화
       dirty = true; tickClock(); console.log('[관리자] 시계:', JSON.stringify(state.clock));
       return adminStatus();
     }

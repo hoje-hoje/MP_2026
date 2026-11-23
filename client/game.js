@@ -3407,6 +3407,7 @@
       case 'cast': playCast(m); break;
       case 'stats': PF.stats = m.stats || {}; if (!$('profile').hidden) renderProfile(); break;
       case 'admin': MY_ADMIN = !!m.on; break;
+      case 'mapReset': toast('🌍 맵이 처음 상태로 돌아갔어요 · 다시 불러오는 중…'); setTimeout(() => location.reload(), 1600); break;
       case 'castOk': { if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); } if (m.cd) { SKCD[m.slot] = performance.now() + m.cd * 1000; SKCDLEN[m.slot] = m.cd * 1000; } if (m.text) toast(m.text); break; }
       case 'bag': MY_BAG = m.bag || {}; if (!$('profile').hidden) renderProfile(); if (!$('bagBox').hidden) openBag(); if (!$('shopBox').hidden) renderShop(); if (CRAFT.after) { cfFill(CRAFT.after); CRAFT.after = null; } if (!$('craftBox').hidden) openCraft(); break;
       case 'tradeReq': $('trqText').textContent = `${m.name}님이 거래를 신청했어요`; $('tradeReq').hidden = false; $('tradeReq').dataset.from = m.from; SND.play('ok'); clearTimeout(window.__trq); window.__trq = setTimeout(() => { $('tradeReq').hidden = true; }, 25000); break;
