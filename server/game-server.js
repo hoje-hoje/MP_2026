@@ -410,7 +410,7 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 65536 }); // 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function meta(s) {
   const n = world.nationOfPlayer(s.token);
-  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), job: s.acc.job || null, weapon: weaponOf(s), teacher: !!s.acc.teacher, side: s.acc.side || null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
+  return { id: s.id, name: s.acc.name, team: s.acc.team, look: s.acc.look, nid: n ? n.id : null, king: !!(n && n.king === s.token), job: s.acc.job || null, weapon: weaponOf(s), teacher: !!s.acc.teacher, room: s.scene === 'sky' ? s.room : null, side: s.acc.side || null, carry: !!s.acc.carry, red: s.acc.arrestStack | 0, jailed: jailed(s.acc), badge: MPRules.notorietyBadge(s.acc.notoriety | 0), bad: s.acc.notoriety | 0 };
 }
 // 체포 횟수 (하루 단위), 감옥
 function arrestsToday(acc) { return acc.arrests && acc.arrests.day === gameDayKey() ? acc.arrests.n : 0; }
@@ -486,13 +486,13 @@ wss.on('connection', (ws) => {
         if ((s.deadUntil || 0) > Date.now()) return; // 쓰러진 동안은 못 움직임
         const scene = m.scene === 'sky' ? 'sky' : 'ground';
         const room = scene === 'sky' ? clean(m.room, 16) : null;
-        const sameArea = scene === s.scene && room === s.room;
+        const sameArea = scene === s.scene && room === s.room, roomMoved = scene === 'sky' && s.scene === 'sky' && room !== s.room; // 하늘섬: 걸어서 다른 방으로
         // 훔친 걸 들고 있으면 포털·워프·순간이동 불가 (걸어서 가져가야 함)
-        if (s.acc.carry && s.x != null && (scene !== s.scene || room !== s.room || Math.hypot(x - s.x, y - s.y) > 160)) { send(ws, { t: 'pos', x: s.x, y: s.y, text: '훔친 걸 들고 있으면 포털·순간이동을 쓸 수 없어요 · 걸어서 우리 저장소로!' }); return; }
+        if (s.acc.carry && s.x != null && !roomMoved && (scene !== s.scene || room !== s.room || Math.hypot(x - s.x, y - s.y) > 160)) { send(ws, { t: 'pos', x: s.x, y: s.y, text: '훔친 걸 들고 있으면 포털·순간이동을 쓸 수 없어요 · 걸어서 우리 저장소로!' }); return; }
         const dt = Math.max(0.05, (now - s.lastMove) / 1000);
         // 같은 장소에서 너무 빨리 움직이면 무시 (순간이동 테스트 기능 m.tp 는 프로토타입 기간에만 허용)
         if (sameArea && s.x != null && !m.tp && Math.hypot(x - s.x, y - s.y) > MAX_SPEED * dt + 64) return;
-        if (!sameArea) { for (const id of s.known) send(ws, { t: 'leave', id }); s.known.clear(); }
+        if (!sameArea && !roomMoved) { for (const id of s.known) send(ws, { t: 'leave', id }); s.known.clear(); }
         if (scene === 'ground') {
           const tx = Math.floor(x / 32), ty = Math.floor(y / 32), i = tileIdx(tx, ty), e = world.s.tiles[i];
           const myN = world.nationOfPlayer(s.token);
@@ -508,6 +508,7 @@ wss.on('connection', (ws) => {
         }
         { const nd = m.dir < 0 ? -1 : 1, nf = Math.max(0, Math.min(3, m.f | 0)), nm = m.moving ? 1 : 0; if (s.x !== x || s.y !== y || s.dir !== nd || s.face !== nf || s.moving !== nm || s.scene !== scene || s.room !== room) s.moved = true;
         s.x = x; s.y = y; s.dir = nd; s.face = nf; s.moving = nm; s.scene = scene; s.room = room; s.lastMove = now; }
+        if (roomMoved) { const mm = meta(s); for (const o of online.values()) if (o !== s && o.known.has(s.id)) send(o.ws, { t: 'meta', p: mm }); } // 다른 사람 화면에서도 그 방 위치로
         Object.assign(s.acc, { x, y, scene, room }); dirty = true;
         break;
       }
@@ -580,19 +581,21 @@ wss.on('connection', (ws) => {
         const id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         const board = kind === 'sudoku' ? MPRules.genSudoku() : MPRules.genSlide();
         const sec = kind === 'sudoku' ? NUM.sudokuSec : NUM.slideSec;
-        s.pending = { id, terr: t.id, kind, board, at: now(), sec, mode: own ? 'army' : 'claim' };
+        s.pending = s.acc.pending = { id, terr: t.id, kind, board, at: now(), sec, mode: own ? 'army' : 'claim' }; // 계정에도 저장 (푸는 중에 연결이 끊겼다 붙어도 이어서)
         dirty = true; sendViews([n.id]);
         send(ws, { t: 'puzzle', id, terr: t.id, kind, board, sec, mode: own ? 'army' : 'claim' });
         break;
       }
       case 'answer': { // 퍼즐 답: 스도쿠는 판 전체, 슬라이딩은 움직인 숫자 순서
-        const n = world.nationOfPlayer(s.token), P = s.pending;
-        if (!n || !P || P.id !== m.id) return;
-        if (m.giveUp) { s.pending = null; return send(ws, { t: 'answer', id: P.id, correct: false, done: true, text: '퍼즐을 그만뒀어요 (행동력 1은 쓴 걸로 쳐요)' }); }
-        if (now() - P.at > (P.sec + 5) * 1000) { s.pending = null; return send(ws, { t: 'answer', id: P.id, correct: false, done: true, text: '시간이 다 됐어요. 다시 도전하려면 행동력 1이 들어요' }); }
+        const n = world.nationOfPlayer(s.token), P = s.pending || s.acc.pending;
+        if (!n) return send(ws, { t: 'answer', id: m.id, correct: false, done: true, text: '나라가 있어야 퍼즐로 점령할 수 있어요' });
+        if (!P || String(P.id) !== String(m.id)) { if (P && String(P.id) !== String(m.id)) { s.pending = s.acc.pending = null; } return send(ws, { t: 'answer', id: m.id, correct: false, done: true, text: '이 퍼즐 기록을 찾지 못했어요 (서버가 다시 켜졌거나 다른 퍼즐을 열었어요) · 다시 도전해 주세요' }); }
+        s.pending = P;
+        if (m.giveUp) { s.pending = s.acc.pending = null; return send(ws, { t: 'answer', id: P.id, correct: false, done: true, text: '퍼즐을 그만뒀어요 (행동력 1은 쓴 걸로 쳐요)' }); }
+        if (now() - P.at > (P.sec + 5) * 1000) { s.pending = s.acc.pending = null; return send(ws, { t: 'answer', id: P.id, correct: false, done: true, text: '시간이 다 됐어요. 다시 도전하려면 행동력 1이 들어요' }); }
         const right = P.kind === 'sudoku' ? MPRules.checkSudoku(P.board, m.grid) : MPRules.checkSlide(P.board, m.moves);
         if (!right) return send(ws, { t: 'answer', id: P.id, correct: false, text: P.kind === 'sudoku' ? '아직 틀린 칸이 있어요' : '아직 다 맞추지 못했어요' });
-        s.pending = null; dirty = true;
+        s.pending = s.acc.pending = null; dirty = true;
         s.acc.stats = s.acc.stats || {}; s.acc.stats.puzzles = (s.acc.stats.puzzles || 0) + 1;
         const owner = world.ownerOf(P.terr);
         if (P.mode === 'claim' && owner) { // 푸는 동안 다른 나라(또는 팀원)가 먼저 점령 → 행동력 돌려줌
@@ -1415,7 +1418,7 @@ wss.on('connection', (ws) => {
 const now = () => Date.now();
 function near(a, b) {
   if (a.x == null || b.x == null || a.scene !== b.scene) return false;
-  if (a.scene === 'sky') return a.room === b.room;
+  if (a.scene === 'sky') return true; // 하늘섬: 방이 구름다리로 이어져 있어서 하늘에 있는 사람은 다 보임
   return Math.abs(a.x - b.x) < AOI_X && Math.abs(a.y - b.y) < AOI_Y;
 }
 
