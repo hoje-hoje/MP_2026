@@ -1304,17 +1304,16 @@
         if (id === 'p_ice') { g.fillStyle = '#ffffff'; g.fillRect(x - 6, y - 52, 2, 18); g.fillRect(x - 6, y - 30, 2, 6); }
         natRibbon(g, x, y - 40, e.n); return;
       }
-      case 'd_lantern': lantern(g, x, y); return;
       case 'd_urn': urn(g, x, y); return;
       case 'd_flower': pix(g, 'flower_r', x - 8, y - 2, 2); pix(g, 'flower_y', x + 8, y, 2); pix(g, 'fern', x, y + 4, 2); return;
       case 'd_mush': pix(g, 'mushroom', x - 6, y, 2); pix(g, 'mushroom', x + 8, y + 2, 1.5); return;
-      case 'd_torch': { g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, x, y, 8, 3); g.fillStyle = '#2b2340'; g.fillRect(x - 3, y - 34, 6, 34); g.fillStyle = '#8a5a2b'; g.fillRect(x - 2, y - 32, 4, 32); g.fillStyle = '#5a3416'; g.fillRect(x - 5, y - 36, 10, 4);
-        const f = Math.sin(t * 12 + x) > 0 ? 2 : 0, grd = g.createRadialGradient(x, y - 42, 2, x, y - 42, 26); grd.addColorStop(0, 'rgba(255,190,90,0.5)'); grd.addColorStop(1, 'rgba(255,190,90,0)'); g.fillStyle = grd; g.fillRect(x - 26, y - 68, 52, 52);
-        g.fillStyle = '#ff7b22'; g.fillRect(x - 5, y - 46 - f, 10, 10); g.fillStyle = '#ffd35a'; g.fillRect(x - 3, y - 50 - f, 6, 10); g.fillStyle = '#fff2a8'; g.fillRect(x - 1, y - 46, 2, 4); return; }
+      case 'd_torch': drawTorch(g, x, y, x * 7 + y); return;
+      case 'd_campfire': drawCampfire(g, x, y + 4, !e.off, x * 7 + y); return;
+      case 'd_lantern': lantern(g, x, y); addLight(g, x, y - 34, 'd_lantern'); return;
       case 'd_snowman': { g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, 14, 4); g.fillStyle = '#c9d6ea'; pxDisc(g, x, y - 12, 12); pxDisc(g, x, y - 32, 9); g.fillStyle = '#ffffff'; pxDisc(g, x - 1, y - 13, 10); pxDisc(g, x - 1, y - 33, 7);
         g.fillStyle = '#2b2340'; g.fillRect(x - 4, y - 36, 2, 2); g.fillRect(x + 2, y - 36, 2, 2); g.fillRect(x - 1, y - 16, 2, 2); g.fillRect(x - 1, y - 10, 2, 2); g.fillStyle = '#ff8a2a'; g.fillRect(x, y - 33, 5, 2); g.fillStyle = '#d6455b'; g.fillRect(x - 8, y - 26, 16, 4); g.fillRect(x + 4, y - 24, 4, 8);
         g.fillStyle = '#2b2340'; g.fillRect(x - 7, y - 46, 14, 4); g.fillRect(x - 5, y - 54, 10, 8); return; }
-      case 'd_crystal': { const b = Math.round(Math.sin(t * 2 + x) * 1) * 2; g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, 12, 4);
+      case 'd_crystal': { addLight(g, x, y - 20, 'd_crystal'); const b = Math.round(Math.sin(t * 2 + x) * 1) * 2; g.fillStyle = 'rgba(0,0,0,0.18)'; ell(g, x, y, 12, 4);
         const grd = g.createRadialGradient(x, y - 22, 2, x, y - 22, 26); grd.addColorStop(0, 'rgba(190,235,255,0.5)'); grd.addColorStop(1, 'rgba(190,235,255,0)'); g.fillStyle = grd; g.fillRect(x - 26, y - 48, 52, 52);
         for (const [dx, h, w] of [[-8, 22, 6], [0, 34, 8], [8, 18, 6]]) { g.fillStyle = '#2b2340'; g.fillRect(x + dx - w / 2 - 1, y - h - 1 + b, w + 2, h + 1); g.fillStyle = '#9fd8ff'; g.fillRect(x + dx - w / 2, y - h + b, w, h); g.fillStyle = '#e6f6ff'; g.fillRect(x + dx - w / 2, y - h + b, 2, h); g.fillStyle = '#6fb6e6'; g.fillRect(x + dx + w / 2 - 2, y - h + b, 2, h); }
         return; }
@@ -1951,7 +1950,11 @@
       else { ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = a * 0.6; ctx.beginPath(); ctx.ellipse(mk.x, mk.y, R, R * 0.5, 0, 0, 7); ctx.stroke(); dots('#ffffff', 12, R, 2, 3); } // 시공: 별 고리
       ctx.restore(); } }
   async function playCast(m) { // 마법 연출 (나·다른 사람 모두)
-    const M = MPRules.MAGIC[m.key]; if (!M) return; await loadPfxW(); if (!PFXW) return; const mod = await fxMod(M.fx); if (!mod) return; PFXW.fx[M.fx] = mod;
+    const M = MPRules.MAGIC[m.key]; if (!M) return;
+    { const c = elHex(M.el), D = FACE_D[m.face | 0] || [0, 1]; // 빛: 날아가는 마법은 빛 동그라미가 같이 날아가고, 나머지는 잠깐 번쩍 (깨달음은 크고 길게)
+      if (M.dir) MLIGHT.push({ x: m.x + D[0] * 20, y: m.y - 20 + D[1] * 10, vx: D[0] * 260, vy: D[1] * 260, t0: performance.now(), life: 0.95, stop: 0.7, move: 1, kind: 'spell', c });
+      lightFlash(m.x, m.y - 20, M.el === 'root' ? 'rootFlash' : 'flash', c, M.el === 'root' ? 2.6 : 0.7); }
+    await loadPfxW(); if (!PFXW) return; const mod = await fxMod(M.fx); if (!mod) return; PFXW.fx[M.fx] = mod;
     const D = FACE_D[m.face | 0] || [0, 1], o = M.pal ? { palette: M.pal } : {}, who = m.id === myId ? player : others('ground', null).find((b) => b.id === m.id);
     { const far = M.dir ? 170 : (M.eff === 'boulder' || M.eff === 'quake' || M.eff === 'freeze' || M.eff === 'bridge' || M.eff === 'grow') ? 36 : 0; setTimeout(() => addMark(M, m.x + D[0] * far, m.y + 6 + D[1] * far * 0.6), M.dir ? 650 : 150); } // 바닥 자국
     if (M.dir) { const e = wfx(M.fx, m.x + D[0] * 20, m.y - 20 + D[1] * 10, Object.assign({ flip: D[0] < 0, angle: D[1] ? (D[1] > 0 ? Math.PI / 2 : -Math.PI / 2) : 0 }, o), { vx: D[0] * 260, vy: D[1] * 260, life: 0.7 }); if (e && D[1]) e.f.options.angle = D[1] > 0 ? Math.PI / 2 : -Math.PI / 2; }
@@ -2497,13 +2500,13 @@
   }
   function smallTable(g, x, y) {
     pix(g, 'tomb', x, y + 2);
-    pix(g, 'candles', x, y - 22);
+    pix(g, 'candles', x, y - 22); addLight(g, x, y - 30, 'candles');
     g.fillStyle = 'rgba(255,210,90,0.35)'; circ(g, x, y - 34, 14 + Math.sin(performance.now() / 120) * 2);
   }
   function bonfire(g, x, y) {
     const t = performance.now() / 1000;
-    g.fillStyle = `rgba(255,170,60,${0.25 + Math.sin(t * 6) * 0.08})`; ell(g, x, y - 6, 70, 30);
-    pix(g, 'campfire', x, y + 4, 3.5 + Math.sin(t * 9) * 0.08);
+    g.fillStyle = `rgba(255,170,60,${0.18 + Math.sin(t * 6) * 0.05})`; ell(g, x, y - 6, 70, 30);
+    g.save(); g.translate(x, y); g.scale(1.4, 1.4); drawCampfire(g, 0, 4, true, 77); g.restore(); addLight(g, x, y - 20, 'bonfire');
   }
   // 아이작식 문: 벽에 박힌 돌 아치 + 어두운 문 구멍 (땅으로 가는 문은 안쪽이 금빛) — 위쪽 벽 기준으로 그린 뒤 벽 방향대로 돌림
   const DOORC = {};
@@ -3899,7 +3902,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { fallNear: () => { if (!testMode) return null; const px = Math.floor(player.x / TILE), py = Math.floor(player.y / TILE); for (let r = 1; r < 12; r++) for (let y = py - r; y <= py + r; y++) for (let x = px - r; x <= px + r; x++) if (treeAt(x, y)) { treeFall(y * W + x); noTree[y * W + x] = 1; dirtyTile(y * W + x); return [x, y]; } return null; }, benchPos: () => { for (const [i, nid] of STORE_AT) if (nid === MY_NID) return [(i % W) + 0.5 + BENCH_DX / TILE, Math.floor(i / W) + 0.5]; return null; }, playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), face: (f) => { if (testMode) player.face = f; }, near: () => (testMode ? JSON.stringify(near && { kind: near.kind, text: near.text }) + ' ft=' + facingTile() + ' ga=' + JSON.stringify(groundAction()) + ' tA=' + treeAt(...facingTile()) + ' on=' + ONLINE : null), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { putTile: (dx, dy, e) => { if (!testMode) return; const i = (Math.floor(player.y / TILE) + dy) * W + Math.floor(player.x / TILE) + dx; TILES[i] = e; dirtyTile(i); }, fallNear: () => { if (!testMode) return null; const px = Math.floor(player.x / TILE), py = Math.floor(player.y / TILE); for (let r = 1; r < 12; r++) for (let y = py - r; y <= py + r; y++) for (let x = px - r; x <= px + r; x++) if (treeAt(x, y)) { treeFall(y * W + x); noTree[y * W + x] = 1; dirtyTile(y * W + x); return [x, y]; } return null; }, benchPos: () => { for (const [i, nid] of STORE_AT) if (nid === MY_NID) return [(i % W) + 0.5 + BENCH_DX / TILE, Math.floor(i / W) + 0.5]; return null; }, playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), face: (f) => { if (testMode) player.face = f; }, near: () => (testMode ? JSON.stringify(near && { kind: near.kind, text: near.text }) + ' ft=' + facingTile() + ' ga=' + JSON.stringify(groundAction()) + ' tA=' + treeAt(...facingTile()) + ' on=' + ONLINE : null), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
@@ -4429,14 +4432,78 @@
     drawActors(list, t);
     nightTint(0.5);
   }
-  // 시간대 색: 아침은 살짝 따뜻하게, 밤은 어둡고 푸르게
+  // ---------------------------------------------------------- 빛 시스템: 밤엔 많이 어둡고, 불·등불·마법 둘레만 밝음
+  const LIGHTS = [], MLIGHT = []; // 이번 프레임 빛(화면 좌표) · 움직이는/잠깐 빛(월드 좌표)
+  const LCV = document.createElement('canvas'), LG = LCV.getContext('2d');
+  function addLight(g, x, y, kind, o) { // 월드 좌표 빛 → 지금 변환으로 화면 좌표에 저장
+    if (g !== ctx) return; const L = Object.assign({}, MPRules.LIGHT_OF[kind] || {}, o || {}); if (!L.r) return;
+    const m = ctx.getTransform(), sc = Math.hypot(m.a, m.b) / dpr, fl = L.flick ? 1 + (Math.sin(performance.now() / 90 + x * 0.7) * 0.6 + Math.sin(performance.now() / 47 + y) * 0.4) * L.flick : 1;
+    LIGHTS.push({ x: (m.a * x + m.c * y + m.e) / dpr, y: (m.b * x + m.d * y + m.f) / dpr, r: L.r * sc * fl, a: L.a == null ? 1 : L.a, c: L.c });
+  }
+  const elHex = (el) => { const E = MPRules.MAGIC_EL.find((e) => e.id === el); return E ? E.hex : '#c8a2ff'; };
+  function lightFlash(x, y, kind, c, life) { MLIGHT.push({ x, y, vx: 0, vy: 0, t0: performance.now(), life, kind, c }); }
+  function darkAmt() { // 0 낮 ~ 1 한밤 (하늘 시간 기준)
+    const h = skyHour(); const ss = (v) => v * v * (3 - 2 * v);
+    if (h >= 21 || h < 4.5) return 1; if (h >= 17) return ss((h - 17) / 4); if (h < 7) return ss(1 - (h - 4.5) / 2.5); return 0; }
   function nightTint(k = 1) {
-    if (!ONLINE) return;
-    if (SLOT === 'lunch') return;
+    const now = performance.now();
+    for (let i = MLIGHT.length - 1; i >= 0; i--) { const L = MLIGHT[i], age = (now - L.t0) / 1000; if (age > L.life) { MLIGHT.splice(i, 1); continue; }
+      const f = L.move ? (age < L.life - 0.25 ? 1 : (L.life - age) / 0.25) : Math.min(1, age * 8) * (1 - age / L.life) ** 0.7;
+      addLight(ctx, L.x + L.vx * Math.min(age, L.stop || 9), L.y + L.vy * Math.min(age, L.stop || 9), L.kind, { c: L.c, a: (MPRules.LIGHT_OF[L.kind].a || 1) * f }); }
+    if (player && !TITLE.on) { const px = player.x, py = player.y - 24;
+      addLight(ctx, px, py, 'self');
+      if (BUFF.light > now) addLight(ctx, px, py, 'lightBuff');
+      else if (MY_BAG && MY_BAG.f_torch > 0) addLight(ctx, px, py, 'torchBag'); }
+    const h = skyHour(), d = darkAmt() * k;
     ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (SLOT === 'night') { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = k < 1 ? '#a8aee0' : '#6f78b8'; ctx.fillRect(0, 0, vw, vh); ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = `rgba(30,40,110,${0.12 * k})`; ctx.fillRect(0, 0, vw, vh); } // 밤: 어둡고 푸르게
-    else { ctx.fillStyle = `rgba(255,190,110,${0.08 * k})`; ctx.fillRect(0, 0, vw, vh); } // 아침: 살짝 따뜻하게
-    ctx.restore();
+    if (h >= 6 && h < 9.5) { ctx.fillStyle = `rgba(255,190,110,${0.08 * Math.sin((h - 6) / 3.5 * Math.PI)})`; ctx.fillRect(0, 0, vw, vh); } // 아침: 살짝 따뜻하게
+    if (d > 0.01) {
+      ctx.globalAlpha = Math.min(1, d); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = '#7d86c4'; ctx.fillRect(0, 0, vw, vh); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; // 푸른 밤빛
+      const S = 0.5, W = Math.ceil(vw * S), H = Math.ceil(vh * S); if (LCV.width !== W || LCV.height !== H) { LCV.width = W; LCV.height = H; }
+      LG.globalCompositeOperation = 'source-over'; LG.clearRect(0, 0, W, H); LG.fillStyle = `rgba(5,6,22,${0.86 * d})`; LG.fillRect(0, 0, W, H);
+      LG.globalCompositeOperation = 'destination-out';
+      for (const L of LIGHTS) { const x = L.x * S, y = L.y * S, r = L.r * S; if (x < -r || y < -r || x > W + r || y > H + r) continue;
+        const gr = LG.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(0,0,0,${L.a})`); gr.addColorStop(0.5, `rgba(0,0,0,${L.a * 0.88})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); LG.fillStyle = gr; LG.fillRect(x - r, y - r, r * 2, r * 2); }
+      ctx.imageSmoothingEnabled = true; ctx.drawImage(LCV, 0, 0, vw, vh);
+      ctx.globalCompositeOperation = 'lighter'; // 불빛 색이 바닥에 번짐
+      for (const L of LIGHTS) { if (!L.c) continue; const r = L.r * 0.8; if (L.x < -r || L.y < -r || L.x > vw + r || L.y > vh + r) continue;
+        const gr = ctx.createRadialGradient(L.x, L.y, 0, L.x, L.y, r), c = L.c, rr = parseInt(c.slice(1, 3), 16), gg = parseInt(c.slice(3, 5), 16), bb = parseInt(c.slice(5, 7), 16);
+        gr.addColorStop(0, `rgba(${rr},${gg},${bb},${0.3 * d * L.a})`); gr.addColorStop(1, `rgba(${rr},${gg},${bb},0)`); ctx.fillStyle = gr; ctx.fillRect(L.x - r, L.y - r, r * 2, r * 2); }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    ctx.restore(); if (testMode) window._lights = LIGHTS.map((L) => [Math.round(L.x), Math.round(L.y), Math.round(L.r), L.a]); LIGHTS.length = 0;
+  }
+  // ---------------------------------------------------------- 코드로 그리는 도트 불꽃 (pixelfx 느낌)
+  const fh = (a, b, c) => { let n = (a * 374761393 + b * 668265263 + c * 1013904223) | 0; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
+  const FIRE_COL = ['#a8323a', '#d8402a', '#ff8a24', '#ffd23f', '#fff4c4'];
+  function pxFire(g, x, y, W, H, p, t, seed) { // (x,y) = 불 밑동 가운데, W = 반폭(칸), H = 높이(칸), p = 한 칸 크기
+    const fr = Math.floor(t * 12), sd = (seed | 0) & 1023;
+    const rows = [[], [], [], [], []];
+    for (let r = 0; r < H; r++) { const u = r / H, sway = Math.sin(t * 5 + sd + r * 0.45) * u * 1.5 + Math.sin(t * 8.7 + sd * 2) * u * 0.7, w = W * Math.pow(1 - u, 0.75) + 0.4;
+      for (let c = -Math.ceil(w) - 1; c <= Math.ceil(w) + 1; c++) { const dx = (c - sway) / w;
+        const heat = 1.05 - u * 1.08 - dx * dx * 0.8 + (fh(c, r + fr, sd) - 0.5) * 0.38 - (r > H * 0.55 && fh(c * 3, r, fr) < 0.25 ? 0.3 : 0);
+        if (heat < 0.1) continue; rows[heat > 0.8 ? 4 : heat > 0.6 ? 3 : heat > 0.4 ? 2 : heat > 0.22 ? 1 : 0].push(c, r); } }
+    for (let k = 0; k < 5; k++) { const L = rows[k]; if (!L.length) continue; g.fillStyle = FIRE_COL[k]; for (let i = 0; i < L.length; i += 2) g.fillRect(Math.round(x + L[i] * p - p / 2), Math.round(y - (L[i + 1] + 1) * p), p, p); }
+    for (let k = 0; k < 4; k++) { const ph = (t * 0.8 + k * 0.27 + sd * 0.013) % 1; // 불티
+      g.globalAlpha = 1 - ph; g.fillStyle = ph < 0.45 ? '#ffd23f' : '#ff7a2a'; g.fillRect(Math.round(x + Math.sin(k * 7.1 + t * 2.6 + sd) * W * p * (0.6 + ph)), Math.round(y - H * p * (0.55 + ph * 1.1)), Math.max(1, p * 0.67), Math.max(1, p * 0.67)); }
+    g.globalAlpha = 1;
+  }
+  function pxSmoke(g, x, y, p, t, seed) { for (let k = 0; k < 5; k++) { const ph = (t * 0.35 + k * 0.2 + seed * 0.01) % 1; g.globalAlpha = 0.45 * (1 - ph); g.fillStyle = k % 2 ? '#8a8796' : '#a9a6b4'; const s = p * (1 + ph * 1.5); g.fillRect(Math.round(x + Math.sin(ph * 5 + k + seed) * p * 3 - s / 2), Math.round(y - ph * p * 22), s, s); } g.globalAlpha = 1; }
+  function drawCampfire(g, x, y, lit, seed) {
+    const t = performance.now() / 1000, p = 3;
+    g.fillStyle = 'rgba(0,0,0,0.22)'; ell(g, x, y + 2, 22, 6);
+    for (let k = 0; k < 9; k++) { const a = k / 9 * Math.PI * 2, sx = Math.round(x + Math.cos(a) * 17), sy = Math.round(y - 2 + Math.sin(a) * 6); g.fillStyle = '#4a4658'; g.fillRect(sx - 4, sy - 3, 8, 6); g.fillStyle = sy < y - 2 ? '#8f8aa0' : '#a9a4b8'; g.fillRect(sx - 3, sy - 3, 6, 4); }
+    const logs = lit ? ['#5a3416', '#8a5a2b', '#b07a44'] : ['#2a211f', '#3d302a', '#54443a'];
+    for (const s of [-1, 1]) for (let i = -5; i <= 5; i++) { const lx = x + i * p, ly = y - 4 - Math.round(i * s * 0.55) * p; g.fillStyle = logs[0]; g.fillRect(lx - 1, ly - 1, p + 2, p + 3); g.fillStyle = logs[1]; g.fillRect(lx, ly, p, p + 1); if (i % 3 === 0) { g.fillStyle = logs[2]; g.fillRect(lx, ly, p, 1); } }
+    if (lit) { g.fillStyle = '#ff7a2a'; for (let i = -3; i <= 3; i++) if (fh(i, Math.floor(t * 6), seed) > 0.4) g.fillRect(x + i * p, y - 5, p, 2); // 숯불
+      pxFire(g, x, y - 6, 4.2, 13, p, t, seed); addLight(g, x, y - 18, 'd_campfire'); }
+    else { g.fillStyle = '#ff5a2a'; if (Math.sin(t * 2 + seed) > 0.6) g.fillRect(x - 1, y - 6, 2, 2); pxSmoke(g, x, y - 8, p, t, seed); }
+  }
+  function drawTorch(g, x, y, seed) {
+    const t = performance.now() / 1000;
+    g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, x, y, 8, 3); g.fillStyle = '#2b2340'; g.fillRect(x - 3, y - 34, 6, 34); g.fillStyle = '#8a5a2b'; g.fillRect(x - 2, y - 32, 4, 32); g.fillStyle = '#b07a44'; g.fillRect(x - 2, y - 32, 1, 32);
+    g.fillStyle = '#2b2340'; g.fillRect(x - 6, y - 40, 12, 8); g.fillStyle = '#6e6c78'; g.fillRect(x - 5, y - 39, 10, 6); g.fillStyle = '#9b98a6'; g.fillRect(x - 5, y - 39, 10, 2);
+    pxFire(g, x, y - 39, 2, 7, 3, t, seed); addLight(g, x, y - 46, 'd_torch');
   }
 
   function drawGround(t) {

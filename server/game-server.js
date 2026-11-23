@@ -221,6 +221,10 @@ const LOOT_K = ['wood', 'stone', 'ore']; // 훔치기·체포: 나라 저장소 
 function lootText(c, sign = '') { return LOOT_K.filter((k) => c[k]).map((k) => `${MPRules.MAT_NAME[k]} ${sign}${c[k]}`).join(', ') || '없음'; }
 function giveLoot(to, c) { for (const k of LOOT_K) to[k] = (to[k] || 0) + (c[k] | 0); }
 // 마법 ↔ 나무: 속성마다 나무에 다른 일 (불=태움 · 번개=쪼갬 · 바람=넘어뜨림 · 어둠=분해 · 얼음=서리 · 자연=다시 자라게)
+// 마법이 모닥불에 닿으면: 불 → 켜짐, 물·얼음·바람 → 꺼짐 (앞쪽 2칸을 가운데로 반지름 4칸)
+function magicFire(M, tx, ty, D) { const on = M.el === 'fire', off = M.el === 'water' || M.el === 'ice' || M.el === 'wind'; if (!on && !off) return ''; let n = 0; const cx = tx + D[0] * 2, cy = ty + D[1] * 2;
+  for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const i = tileIdx(cx + dx, cy + dy), e = world.s.tiles[i]; if (!e || e.id !== 'd_campfire') continue; if (on && e.off) { delete e.off; n++; sendTile(i); } else if (off && !e.off) { e.off = 1; n++; sendTile(i); } }
+  if (n) dirty = true; return n ? (on ? `🔥 모닥불 ${n}개에 불이 붙었어요` : `💨 모닥불 ${n}개가 꺼졌어요`) : ''; }
 function magicTrees(s, M, tx, ty, D) {
   const el = M.el, tier = M.tier, alive = (x, y) => treeHere(x, y) && !world.s.chopped[tileIdx(x, y)], hit = [], seen = new Set();
   const push = (x, y) => { const i = tileIdx(x, y); if (!seen.has(i)) { seen.add(i); hit.push([x, y]); } };
@@ -1004,6 +1008,7 @@ wss.on('connection', (ws) => {
         else if (M.eff === 'light') extra = { light: 30 };
         else if (M.eff === 'heal') extra = { heal: 1 };
         { const tt = magicTrees(s, M, tx, ty, D); if (tt) text = text ? `${text} · ${tt}` : tt; } // 마법이 나무에 닿으면
+        { const ff = magicFire(M, tx, ty, D); if (ff) text = text ? `${text} · ${ff}` : ff; }
         s.acc.mana = ADM ? MPRules.MANA.max : manaNow() - T.mp; s.acc.manaAt = now(); stat(s.acc, 'magic'); dirty = true;
         areaSend(s, Object.assign({ t: 'cast', id: s.id, key, x: s.x, y: s.y, face }, extra));
         send(ws, { t: 'castOk', key, slot: m.slot === 1 ? 1 : 0, cd: ADM ? 0 : T.cd, text, mana: s.acc.mana });

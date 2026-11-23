@@ -25,7 +25,7 @@
     ['d_lantern', 'deco', 'heaven', '빛 수정 등불'], ['d_urn', 'deco', 'heaven', '꽃 화분'],
     ['d_flower', 'deco', 'forest', '꽃밭'], ['d_mush', 'deco', 'forest', '버섯'],
     ['d_snowman', 'deco', 'winter', '눈사람'], ['d_crystal', 'deco', 'winter', '얼음 수정'],
-    ['d_torch', 'deco', 'stone', '횃불'],
+    ['d_torch', 'deco', 'stone', '횃불'], ['d_campfire', 'deco', 'forest', '모닥불'],
     ['trap', 'trap', 'stone', '덫'],
   ].map(([id, cat, theme, name]) => ({ id, cat, theme, name }));
   // 농사: 작물 (실제 시간으로 자람 · 수로 2칸 안이면 20% 빨리 · 비료 주면 남은 시간 절반)
@@ -186,7 +186,7 @@
     f_wood: [['WW'], 4], f_moss: [['WF'], 4], f_stone: [['SS'], 4], f_brick: [['SO'], 4], f_sand: [['SW'], 4], f_ice: [['SF'], 4], f_snow: [['FS'], 4], f_gold: [['OO'], 4], f_cloud: [['FF'], 4], f_sky: [['FL'], 4], f_amethyst: [['OL'], 4],
     w_fence: [['WWW'], 2], w_brick: [['SOS'], 2], w_ice: [['SFS'], 2], w_marble: [['SLS'], 2],
     p_wood: [['W', 'W', 'W'], 2], p_stone: [['S', 'S', 'S'], 2], p_ice: [['F', 'S', 'F'], 2], p_marble: [['O', 'S', 'O'], 2],
-    d_torch: [['O', 'W'], 1], d_lantern: [['L', 'O'], 1], d_urn: [['L', 'S'], 1], d_mush: [['L', 'W'], 1], d_snowman: [['F', 'F'], 1], d_crystal: [['O', 'F'], 1], d_flower: [['LL', 'FF'], 1],
+    d_torch: [['O', 'W'], 1], d_campfire: [['W.W', 'WSW'], 1], d_lantern: [['L', 'O'], 1], d_urn: [['L', 'S'], 1], d_mush: [['L', 'W'], 1], d_snowman: [['F', 'F'], 1], d_crystal: [['O', 'F'], 1], d_flower: [['LL', 'FF'], 1],
     trap: [['O.O', '.W.'], 1], b_wood: [['WWW', 'F.F'], 2], b_stone: [['SSS', 'S.S'], 2], farm: [['FF', 'WW'], 2], canal: [['S.S', 'SSS'], 2],
   };
   const gridMats = (g) => { const m = {}; for (const row of g) for (const c of row) if (GRID_KEY[c]) m[GRID_KEY[c]] = (m[GRID_KEY[c]] || 0) + 1; return m; };
@@ -898,5 +898,13 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  // 빛 (밤에 둘레를 밝힘): r = 반지름(월드 px), a = 세기 0~1, c = 빛 색. 새 빛나는 가구를 만들면 여기에 적기
+  const LIGHT_OF = {
+    d_campfire: { r: 230, a: 1, c: '#ff9a3a', flick: 0.08 }, d_torch: { r: 160, a: 0.95, c: '#ffb050', flick: 0.1 },
+    d_lantern: { r: 150, a: 0.9, c: '#ffe7a0', flick: 0.02 }, d_crystal: { r: 95, a: 0.6, c: '#9fd8ff', flick: 0.03 },
+    bonfire: { r: 280, a: 1, c: '#ff9a3a', flick: 0.08 }, candles: { r: 120, a: 0.8, c: '#ffd27a', flick: 0.06 },
+    torchBag: { r: 150, a: 0.9, c: '#ffb050', flick: 0.1 }, self: { r: 75, a: 0.45, c: null }, lightBuff: { r: 240, a: 1, c: '#fff0b0', flick: 0.03 },
+    spell: { r: 130, a: 0.9 }, flash: { r: 150, a: 0.8 }, rootFlash: { r: 300, a: 1 },
+  };
+  return { LIGHT_OF, applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
