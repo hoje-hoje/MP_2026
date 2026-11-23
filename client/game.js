@@ -2553,13 +2553,19 @@
   }
 
 
-  const CLOUDS = [0, 1, 2].map((v) => artCanvas(64, 32, (g) => { // 직접 그린 구름 (테두리 없이 흰색 + 아래쪽만 연한 하늘색 그늘)
-    const blobs = [[[14, 20, 9], [26, 14, 11], [40, 16, 10], [50, 21, 8]], [[12, 21, 8], [24, 16, 10], [36, 12, 11], [48, 18, 9]], [[16, 18, 10], [30, 12, 12], [44, 19, 9]]][v];
-    g.fillStyle = '#d6e6fb'; for (const [x, y, r] of blobs) pxDisc(g, x, y + 3, r); g.fillRect(8, 22, 48, 6);
-    g.fillStyle = '#ffffff'; for (const [x, y, r] of blobs) pxDisc(g, x, y, r - 1); g.fillRect(10, 20, 44, 5);
-    g.fillStyle = '#f2f8ff'; for (const [x, y, r] of blobs) g.fillRect(x - 2, y + r - 5, 4, 2);
+  const CLOUD_N = 6, CLOUDS = [...Array(CLOUD_N)].map((_, v) => artCanvas(48, 24, (g) => { // 도트 구름: 꽉 찬 모양(가운데 빈 곳 없음) · 위 밝게, 아래 그늘
+    let sd = v * 9301 + 49297; const rnd = () => ((sd = (sd * 233280 + 49297) % 2147483647) / 2147483647);
+    const W = 48, B = 20, n = 3 + (v % 3), m = []; for (let y = 0; y < 24; y++) m.push(new Array(W).fill(0));
+    const x0 = 5 + Math.floor(rnd() * 3), x1 = W - 6 - Math.floor(rnd() * 3), bumps = [];
+    for (let i = 0; i < n; i++) { const r = 4 + Math.floor(rnd() * 5) + (i > 0 && i < n - 1 ? 2 : 0); bumps.push([x0 + 3 + (x1 - x0 - 6) * (i / (n - 1)) + (rnd() - 0.5) * 3, B - 2 - r * 0.55, r]); }
+    for (let y = 0; y <= B; y++) for (let x = 0; x < W; x++) { let on = y >= B - 4 && x >= x0 && x <= x1; for (const [cx, cy, r] of bumps) if ((x - cx) ** 2 + (y - cy) ** 2 * 1.15 <= r * r) on = true; if (on) m[y][x] = 1; }
+    for (let x = 0; x < W; x++) { let top = -1; for (let y = 0; y <= B; y++) if (m[y][x]) { top = y; break; } if (top >= 0) for (let y = top; y <= B; y++) m[y][x] = 1; } // 세로로 꽉 채움 → 구멍 없음
+    m[B][x0] = 0; m[B][x1] = 0; // 아래 모서리 둥글게
+    for (let y = 0; y <= B; y++) for (let x = 0; x < W; x++) { if (!m[y][x]) continue; const up = y > 0 && m[y - 1][x], up2 = y > 1 && m[y - 2][x];
+      g.fillStyle = !up ? '#ffffff' : y >= B ? '#b9cfee' : y >= B - 2 ? '#d2e2f7' : !up2 ? '#fbfdff' : '#eef5ff'; g.fillRect(x, y, 1, 1); }
+    for (const [cx, cy, r] of bumps) { g.fillStyle = '#ffffff'; g.fillRect(Math.round(cx - r * 0.45), Math.round(cy - r * 0.55), 2, 1); } // 반짝 하이라이트
   }));
-  function cloudAt(g, i, x, bottom, w, alpha = 1) { const c = CLOUDS[i % 3], k = w / 64; g.globalAlpha = alpha; const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(c, Math.round(x - w / 2), Math.round(bottom - 32 * k), Math.round(w), Math.round(32 * k)); g.imageSmoothingEnabled = p; g.globalAlpha = 1; }
+  function cloudAt(g, i, x, bottom, w, alpha = 1) { const c = CLOUDS[i % CLOUD_N], k = w / 48; g.globalAlpha = alpha; const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(c, Math.round(x - w / 2), Math.round(bottom - 24 * k), Math.round(w), Math.round(24 * k)); g.imageSmoothingEnabled = p; g.globalAlpha = 1; }
   // 하늘 배경: 사용자 하늘 색 시안 6가지를 시간(한국 시간)에 따라 부드럽게 섞음. 밤(21시~)엔 별하늘 사진 + 어둡고 몽환적인 구름
   const SKY_KEYS = [ // [시각, 위→아래 5색]
     [0, ['#0b0626', '#1a0f45', '#341a5a', '#5a2a70', '#83437f']], [5, ['#120a2e', '#22144f', '#3d1d62', '#6b3a78', '#9a5a8a']],
@@ -2582,7 +2588,7 @@
     const n = night ? 6 : 9; // 구름: 밤엔 어둡고 보랏빛으로 빛나게 (몽환적)
     if (night) { ctx.save(); ctx.filter = 'brightness(0.32) saturate(1.4) hue-rotate(205deg) drop-shadow(0 0 10px rgba(190,160,255,0.55))'; }
     else if (dusk) { ctx.save(); ctx.filter = 'sepia(0.35) saturate(1.3) hue-rotate(-12deg) brightness(0.95)'; }
-    for (let i = 0; i < n; i++) { const x = ((i * 337 + t * (8 + i * 2)) % (vw + 400)) - 200, y = (i * 173) % Math.max(1, vh); cloudAt(ctx, i, x, y + 60, 128 + (i % 3) * 48, night ? 0.75 : 0.9); }
+    for (let i = 0; i < n; i++) { const sp = 7 + ((i * 7919) % 13) * 0.55, w = 120 + ((i * 131) % 5) * 26, x = ((i * 337 + t * sp) % (vw + 500)) - 250, y = (i * 173) % Math.max(1, vh); cloudAt(ctx, i, x, y + 60, w, night ? 0.8 : 1); } // 구름마다 속도·크기 조금씩 다름
     if (night || dusk) ctx.restore();
   }
 
