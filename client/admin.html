@@ -155,6 +155,15 @@ tr.editing td { background: #fff1b8; }
   </section>
 
   <section class="card">
+    <h2>💬 말투 고치기 <span class="hint">게임 화면·알림·스킬 트리·팻말 글자를 바꿔요 · 문장 일부만 적어도 그 부분만 바뀌어요 · 학생 채팅은 안 바뀜 · 저장하면 바로 적용</span></h2>
+    <div class="row"><label>원래 문장 <input id="txFrom" style="width:280px" placeholder="예: 앞 마법을 먼저 배워요"></label><label>바꿀 문장 <input id="txTo" style="width:280px" placeholder="예: 앞 마법부터 배워야 해!"></label><button id="txSave" type="button" class="primary">저장</button></div>
+    <div class="row"><input id="txFind" style="width:280px" placeholder="게임 속 문장 찾기 (예: 마법석)"><button id="txScan" type="button">문장 모으기</button><span class="muted" id="txInfo"></span></div>
+    <div class="tablewrap" style="max-height:220px"><table><tbody id="txCands"></tbody></table></div>
+    <h3 style="margin:10px 0 4px">바꾼 문장</h3>
+    <div class="tablewrap" style="max-height:260px"><table><thead><tr><th>원래</th><th>바꾼 말</th><th></th></tr></thead><tbody id="txList"></tbody></table></div>
+  </section>
+
+  <section class="card">
     <h2>🔨 제작대 조합법 고치기 <span class="hint">칸을 누를 때마다 재료가 바뀌어요 (빈칸 → 목재 → 돌 → 광석 → 풀 → 꽃 → 가죽) · 저장하면 접속 중인 학생에게 바로 적용</span></h2>
     <div class="row"><button id="rcLoad" type="button">조합법 불러오기</button><select id="rcCat"><option value="build">건축 자재</option><option value="tool">도구</option><option value="light">빛</option><option value="furniture">가구</option></select><input id="rcFind" placeholder="이름 찾기" style="width:140px"><span class="muted" id="rcRes"></span></div>
     <div id="rcList" class="rcList"></div>
@@ -346,6 +355,23 @@ tr.editing td { background: #fff1b8; }
   document.addEventListener('click', async (e) => { if (e.target.id !== 'adOn' && e.target.id !== 'adOff') return; try { const r = await api('setAdmin', { name: $('adName').value, on: e.target.id === 'adOn' }); $('adRes').textContent = `${r.name} → ${r.admin ? '관리자 켜짐' : '관리자 꺼짐'}`; say(r.admin ? '관리자 계정을 켰어요' : '관리자 계정을 껐어요'); } catch (er) {} });
   document.addEventListener('click', async (e) => { if (e.target.id !== 'gpGo') return; try { const r = await api('giveP', { name: $('gpName').value, n: +$('gpN').value, why: $('gpWhy').value || '신의 선물' }); $('gpRes').textContent = `${r.name} → 내 코인 ${r.pcoin}${r.online ? ' (접속 중 · 알림 보냄)' : ' (다음 접속 때 보여요)'}`; say('줬어요'); } catch (er) {} });
 
+
+  // 말투 고치기
+  let TX = {}, TXC = [];
+  const drawTx = () => { $('txList').innerHTML = Object.entries(TX).map(([a, b]) => `<tr><td>${escA(a)}</td><td><b>${escA(b)}</b></td><td><button type="button" data-txe="${escA(a)}">고치기</button> <button type="button" data-txd="${escA(a)}">지우기</button></td></tr>`).join('') || '<tr><td class="muted">아직 없어요</td></tr>'; };
+  const drawCands = () => { const q = $('txFind').value.trim(); const L = (q ? TXC.filter((t) => t.includes(q)) : TXC).slice(0, 80); $('txCands').innerHTML = L.map((t) => `<tr><td style="cursor:pointer" data-txc="${escA(t)}">${escA(t)}${TX[t] != null ? ' <small class="muted">→ ' + escA(TX[t]) + '</small>' : ''}</td></tr>`).join(''); $('txInfo').textContent = TXC.length ? `${TXC.length}개 중 ${L.length}개` : ''; };
+  async function scanTexts() { const set = new Set(); for (const f of ['/game.js', '/index.html', '/rules.js', '/skilltree.html']) { try { const t = await (await fetch(f)).text();
+      for (const m of t.matchAll(/['"`]([^'"`\n<>{}$]{2,120})['"`]/g)) if (/[가-힣]/.test(m[1])) set.add(m[1].trim());
+      for (const m of t.matchAll(/>([^<>{}]{2,120})</g)) if (/[가-힣]/.test(m[1])) set.add(m[1].trim()); } catch (e) {} }
+    TXC = [...set].filter((x) => x && !/^(\/\/|\*)/.test(x)).sort((a, b) => a.length - b.length); drawCands(); }
+  document.addEventListener('click', async (e) => {
+    if (e.target.id === 'txScan') { $('txInfo').textContent = '모으는 중…'; const r = await api('textList'); TX = r.texts || {}; drawTx(); await scanTexts(); return; }
+    if (e.target.id === 'txSave') { try { const r = await api('textSet', { from: $('txFrom').value, to: $('txTo').value }); TX = r.texts; drawTx(); drawCands(); say('말투를 바꿨어요 (접속 중인 학생에게 바로 적용)'); } catch (er) {} return; }
+    const c = e.target.closest && e.target.closest('[data-txc]'); if (c) { $('txFrom').value = c.dataset.txc; $('txTo').value = TX[c.dataset.txc] ?? c.dataset.txc; $('txTo').focus(); return; }
+    if (e.target.dataset.txe) { $('txFrom').value = e.target.dataset.txe; $('txTo').value = TX[e.target.dataset.txe]; $('txTo').focus(); return; }
+    if (e.target.dataset.txd) { try { const r = await api('textDel', { from: e.target.dataset.txd }); TX = r.texts; drawTx(); drawCands(); say('지웠어요'); } catch (er) {} }
+  });
+  document.addEventListener('input', (e) => { if (e.target.id === 'txFind') drawCands(); });
   // 제작대 조합법 고치기
   let RC = [], RCK = {}; const RC_ORDER = ['.', 'W', 'S', 'O', 'F', 'L', 'H'], RC_NAME = { '.': '', W: '목재', S: '돌', O: '광석', F: '풀', L: '꽃', H: '가죽' }, RC_COL = { W: '#b07a42', S: '#8a8a96', O: '#c08a2a', F: '#4a9a3a', L: '#e070a0', H: '#a0623a' };
   const rcPad = (g) => { const rows = (g || []).map((r) => r.padEnd(3, '.')).concat(['...', '...', '...']).slice(0, 3); return rows.join('').split(''); };

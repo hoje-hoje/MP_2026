@@ -63,6 +63,7 @@ svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
 </div><div class="info" id="info"></div></div>
 <p class="note">시안 화면 · 처음엔 위의 기본 6속성만 보여요. 숨은 속성이 하나라도 열리면 아래쪽이 나타나고, 아직 못 연 숨은 속성은 ???로 보여요.</p>
 <script src="rules.js"></script>
+<script src="texts.js"></script>
 <script type="module">
 const P = '/assets/pixelfx/';
 const core = await import(P + 'core/index.js');
@@ -138,5 +139,6 @@ function render() { for (const b of stage.querySelectorAll('.node')) { const k =
 document.getElementById('reset').onclick = () => { lv = { root: 1 }; sel = 'fire.t1'; INV = {}; for (const e of EL) for (const r of ['Ⅰ', 'Ⅱ', 'Ⅲ']) INV[e.id + '.' + r] = r === 'Ⅰ' ? 3 : 1; render(); };
 render(); icons();
 </script>
+<script>try { if (window.parent !== window && window.parent.MP_TX) { const sync = () => MP_TX.set(window.parent.MP_TX.map); addEventListener("load", sync); setInterval(() => { if (MP_TX.map !== window.parent.MP_TX.map) sync(); }, 2000); } } catch (e) { /* 따로 열었을 때 */ }</script>
 </body>
 </html>

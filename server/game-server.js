@@ -36,6 +36,7 @@ const STATIC = {
   '/index.html': path.join(ROOT, 'client', 'index.html'),
   '/game.js': path.join(ROOT, 'client', 'game.js'),
   '/rules.js': path.join(ROOT, 'client', 'rules.js'),
+  '/texts.js': path.join(ROOT, 'client', 'texts.js'),
   '/admin': path.join(ROOT, 'client', 'admin.html'),
   '/preview': path.join(ROOT, 'client', 'preview.html'),
   '/palette': path.join(ROOT, 'client', 'palette.html'),
@@ -324,6 +325,7 @@ const findPuzzle = (id) => (state.puzzles || []).find((q) => q.id === id) || FIL
 loadPuzzles();
 fs.watchFile(PUZZLE_FILE, { interval: 5000 }, loadPuzzles); // 문제 파일을 고치면 서버 재시작 없이 반영
 state.world = world.s;
+state.texts = state.texts || {}; // 관리자가 고친 말투 (원래 문장 → 바꿀 문장)
 state.recipes = state.recipes || {}; MPRules.applyRecipes(state.recipes); // 관리자가 고친 조합법
 state.settings = state.settings || {};   // 관리자 설정: testMode(true/false/없음=환경변수), founding('auto'|'open'|'closed')
 state.coupons = state.coupons || {};     // 쿠폰 코드 -> { r:{coin|army}, memo, at, used:{name,nation,ts} }
@@ -461,7 +463,7 @@ wss.on('connection', (ws) => {
       if (nat) { world.refreshActions(nat, actionDayKey()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       if (!acc.rootGiven) { acc.rootGiven = 1; acc.skills = acc.skills || {}; acc.bag = acc.bag || {}; if (Object.keys(acc.skills).length) acc.skills.root = 1; else acc.bag.ms_root_0 = (acc.bag.ms_root_0 | 0) + 1; dirty = true; } // 처음 마법석 1개 (이미 마법을 배운 사람은 마력 깨우기를 배운 걸로)
       send(ws, {
-        t: 'welcome', admin: !!acc.admin, recipes: state.recipes, bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
+        t: 'welcome', admin: !!acc.admin, recipes: state.recipes, texts: state.texts, bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander.map(({ token, ...r }) => r), board: boardPub(),
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
         frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], picked: Object.entries(world.s.picked || {}).filter(([, t]) => MPRules.stillPicked(t, now())).map(([i]) => +i), job: acc.job || null, tools: acc.tools || {}, skills: acc.skills || {}, slots: acc.slots || [null, null], mana: Math.min(MPRules.MANA.max, (acc.mana ?? MPRules.MANA.max) + (Date.now() - (acc.manaAt || 0)) / 1000 * MPRules.MANA.rate), pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), dug: Object.keys(world.s.dug || {}).map(Number), weapons: acc.weapons || {}, weapon: acc.weapon || null, startDay: gameClock().day, traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
@@ -1665,6 +1667,10 @@ async function adminOp(m) {
       const msg = JSON.stringify({ t: 'roomEdit', id, diff: { set, walls, props, hideProps: R.hideProps, reset: !!m.reset } }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
       return { ok: true, floor: Object.keys(R.floor).length, walls: Object.keys(R.walls).length, props: Object.keys(R.props).length };
     }
+    case 'textList': return { ok: true, texts: state.texts };
+    case 'textSet': case 'textDel': { const from = String(m.from || '').slice(0, 300); if (!from.trim()) return { ok: false, err: '원래 문장을 적어요' };
+      if (m.op === 'textDel') delete state.texts[from]; else state.texts[from] = String(m.to ?? '').slice(0, 300);
+      dirty = true; const msg = JSON.stringify({ t: 'texts', texts: state.texts }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return { ok: true, texts: state.texts }; }
     case 'recipeList': return { ok: true, keys: MPRules.GRID_KEY, list: MPRules.RECIPES.filter((r) => r.grid).map((r) => ({ id: r.id, cat: r.cat, name: r.name, grid: r.grid, give: r.give || 1, def: r.grid0, give0: r.give0, changed: !!state.recipes[r.id] })) };
     case 'recipeSet': case 'recipeReset': { // 조합법 고치기 / 원래대로
       const R = MPRules.RECIPE_BY[String(m.id || '')]; if (!R || !R.grid0) return { ok: false, err: '없는 조합법이에요' };

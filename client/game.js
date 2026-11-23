@@ -933,7 +933,8 @@
     g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(L, T, w, 2);
     g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, Math.round(x), T + 9);
   }
-  function bubble(g, x, y, text) {
+  function bubble(g, x, y, text) { if (window.MP_TX) return MP_TX.off(() => bubble0(g, x, y, text)); return bubble0(g, x, y, text); } // 학생 말풍선은 말투 바꾸기 안 함
+  function bubble0(g, x, y, text) {
     const ei = EMOTE_LIST.indexOf(text);
     if (ei >= 0 && ART['x_emote' + ei]) { pix(g, 'emote' + ei, x, y + 14, 3); return; }
     g.font = `11px ${PFONT}`;
@@ -3310,7 +3311,7 @@
   function onNet(m) {
     switch (m.t) {
       case 'welcome': {
-        myId = m.id; netOn = true; store('mp2026.token', m.token); MY_ADMIN = !!m.admin; if (m.recipes) MPRules.applyRecipes(m.recipes); if (MY_ADMIN) setTimeout(() => toast('🛠 관리자 계정이에요 · 마법·도구 전부, 마나·쿨타임·재료 제한 없음'), 1500);
+        myId = m.id; netOn = true; store('mp2026.token', m.token); MY_ADMIN = !!m.admin; if (m.recipes) MPRules.applyRecipes(m.recipes); if (m.texts && window.MP_TX) MP_TX.set(m.texts); if (MY_ADMIN) setTimeout(() => toast('🛠 관리자 계정이에요 · 마법·도구 전부, 마나·쿨타임·재료 제한 없음'), 1500);
         MY_SKILLS = m.skills || {}; MY_SLOTS = m.slots || [null, null]; setTimeout(renderSkillPad, 500); if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); }
         if (m.picked) { PICKED.clear(); const t0 = Date.now(); for (const i of m.picked) PICKED.set(i, t0); } // 뜯긴 풀·꽃
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
@@ -3407,6 +3408,7 @@
       case 'cast': playCast(m); break;
       case 'stats': PF.stats = m.stats || {}; if (!$('profile').hidden) renderProfile(); break;
       case 'admin': MY_ADMIN = !!m.on; break;
+      case 'texts': if (window.MP_TX) MP_TX.set(m.texts || {}); break; // 관리자가 말투를 고침
       case 'recipes': MPRules.applyRecipes(m.recipes || {}); if (!$('craftBox').hidden) openCraft(); break; // 관리자가 조합법을 고침
       case 'mapReset': toast('🌍 맵이 처음 상태로 돌아갔어요 · 다시 불러오는 중…'); setTimeout(() => location.reload(), 1600); break;
       case 'castOk': { if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); } if (m.cd) { SKCD[m.slot] = performance.now() + m.cd * 1000; SKCDLEN[m.slot] = m.cd * 1000; } if (m.text) toast(m.text); break; }
