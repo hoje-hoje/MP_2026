@@ -1421,7 +1421,7 @@
   // 도구 그림: 사용자 마크 도구 리스프라이트(assets/tools/철_*) — 대각선 그림이라 손에 들 때 45° 돌려 세움
   TOOL.can = { pv: [1, 6], noRot: true, px: ['...SSS.....', '..S...S....', '.SSSSSSS..S', 'SLWLLLLDS.S', 'SLWLLLLDSS.', 'SLLLLLLDS..', 'SLLLLLLDS..', 'SDDDDDDDS..', '.SSSSSSS...'] }; TOOL.can.cv = pxRows(TOOL.can.px, Object.assign({}, TPAL, { L: '#6fb6e8', W: '#d8f1ff', D: '#3f7fb8', S: '#2b2340' }));
   TOOL.hoe = { pv: [2, 12], px: ['SSS.', '..S.', '..b.', '..b.', '..b.', '..b.', '..b.', '..b.'] }; TOOL.hoe.cv = pxRows(TOOL.hoe.px, TPAL);
-  for (const [k, f] of [['axe', 'iron_axe'], ['pick', 'iron_pick'], ['shovel', 'iron_shovel'], ['sword', 'iron_sword'], ['dagger', 'stone_sword'], ['hoe', 'iron_hoe'], ['rod', 'rod_wood']]) { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d').drawImage(im, 0, 0); Object.assign(TOOL[k], { cv: c, pv: [2, im.height - 2], diag: true }); }; im.src = `assets/tools/${f}.png`; }
+  for (const [k, f] of [['axe', 'iron_axe'], ['pick', 'iron_pick'], ['shovel', 'iron_shovel'], ['sword', 'iron_sword'], ['dagger', 'stone_sword'], ['hoe', 'iron_hoe']]) { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d').drawImage(im, 0, 0); Object.assign(TOOL[k], { cv: c, pv: [2, im.height - 2], diag: true }); }; im.src = `assets/tools/${f}.png`; }
   const ACT_TOOL = { chop: 'axe', hit: 'axe', mine: 'pick', dig: 'pick', fish: 'rod', farm: 'shovel', till: 'hoe', water: 'can' };
   function drawToolOn(g, o, act, t) { // o = 캐릭터 (x, y는 발), 캐릭터 48px(3배) 기준 손 위치
     const k = TOOL[ACT_TOOL[act]]; if (!k) return;
@@ -2248,14 +2248,14 @@
       name: '구름 쉼터 1', desc: '조용히 쉬어 가는 작은 방', w: 14, h: 10, pos: [3, 0.55], crowd: 2,
       floor: 'cloud', wall: true, trim: '#6b4fb3',
       emotes: ['쉿', '여기 조용하다', '...'],
-      doors: [{ side: 'W', at: 5, to: 'council' }],
+      doors: [{ side: 'W', at: 7, to: 'council' }],
       props: [P1(6, 5, cloudBench, { w: 2 }), P1(3, 3, urn), P1(10, 3, urn), P1(10, 7, lantern), npcProp('rest', 6, 3)],
     },
     secret2: {
       name: '구름 쉼터 2', desc: '조용히 쉬어 가는 작은 방', w: 14, h: 10, pos: [3, 1.45], crowd: 1,
       floor: 'cloud', wall: true, trim: '#6b4fb3',
       emotes: ['쉿', '...'],
-      doors: [{ side: 'W', at: 5, to: 'council' }],
+      doors: [{ side: 'W', at: 2, to: 'council' }],
       props: [P1(6, 5, cloudBench, { w: 2 }), P1(3, 3, urn), P1(10, 3, urn), P1(3, 7, lantern)],
     },
     plaza: { // 넓은 구름 광장: 가운데 빛의 분수, 네 귀퉁이 꽃밭, 위쪽 이벤트 무대
@@ -2310,8 +2310,46 @@
       ],
     },
   };
+  // ---------------------------------------------------------- 하늘섬: 방을 벽·문 없이 구름다리로 이어 한 장의 지도로 (가로·세로로 길게)
+  // 방 번호·방 안 좌표는 그대로 (서버·감옥·맵 고치기와 호환). 다리 위에 서 있으면 왼쪽/위쪽 방 좌표로 셈 (좌표가 음수가 안 되게)
+  const SKY = { off: {}, bridge: new Map(), bcv: null, bx0: 0, by0: 0, gap: 6 };
+  for (const [id, R] of Object.entries(ROOMS)) if (id !== 'jail') R.wall = false; // 감옥만 벽
+  const skyLinked = (R, d) => d.to !== 'ground' && ROOMS[d.to] && ROOMS[d.to].doors.some((q) => q.to === R.id);
+  (function layoutSky() {
+    for (const [id, R] of Object.entries(ROOMS)) R.id = id;
+    const G = SKY.gap, off = SKY.off; off.temple = [0, 0]; const qu = ['temple'];
+    while (qu.length) { const id = qu.shift(), A = ROOMS[id], [ax, ay] = off[id];
+      for (const d of A.doors) { if (!skyLinked(A, d) || off[d.to]) continue; const B = ROOMS[d.to], d2 = B.doors.find((q) => q.to === id);
+        off[d.to] = d.side === 'E' ? [ax + A.w + G, ay + d.at - d2.at] : d.side === 'W' ? [ax - G - B.w, ay + d.at - d2.at] : d.side === 'N' ? [ax + d.at - d2.at, ay - G - B.h] : [ax + d.at - d2.at, ay + A.h + G]; qu.push(d.to); } }
+    for (const id of Object.keys(ROOMS)) if (!off[id]) off[id] = [0, 200]; // 이어지지 않은 방 (없어야 함)
+    for (const [id, A] of Object.entries(ROOMS)) { const [ax, ay] = off[id];
+      for (const d of A.doors) { if (!skyLinked(A, d) || (d.side !== 'E' && d.side !== 'S')) continue; // 오른쪽·아래로 가는 다리만 (한 번씩)
+        for (let k = 1; k <= G; k++) for (let w = -1; w <= 1; w++) { const gx = d.side === 'E' ? ax + A.w - 1 + k : ax + d.at + w, gy = d.side === 'E' ? ay + d.at + w : ay + A.h - 1 + k; SKY.bridge.set(gx + ',' + gy, id); } } }
+  })();
+  const skyRoomAt = (gx, gy) => { for (const [id, R] of Object.entries(ROOMS)) { const [ox, oy] = SKY.off[id]; if (gx >= ox && gy >= oy && gx < ox + R.w && gy < oy + R.h) return R; } return null; };
+  function skyBlocked(R, tx, ty) { // 방 안 칸 좌표 → 하늘섬 전체에서 막혔는지
+    const [ox, oy] = SKY.off[R.id], gx = tx + ox, gy = ty + oy, Q = skyRoomAt(gx, gy);
+    if (Q) { const lx = gx - SKY.off[Q.id][0], ly = gy - SKY.off[Q.id][1], v = Q.grid[ly * Q.w + lx]; if (v >= 10) { const d = Q.doors[v - 10]; return !(d && (d.to === 'ground' || skyLinked(Q, d))); } return v === 1; }
+    return !SKY.bridge.has(gx + ',' + gy);
+  }
+  function skyRebase() { // 걸어서 다른 섬(방)에 들어가면 그 방 좌표로 바꿈
+    const R = player.room; if (!R || !SKY.off[R.id]) return; const [ox, oy] = SKY.off[R.id], gx = Math.floor(player.x / TILE) + ox, gy = Math.floor(player.y / TILE) + oy;
+    let Q = skyRoomAt(gx, gy); if (!Q) { const own = SKY.bridge.get(gx + ',' + gy); Q = own ? ROOMS[own] : R; }
+    if (Q === R) return; const [qx, qy] = SKY.off[Q.id]; player.x += (ox - qx) * TILE; player.y += (oy - qy) * TILE; player.room = Q; lastTerr = null; netTp = true;
+  }
+  function buildBridges() { // 구름다리 그림 (한 장)
+    const keys = [...SKY.bridge.keys()].map((k) => k.split(',').map(Number)); if (!keys.length) return;
+    const x0 = Math.min(...keys.map((k) => k[0])) - 2, y0 = Math.min(...keys.map((k) => k[1])) - 2, x1 = Math.max(...keys.map((k) => k[0])) + 3, y1 = Math.max(...keys.map((k) => k[1])) + 3;
+    const c = document.createElement('canvas'); c.width = (x1 - x0) * TILE; c.height = (y1 - y0) * TILE; const g = c.getContext('2d'), NC = ROOM_NIGHT;
+    const pts = keys.map(([x, y]) => [(x - x0) * TILE + 16, (y - y0) * TILE + 16]);
+    g.fillStyle = NC ? 'rgba(14,8,40,0.4)' : 'rgba(110,130,200,0.22)'; for (const [x, y] of pts) circ(g, x, y + 26, 22 + hash(x, y) * 6);
+    g.fillStyle = NC ? '#2c2860' : '#e4ebfb'; for (const [x, y] of pts) circ(g, x, y + 6, 22 + hash(x, y, 2) * 6);
+    g.fillStyle = NC ? '#463f86' : '#ffffff'; for (const [x, y] of pts) circ(g, x, y, 20 + hash(x, y, 3) * 6);
+    g.fillStyle = NC ? 'rgba(120,110,190,0.5)' : 'rgba(225,235,252,0.9)'; for (const [x, y] of pts) if (hash(x, y, 5) < 0.35) circ(g, x + 6, y + 4, 5); // 구름 결
+    SKY.bcv = c; SKY.bx0 = x0 * TILE; SKY.by0 = y0 * TILE;
+  }
   const SKY_M = 90;
-  function buildRooms() { for (const id of Object.keys(ROOMS)) buildRoom(id); }
+  function buildRooms() { for (const id of Object.keys(ROOMS)) buildRoom(id); buildBridges(); }
   // 관리자 '맵 고치기'로 바꾼 방 (타일·장벽·소품 숨기기). 서버가 보내 준다
   let ROOM_EDITS = {};
   const GFLOOR = new Map(), GWALL = new Set(), GPROPS = new Map(); // GPROPS: 칸 → { r: 'x:그림'|'u:동물', b: 막힘 } // 땅 지도에 관리자가 깐 타일·장벽 (칸 번호)
@@ -2409,7 +2447,7 @@
       for (const [k, v] of Object.entries(E.props || {})) { const [x, y] = k.split(',').map(Number); if (v.b && x < R.w && y < R.h && R.grid[y * R.w + x] < 10) R.grid[y * R.w + x] = 1; } // 막힘 소품
       R.sprites = (E.hideProps ? [] : R.props).map((p) => ({ x: (p.x + p.w / 2) * TILE, y: (p.y + p.h) * TILE, draw: p.draw, board: p.board, prop: p }));
       for (const [k, v] of Object.entries(E.props || {})) { const [x, y] = k.split(',').map(Number); R.sprites.push({ x: (x + 0.5) * TILE, y: (y + 1) * TILE - 2, draw: (g, X, Y) => drawProp(g, v.r, X, Y) }); } // 관리자가 놓은 소품
-      R.doors.forEach((d) => {
+      R.doors.forEach((d) => { if (skyLinked(R, d)) return; // 이어진 곳은 문 없이 구름다리
         const label = d.to === 'ground' ? '땅으로 내려가기' : ROOMS[d.to].name;
         const [x, y] = d.side === 'N' ? [(d.at + 0.5) * TILE, TILE] : d.side === 'S' ? [(d.at + 0.5) * TILE, R.h * TILE] : d.side === 'W' ? [TILE, (d.at + 1) * TILE] : [(R.w - 1) * TILE, (d.at + 1) * TILE];
         R.sprites.push({ x, y, draw: (g, X, Y) => arch(g, X, Y, d.side, label, d.to === 'ground') });
@@ -2512,7 +2550,7 @@
   function checkDoor() {
     const R = player.room;
     const v = R.grid[(player.y / TILE | 0) * R.w + (player.x / TILE | 0)];
-    if (v >= 10) { const d = R.doors[v - 10]; if (d.to === 'ground') descend(); else enterRoom(d.to, R.id); }
+    if (v >= 10) { const d = R.doors[v - 10]; if (d.to === 'ground') descend(); else if (!skyLinked(R, d)) enterRoom(d.to, R.id); }
   }
 
   // 하늘 소품
@@ -3360,7 +3398,7 @@
       const id = v.getUint32(q, true), x = v.getUint16(q + 4, true), y = v.getUint16(q + 6, true), f = v.getUint8(q + 8);
       const r = remotes.get(id); if (!r) continue;
       if (r.x == null || Math.hypot(x - r.x, y - r.y) > 400) { r.x = x; r.y = y; }
-      r.tx = x; r.ty = y; r.dir = f & 1 ? -1 : 1; r.moving = !!(f & 2); r.face = (f >> 2) & 3;
+      if (r.snap) { r.x = x; r.y = y; r.snap = false; } r.tx = x; r.ty = y; r.dir = f & 1 ? -1 : 1; r.moving = !!(f & 2); r.face = (f >> 2) & 3;
     }
     setNet(`접속 중 ${onlineCount}명`);
   }
@@ -3396,7 +3434,7 @@
         if (!r) { r = { x: null, y: null, tx: null, ty: null, dir: 1, moving: false, emote: null, emoteT: 0 }; remotes.set(q.id, r); }
         r.name = q.name; r.team = q.team; r.tag = teamColor(q.team);
         r.look = Object.assign({ seed: (q.id * 0.37) % 3 }, q.look, { red: q.red | 0 });
-        r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || ''; r.king = !!q.king; r.job = q.job || null; r.weapon = q.weapon || null; r.side = q.side || null; r.teacher = !!q.teacher;
+        if (r.room !== q.room && r.x != null) r.snap = true; r.room = q.room || null; r.nid = q.nid; r.carry = q.carry; r.jailed = q.jailed; r.badge = q.badge || ''; r.king = !!q.king; r.job = q.job || null; r.weapon = q.weapon || null; r.side = q.side || null; r.teacher = !!q.teacher;
         break;
       }
       case 'leave': remotes.delete(m.id); break;
@@ -3957,7 +3995,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { send: (o) => { if (testMode) ws.send(JSON.stringify(o)); }, near: () => (testMode && near ? { kind: near.kind, text: near.text, x: near.x, y: near.y } : null), tile: (dx, dy) => testMode ? TILES[(Math.floor(player.y / TILE) + dy) * W + Math.floor(player.x / TILE) + dx] || null : null, me: () => testMode ? { x: Math.floor(player.x / TILE), y: Math.floor(player.y / TILE), face: player.face, can: MY_CAN, sap: MY_BAG.m_sapling | 0 } : null, putTile: (dx, dy, e) => { if (!testMode) return; const i = (Math.floor(player.y / TILE) + dy) * W + Math.floor(player.x / TILE) + dx; TILES[i] = e; dirtyTile(i); }, fallNear: () => { if (!testMode) return null; const px = Math.floor(player.x / TILE), py = Math.floor(player.y / TILE); for (let r = 1; r < 12; r++) for (let y = py - r; y <= py + r; y++) for (let x = px - r; x <= px + r; x++) if (treeAt(x, y)) { treeFall(y * W + x); noTree[y * W + x] = 1; dirtyTile(y * W + x); return [x, y]; } return null; }, benchPos: () => { for (const [i, nid] of STORE_AT) if (nid === MY_NID) return [(i % W) + 0.5 + BENCH_DX / TILE, Math.floor(i / W) + 0.5]; return null; }, playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), face: (f) => { if (testMode) player.face = f; }, near: () => (testMode ? JSON.stringify(near && { kind: near.kind, text: near.text }) + ' ft=' + facingTile() + ' ga=' + JSON.stringify(groundAction()) + ' tA=' + treeAt(...facingTile()) + ' on=' + ONLINE : null), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { send: (o) => { if (testMode) ws.send(JSON.stringify(o)); }, near: () => (testMode && near ? { kind: near.kind, text: near.text, x: near.x, y: near.y } : null), tile: (dx, dy) => testMode ? TILES[(Math.floor(player.y / TILE) + dy) * W + Math.floor(player.x / TILE) + dx] || null : null, me: () => testMode ? { room: player.room ? player.room.id : null, x: Math.floor(player.x / TILE), y: Math.floor(player.y / TILE), face: player.face, can: MY_CAN, sap: MY_BAG.m_sapling | 0 } : null, putTile: (dx, dy, e) => { if (!testMode) return; const i = (Math.floor(player.y / TILE) + dy) * W + Math.floor(player.x / TILE) + dx; TILES[i] = e; dirtyTile(i); }, fallNear: () => { if (!testMode) return null; const px = Math.floor(player.x / TILE), py = Math.floor(player.y / TILE); for (let r = 1; r < 12; r++) for (let y = py - r; y <= py + r; y++) for (let x = px - r; x <= px + r; x++) if (treeAt(x, y)) { treeFall(y * W + x); noTree[y * W + x] = 1; dirtyTile(y * W + x); return [x, y]; } return null; }, benchPos: () => { for (const [i, nid] of STORE_AT) if (nid === MY_NID) return [(i % W) + 0.5 + BENCH_DX / TILE, Math.floor(i / W) + 0.5]; return null; }, playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), face: (f) => { if (testMode) player.face = f; }, near: () => (testMode ? JSON.stringify(near && { kind: near.kind, text: near.text }) + ' ft=' + facingTile() + ' ga=' + JSON.stringify(groundAction()) + ' tA=' + treeAt(...facingTile()) + ' on=' + ONLINE : null), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
@@ -4403,7 +4441,7 @@
       player.x = step.fx + (step.tx - step.fx) * k; player.y = step.fy + (step.ty - step.fy) * k;
       if (k < 1) return;
       step.on = false;
-      if (player.scene === 'sky') { checkDoor(); if (step.on) return; }
+      if (player.scene === 'sky') { skyRebase(); checkDoor(); if (step.on) return; }
     }
     const d = $('talk').hidden ? wantDir() : null; // 대화 중엔 못 움직임
     if (!d) { player.moving = false; return; }
@@ -4415,7 +4453,7 @@
     const cx = Math.floor(player.x / TILE), cy = Math.floor(player.y / TILE);
     const nx = cx + d[0], ny = cy + d[1];
     const room = player.scene === 'sky' ? player.room : null;
-    if (room ? roomBlocked(room, nx, ny) : ((blocked(nx, ny) && !swimmable(nx, ny)) || heightBlocked(cx, cy, nx, ny))) { player.x = cx * TILE + 16; player.y = cy * TILE + 16; player.moving = false; return; }
+    if (room ? (EDIT.on ? roomBlocked(room, nx, ny) : skyBlocked(room, nx, ny)) : ((blocked(nx, ny) && !swimmable(nx, ny)) || heightBlocked(cx, cy, nx, ny))) { player.x = cx * TILE + 16; player.y = cy * TILE + 16; player.moving = false; return; }
     step.on = true; step.t = 0;
     step.fx = player.x; step.fy = player.y; step.tx = nx * TILE + 16; step.ty = ny * TILE + 16;
     step.dur = (keys.has('shift') ? 0.04 : STEP) / (room ? 1 : speedAt(nx, ny)) * (player.carry ? 1.25 : 1); // 훔친 걸 들면 느려짐
@@ -4473,18 +4511,25 @@
     const R = player.room;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawSkyBackground(t);
-    const RW = R.w * TILE, RH = R.h * TILE;
     const sw = vw / zoom, sh = vh / zoom;
-    const camX = RW + 160 <= sw ? RW / 2 - sw / 2 : Math.max(-80, Math.min(RW + 80 - sw, player.x - sw / 2));
-    const camY = RH + 260 <= sh ? RH / 2 - sh / 2 - 40 : Math.max(-200, Math.min(RH + 80 - sh, player.y - 40 - sh / 2));
+    if (EDIT.on) { // 맵 고치기: 방 하나만 (방 좌표 그대로)
+      const RW = R.w * TILE, RH = R.h * TILE;
+      const camX = RW + 160 <= sw ? RW / 2 - sw / 2 : Math.max(-80, Math.min(RW + 80 - sw, player.x - sw / 2));
+      const camY = RH + 260 <= sh ? RH / 2 - sh / 2 - 40 : Math.max(-200, Math.min(RH + 80 - sh, player.y - 40 - sh / 2));
+      ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -camX * dpr * zoom, -camY * dpr * zoom); skyCam.x = camX; skyCam.y = camY;
+      ctx.drawImage(R.canvas, -SKY_M, -SKY_M); editOverlay(R); propGhost(); if (EDIT.lastScene !== R.id) { EDIT.lastScene = R.id; editUI(); }
+      const list = R.sprites.slice(); for (const b of others('sky', R)) list.push(b); list.push(player); drawActors(list, t); nightTint(0.5); return;
+    }
+    const [pox, poy] = SKY.off[R.id], camX = player.x + pox * TILE - sw / 2, camY = player.y + poy * TILE - 40 - sh / 2; // 하늘섬 전체 좌표 카메라
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -camX * dpr * zoom, -camY * dpr * zoom);
-    skyCam.x = camX; skyCam.y = camY;
-    ctx.drawImage(R.canvas, -SKY_M, -SKY_M);
-    if (EDIT.on) { editOverlay(R); propGhost(); if (EDIT.lastScene !== R.id) { EDIT.lastScene = R.id; editUI(); } }
-    const list = R.sprites.slice();
-    for (const b of others('sky', R)) list.push(b);
-    list.push(player);
-    drawActors(list, t);
+    skyCam.x = camX - pox * TILE; skyCam.y = camY - poy * TILE;
+    const vis = Object.values(ROOMS).filter((Q) => { const [ox, oy] = SKY.off[Q.id]; return ox * TILE - SKY_M < camX + sw && (ox + Q.w) * TILE + SKY_M > camX && oy * TILE - SKY_M < camY + sh && (oy + Q.h) * TILE + SKY_M > camY; });
+    for (const Q of vis) { const [ox, oy] = SKY.off[Q.id]; ctx.drawImage(Q.canvas, ox * TILE - SKY_M, oy * TILE - SKY_M); }
+    if (SKY.bcv) ctx.drawImage(SKY.bcv, SKY.bx0, SKY.by0); // 구름다리
+    const rem = others('sky', R);
+    for (const Q of vis) { const [ox, oy] = SKY.off[Q.id]; ctx.save(); ctx.translate(ox * TILE, oy * TILE);
+      const list = Q.sprites.slice(); for (const b of rem) if ((ONLINE ? (b.room || R.id) : b.room && b.room.id) === Q.id || (!ONLINE && b.room === Q)) list.push(b); if (Q === R) list.push(player);
+      drawActors(list, t); ctx.restore(); }
     nightTint(0.5);
   }
   // ---------------------------------------------------------- 빛 시스템: 밤엔 많이 어둡고, 불·등불·마법 둘레만 밝음
