@@ -471,7 +471,7 @@ wss.on('connection', (ws) => {
         t: 'welcome', admin: !!acc.admin, tune: state.tune, recipes: state.recipes, texts: state.texts, bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander.map(({ token, ...r }) => r), board: boardPub(),
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
-        frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], picked: Object.entries(world.s.picked || {}).filter(([, t]) => MPRules.stillPicked(t, now())).map(([i]) => +i), job: acc.job || null, tools: acc.tools || {}, skills: acc.skills || {}, slots: acc.slots || [null, null], mana: Math.min(MPRules.MANA.max, (acc.mana ?? MPRules.MANA.max) + (Date.now() - (acc.manaAt || 0)) / 1000 * MPRules.MANA.rate), pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), dug: Object.keys(world.s.dug || {}).map(Number), weapons: acc.weapons || {}, weapon: acc.weapon || null, startDay: gameClock().day, traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
+        frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], picked: Object.entries(world.s.picked || {}).filter(([, t]) => MPRules.stillPicked(t, now())).map(([i]) => +i), job: acc.job || null, tools: acc.tools || {}, can: acc.can ?? MPRules.GARDEN.canMax, skills: acc.skills || {}, slots: acc.slots || [null, null], mana: Math.min(MPRules.MANA.max, (acc.mana ?? MPRules.MANA.max) + (Date.now() - (acc.manaAt || 0)) / 1000 * MPRules.MANA.rate), pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), dug: Object.keys(world.s.dug || {}).map(Number), weapons: acc.weapons || {}, weapon: acc.weapon || null, startDay: gameClock().day, traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
       });
       if (nat && nat.king === token && nat.kingName !== acc.name) { nat.kingName = acc.name; broadcastOwners(); } // 접속할 때마다 모두에게 나라 정보를 다시 보내지 않음 (전송량 절약)
       return;
@@ -784,12 +784,50 @@ wss.on('connection', (ws) => {
         const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y);
         const axe = needTool(s, 'axe'); // 누구나 어디서든 · 맨손은 느리고 조금, 도끼는 빠르고 많이
         if (now() - (s.lastChop || 0) < (axe ? NUM.chopSec : NUM.chopHandSec) * 900) return;
+        { const e = world.s.tiles[i]; if (e && e.k === 'sapling' && nextTo(s, x, y)) { // 묘목이 다 자란 나무 → 베면 풀밭으로
+          if (Date.now() - e.tree.at < e.tree.d) return send(ws, { t: 'err', text: '아직 다 자라지 않았어요' });
+          s.lastChop = now(); delete world.s.tiles[i]; stat(s.acc, 'chop'); dirty = true; const got = axe ? MPRules.GARDEN.treeWood : 1, sap = Math.random() < MPRules.GARDEN.saplingChance + 0.25;
+          addMat(s, 'm_wood', got); if (sap) addMat(s, 'm_sapling', 1); const msg = JSON.stringify({ t: 'chopped', i, grown: 1 }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); sendTile(i);
+          return send(ws, { t: 'ok', text: `🪵 목재 +${got}${sap ? ' · 🌱 묘목 +1' : ''} (내 가방)` }); } }
         if (!nextTo(s, x, y) || !treeHere(x, y) || world.s.chopped[i]) return send(ws, { t: 'err', text: '벨 수 있는 나무가 없어요' });
         s.lastChop = now(); world.s.chopped[i] = 1; stat(s.acc, 'chop'); dirty = true;
-        const got = axe ? NUM.woodPerTree : 1; addMat(s, 'm_wood', got);
+        const got = axe ? NUM.woodPerTree : 1, sap = Math.random() < MPRules.GARDEN.saplingChance; addMat(s, 'm_wood', got); if (sap) addMat(s, 'm_sapling', 1);
         const msg = JSON.stringify({ t: 'chopped', i }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
-        send(ws, { t: 'ok', text: `🪵 목재 +${got} (내 가방)${axe ? '' : ' · 도끼가 있으면 더 빠르고 많이 얻어요'}` });
+        send(ws, { t: 'ok', text: `🪵 목재 +${got}${sap ? ' · 🌱 묘목 +1' : ''} (내 가방)${axe ? '' : ' · 도끼가 있으면 더 빠르고 많이 얻어요'}` });
         break;
+      }
+      case 'till': case 'water': case 'fillCan': case 'sapling': { // 텃밭: 괭이질 · 물 주기 · 물뿌리개 채우기 · 묘목 심기
+        const G = MPRules.GARDEN, x = m.x | 0, y = m.y | 0, i = tileIdx(x, y), e = world.s.tiles[i], ADM = !!s.acc.admin;
+        if (!nextTo(s, x, y, 2.4)) return send(ws, { t: 'err', text: '너무 멀어요' });
+        if (m.t === 'fillCan') { if (!needTool(s, 'can')) return; const wet = tileAt(x, y) === TT.WATER || (e && (e.k === 'water' || e.canal)); if (!wet) return send(ws, { t: 'err', text: '물가에서 채워요' }); s.acc.can = G.canMax; dirty = true; return send(ws, { t: 'can', n: s.acc.can, text: `💧 물뿌리개를 가득 채웠어요 (${G.canMax}번)` }); }
+        const n = world.nationOfPlayer(s.token);
+        if (m.t === 'sapling') { // 묘목: 빈 풀밭에 심음 (다른 나라 땅은 안 됨)
+          const own = world.ownerOf(terrAtTile(x, y)); if (own && (!n || own !== n.id)) return send(ws, { t: 'err', text: '다른 나라 땅에는 못 심어요' });
+          if (e || tileAt(x, y) !== TT.GRASS || (treeHere(x, y) && !world.s.chopped[i])) return send(ws, { t: 'err', text: '빈 풀밭에만 심을 수 있어요' });
+          if (!ADM && !((s.acc.bag || {}).m_sapling > 0)) return send(ws, { t: 'err', text: '묘목이 없어요 · 나무를 베면 가끔 나와요' });
+          if (!ADM) { s.acc.bag.m_sapling--; if (!s.acc.bag.m_sapling) delete s.acc.bag.m_sapling; send(ws, { t: 'bag', bag: s.acc.bag }); }
+          world.s.tiles[i] = { k: 'sapling', n: n ? n.id : null, tree: { at: Date.now(), d: Math.round(G.treeMin * 60e3 * (jobOf(s) === 'farmer' ? 0.5 : 1) / (+process.env.CROP_FAST || 1)) } };
+          dirty = true; sendTile(i); stat(s.acc, 'plant'); return send(ws, { t: 'ok', text: `🌱 묘목을 심었어요 · ${Math.round(world.s.tiles[i].tree.d / 60e3)}분 뒤 나무가 돼요 · 물을 주면 빨라져요` });
+        }
+        if (!n && !(m.t === 'water' && e && e.k === 'sapling')) return send(ws, { t: 'err', text: '나라가 있어야 밭을 가꿀 수 있어요' });
+        if (m.t === 'till') {
+          if (!needTool(s, 'hoe')) return send(ws, { t: 'err', text: '괭이가 있어야 해요 · 작업대에서 만들어요' });
+          if (now() - (s.lastTill || 0) < G.tillSec * 800) return;
+          if (world.ownerOf(terrAtTile(x, y)) !== n.id) return send(ws, { t: 'err', text: '우리 나라 땅에서만 일굴 수 있어요' });
+          if (e || tileAt(x, y) !== TT.GRASS || (treeHere(x, y) && !world.s.chopped[i])) return send(ws, { t: 'err', text: '빈 풀밭만 일굴 수 있어요' });
+          s.lastTill = now(); world.s.tiles[i] = { k: 'farm', n: n.id, id: 'farm', till: 1 }; dirty = true; sendTile(i); stat(s.acc, 'till'); return send(ws, { t: 'ok', text: '🟫 경작지를 일궜어요 · 씨앗을 심어요 (설치 모드 G)' });
+        }
+        if (!e || !(e.k === 'sapling' || (e.k === 'farm' && n && e.n === n.id))) return send(ws, { t: 'err', text: '우리 밭이나 묘목에만 할 수 있어요' });
+        if (m.t === 'water') {
+          if (!needTool(s, 'can')) return send(ws, { t: 'err', text: '물뿌리개가 있어야 해요' });
+          const left = ADM ? G.canMax : s.acc.can ?? G.canMax; if (left <= 0) return send(ws, { t: 'err', text: '물뿌리개가 비었어요 · 물가에서 E로 채워요' });
+          if ((e.wet || 0) > Date.now() && !(e.crop && !e.crop.wt) && !(e.tree && !e.tree.wt)) return send(ws, { t: 'err', text: '이미 촉촉해요' });
+          if (!ADM) s.acc.can = left - 1; e.wet = Date.now() + G.wetMin * 60e3; let boost = '';
+          for (const c of [e.crop, e.tree]) if (c && !c.wt) { const rest = c.d - (Date.now() - c.at); if (rest > 0) { c.at -= rest * G.waterCut; boost = ' · 남은 시간 30% 줄었어요'; } c.wt = 1; }
+          dirty = true; sendTile(i); stat(s.acc, 'water'); const msg = JSON.stringify({ t: 'watered', i, by: s.id }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg);
+          return send(ws, { t: 'can', n: s.acc.can ?? G.canMax, text: `💧 물을 줬어요${boost} (남은 물 ${ADM ? '∞' : s.acc.can})` });
+        }
+        return;
       }
       case 'dig': { // 산 캐기: 곡괭이로, 우리 땅에 붙은 산 칸 → 풀밭이 되고 코인 조금 (산줄기에 길을 뚫음)
         const x = m.x | 0, y = m.y | 0, i = tileIdx(x, y);
@@ -882,7 +920,7 @@ wss.on('connection', (ws) => {
           if (m.t === 'pickup') {
             const e = world.s.tiles[i];
             if (e && e.n === n.id && e.crop) { why = '작물이 자라는 밭은 못 거둬요 (수확 먼저)'; continue; }
-            if (e && e.n === n.id) { const id = tileItem(e); if (e.under) world.s.tiles[i] = { k: 'floor', n: n.id, id: e.under }; else delete world.s.tiles[i]; if (id) n.items[id] = (n.items[id] || 0) + 1; sendTile(i); done++; } // 위에 놓인 것부터 거둠 (밑의 바닥은 남음)
+            if (e && e.n === n.id) { const id = tileItem(e); if (e.under) world.s.tiles[i] = { k: 'floor', n: n.id, id: e.under }; else delete world.s.tiles[i]; if (id && !e.till) n.items[id] = (n.items[id] || 0) + 1; sendTile(i); done++; } // 괭이로 일군 밭은 되돌려도 물건이 안 생김 · 위에 놓인 것부터 거둠 (밑의 바닥은 남음)
             else if (world.s.traps[i] === n.id) { delete world.s.traps[i]; n.items.trap = (n.items.trap || 0) + 1; sendTrap(n.id, i, false); done++; }
             continue;
           }
@@ -939,7 +977,7 @@ wss.on('connection', (ws) => {
         for (const o of online.values()) if (o !== s && o.scene === s.scene && o.room === s.room && o.ws.readyState === 1) send(o.ws, { t: 'act', id: s.id, a, fx: m.fx | 0, fy: m.fy | 0 });
         break;
       }
-      case 'plant': case 'fert': case 'harvest': { // 농사: 씨앗 심기(여러 칸) · 비료 주기 · 수확
+      case 'plant': case 'fert': case 'harvest': { const G = MPRules.GARDEN; // 농사: 씨앗 심기(여러 칸) · 비료 주기 · 수확
         const n = world.nationOfPlayer(s.token); if (!n) return send(ws, { t: 'err', text: '나라가 있어야 농사지을 수 있어요' });
         if (!needTool(s, 'shovel')) return send(ws, { t: 'err', text: '삽이 있어야 심고 거둘 수 있어요 · 하늘 치유의 샘(백신·도구 상점)에서 사요' });
         n.items = normItems(n.items);
@@ -955,7 +993,7 @@ wss.on('connection', (ws) => {
             if (e.crop) { why = '이미 심은 칸이 있어요'; continue; }
             if (!(n.items[B.id] > 0)) { why = '씨앗이 모자라요 (하늘 정원 천사에게서 사요)'; break; }
             let near = false; for (let dy = -NUM.canalRange; dy <= NUM.canalRange && !near; dy++) for (let dx = -NUM.canalRange; dx <= NUM.canalRange; dx++) { const w2 = world.s.tiles[tileIdx(x + dx, y + dy)]; if (w2 && (w2.k === 'water' || w2.canal)) { near = true; break; } }
-            n.items[B.id]--; e.crop = { c: B.crop, at: Date.now(), d: Math.round(CROPS[B.crop].min * 60e3 * (near ? NUM.canalBoost : 1) * (jobOf(s) === 'farmer' ? 0.5 : 1) / (+process.env.CROP_FAST || 1)), w: near ? 1 : 0 }; done++; sendTile(i);
+            n.items[B.id]--; e.crop = { c: B.crop, at: Date.now(), d: Math.round(CROPS[B.crop].min * 60e3 * (near ? NUM.canalBoost : 1) * (jobOf(s) === 'farmer' ? 0.5 : 1) / (+process.env.CROP_FAST || 1)), w: near ? 1 : 0 }; if ((e.wet || 0) > Date.now()) { e.crop.d = Math.round(e.crop.d * (1 - G.waterCut)); e.crop.wt = 1; } done++; sendTile(i);
           } else if (m.t === 'fert') {
             if (!e.crop) { why = '심은 작물이 없어요'; continue; }
             if (e.crop.f) { why = '이미 비료를 준 작물이에요'; continue; }

@@ -45,7 +45,9 @@
     salmon: { name: '연어', w: 8, sell: 15, rare: 1 }, goldcarp: { name: '황금 잉어', w: 2.5, sell: 60, rare: 1, gold: 1 }, turtle: { name: '황금 거북', w: 1.2, sell: 45, rare: 1, gold: 1 },
     axolotl: { name: '황금 우파루파', w: 1, sell: 55, rare: 1, gold: 1 }, legend: { name: '전설의 하늘청새치', w: 0.6, sell: 150, rare: 1, gold: 1 },
   };
-  const TOOLS = { pick: { name: '곡괭이', price: 300, use: '금광·산 캐기' }, axe: { name: '나무도끼', price: 150, use: '나무 베기' }, rod: { name: '낚싯대', price: 200, use: '낚시' }, shovel: { name: '삽', price: 150, use: '씨앗 심기·수확' } }; // 작업 도구: 사람마다 하나씩 (내 코인 = 개인 지갑으로 삼)
+  const TOOLS = { pick: { name: '곡괭이', price: 300, use: '금광·산 캐기' }, axe: { name: '나무도끼', price: 150, use: '나무 베기' }, rod: { name: '낚싯대', price: 200, use: '낚시' }, shovel: { name: '삽', price: 150, use: '씨앗 심기·수확' }, hoe: { name: '괭이', price: 150, use: '우리 땅 풀밭을 경작지로' }, can: { name: '물뿌리개', price: 120, use: '밭·묘목에 물 주기 (물가에서 채움)' } };
+  // 텃밭: 괭이로 일군 경작지 · 물뿌리개 · 묘목(나무 베면 가끔 나옴 → 경작지에 심으면 나무로 자람)
+  const GARDEN = { tillSec: 1.2, treeMin: 60, waterCut: 0.3, wetMin: 30, canMax: 10, saplingChance: 0.35, treeWood: 3 }; // 작업 도구: 사람마다 하나씩 (내 코인 = 개인 지갑으로 삼)
   for (const [k, f] of Object.entries(FISH)) BUILD.push({ id: 'fi_' + k, cat: 'crop', theme: 'stone', name: f.name, sell: f.sell, fish: k });
   BUILD.push({ id: 'b_wood', cat: 'bridge', theme: 'forest', name: '나무 다리', price: 25 }, { id: 'b_stone', cat: 'bridge', theme: 'stone', name: '돌 다리', price: 25 });
   BUILD.push({ id: 'farm', cat: 'farm', theme: 'forest', name: '밭', price: 10 }, { id: 'canal', cat: 'water', theme: 'stone', name: '수로', price: 15 }, { id: 'fert', cat: 'fert', theme: 'forest', name: '비료', price: 40 });
@@ -106,7 +108,7 @@
   function hash(x, y, s = 0) { let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
   // 나무가 있는 칸인지 (지형 값만 보고 정해짐 → 서버와 화면이 같은 결과)
   // 채집 재료 (내 가방 'm_…'). shared: 나라 저장소에 넣으면 쓰이는 이름 (건축 재료)
-  const MATS = { m_wood: { name: '목재', shared: 'wood' }, m_stone: { name: '돌', shared: 'stone' }, m_ore: { name: '광석', shared: 'ore' }, m_fiber: { name: '풀' }, m_flower: { name: '꽃' }, m_hide: { name: '가죽' } };
+  const MATS = { m_wood: { name: '목재', shared: 'wood' }, m_stone: { name: '돌', shared: 'stone' }, m_ore: { name: '광석', shared: 'ore' }, m_fiber: { name: '풀' }, m_flower: { name: '꽃' }, m_hide: { name: '가죽' }, m_sapling: { name: '묘목' } };
   // 땅에 난 풀·꽃 (화면에 그려지는 소품과 같은 규칙) → 채집하면 재료
   // 건축물은 나라 저장소 재료로 (나라 코인 없음). 씨앗·비료·백신은 내 코인으로 사서 나라 저장소에
   const MAT_NAME = { wood: '목재', stone: '돌', ore: '광석' };
@@ -119,6 +121,8 @@
     { id: 'pick', cat: 'tool', name: '곡괭이', tool: 'pick', mats: { m_wood: 2, m_stone: 3 }, desc: '산·금광 캐기' },
     { id: 'rod', cat: 'tool', name: '낚싯대', tool: 'rod', mats: { m_wood: 3, m_fiber: 3 }, desc: '물가에서 낚시' },
     { id: 'shovel', cat: 'tool', name: '삽', tool: 'shovel', mats: { m_wood: 2, m_stone: 1 }, desc: '작물 수확' },
+    { id: 'hoe', cat: 'tool', name: '괭이', tool: 'hoe', mats: { m_wood: 2, m_stone: 2 }, desc: '우리 땅 풀밭을 꾹 눌러 경작지로 일궈요' },
+    { id: 'can', cat: 'tool', name: '물뿌리개', tool: 'can', mats: { m_stone: 4, m_ore: 1 }, desc: '밭·묘목에 물 주기 (한 번 = 남은 시간 30% 줄어요) · 물가에서 채워요' },
     { id: 'f_torch', cat: 'light', name: '횃불', mats: { m_wood: 1, m_fiber: 1 }, give: 2, desc: '밤에 들고 다니면 주변이 밝아요 (빛 시스템 때 켜짐)' },
     { id: 'f_campfire', cat: 'light', name: '모닥불', mats: { m_wood: 4, m_stone: 2 }, desc: '놓으면 둘레가 밝아요' },
     { id: 'f_lamp', cat: 'light', name: '가로등', mats: { m_ore: 1, m_wood: 2, m_fiber: 1 }, desc: '밤새 켜지는 등' },
@@ -181,7 +185,7 @@
   // 글자 = 재료: W 목재 · S 돌 · O 광석 · F 풀 · L 꽃 · H 가죽 · '.' 빈칸. 모양 그대로 놓아야 해요 (칸 안 어디든 위치는 상관없음)
   const GRID_KEY = { W: 'm_wood', S: 'm_stone', O: 'm_ore', F: 'm_fiber', L: 'm_flower', H: 'm_hide' };
   const GRIDS = { // 도구·빛·가구 (만든 건 내 가방 / 도구)
-    axe: ['SS', 'SW', '.W'], pick: ['SSS', '.W.', '.W.'], shovel: ['S', 'W', 'W'], rod: ['..W', '.WF', 'W.F'],
+    axe: ['SS', 'SW', '.W'], pick: ['SSS', '.W.', '.W.'], shovel: ['S', 'W', 'W'], hoe: ['SS', '.W', '.W'], can: ['S.S', 'SOS'], rod: ['..W', '.WF', 'W.F'],
     f_torch: ['F', 'W'], f_campfire: ['.W.', 'WSW'], f_lamp: ['O', 'W', 'W'],
     f_chair: ['W..', 'WWW', 'W.W'], f_table: ['WWW', 'W.W'], f_chest: ['WWW', 'W.W', 'WWW'], f_fence: ['WFW'], f_sign: ['WWW', '.W.'], f_pot: ['SLS', '.S.'], f_rug: ['LFL', 'FFF'],
   };
@@ -917,5 +921,5 @@
     torchBag: { r: 150, a: 0.9, c: '#ffb050', flick: 0.1 }, self: { r: 75, a: 0.45, c: null }, lightBuff: { r: 240, a: 1, c: '#fff0b0', flick: 0.03 },
     spell: { r: 130, a: 0.9 }, flash: { r: 150, a: 0.8 }, rootFlash: { r: 520, a: 1 },
   };
-  return { LIGHT_OF, FISH_W0, applyTune, magicCost, fishOdds, applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { GARDEN, LIGHT_OF, FISH_W0, applyTune, magicCost, fishOdds, applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
