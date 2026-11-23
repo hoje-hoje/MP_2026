@@ -144,14 +144,17 @@
     { id: 'dark', name: '어둠', en: '검은 그림자', hex: '#1a1124', ring: '#8c78b0', req: ['holy', 'bolt', 'fire'], n: [['t1', '그림자', 'status/cursed', '그림자 (연출)', null, PAL.SHADOW], ['a', '영혼 흡수', 'spawn/soul-rise', '영혼 흡수 (연출)', null, PAL.SHADOW], ['b', '분해', 'spawn/disintegrate', '분해 (연출)', null, PAL.SHADOW], ['ult', '블랙홀', 'explosions/implosion', '블랙홀 (연출)', null, PAL.DARK]] },
     { id: 'chrono', name: '시공', en: '별·시간·공간', hex: '#ffffff', req: ['nature', 'fire', 'bolt', 'wind', 'holy', 'ice'], n: [['t1', '마법진', 'arcane/magic-circle-cast', '마법진 (연출)'], ['a', '순간이동', 'arcane/blink-in', '바라보는 쪽으로 4칸 순간이동', 'blink'], ['b', '별똥별', 'arcane/star-fall', '별똥별 (연출)'], ['ult', '시간 정지', 'arcane/time-stop', '바로 우리 수도로 돌아가요', 'recall']] },
   ];
-  const MAGIC_TIER = { t1: { roman: 'Ⅰ', n: 1, max: 3, cd: 20, mp: 10 }, a: { roman: 'Ⅱ', n: 2, max: 1, cd: 30, mp: 20 }, b: { roman: 'Ⅱ', n: 2, max: 1, cd: 30, mp: 20 }, ult: { roman: 'Ⅲ', n: 3, max: 1, cd: 0, mp: 40 } }; const MANA = { max: 100, rate: 1.5 }; // 마나: 1초에 1.5씩 참 // ult: 게임 하루 1번
+  const MAGIC_TIER = { t1: { roman: 'Ⅰ', n: 1, max: 3, cd: 20, mp: 10 }, a: { roman: 'Ⅱ', n: 2, max: 1, cd: 30, mp: 20 }, b: { roman: 'Ⅱ', n: 2, max: 1, cd: 30, mp: 20 }, ult: { roman: 'Ⅲ', n: 3, max: 1, cd: 0, mp: 40 }, root: { roman: '', n: 0, max: 1, cd: 3, mp: 5 } }; const MANA = { max: 100, rate: 1.5 }; // 마나: 1초에 1.5씩 참 // ult: 게임 하루 1번
   const MAGIC_EL = [...MAGIC_BASE, ...MAGIC_HIDDEN], MAGIC = {};
   for (const e of MAGIC_EL) for (const [k, name, fx, desc, eff, pal, dir] of e.n) MAGIC[e.id + '.' + k] = { key: e.id + '.' + k, el: e.id, tier: k, name, fx, desc, eff: eff || null, pal: pal || null, dir: !!dir, hex: e.hex };
-  const magicEl = (id) => MAGIC_EL.find((e) => e.id === id);
+  // 첫 마법 '마력 깨우기': 처음 받은 깨달음의 마법석으로 배움. 아무 효과 없이 보랏빛만 퍼짐 → 마법 쓰는 법을 익히는 용도
+  const ROOT_EL = { id: 'root', name: '마력', en: '깨달음', hex: '#b57bff' };
+  MAGIC.root = { key: 'root', el: 'root', tier: 'root', name: '마력 깨우기', fx: 'arcane/mana-burst', desc: '아무 효과 없는 첫 마법이에요. R 키(패드는 동그라미)로 써 보며 마법이 어떻게 나가는지 익혀요. 배우면 다른 속성 마법을 배울 수 있어요.', eff: null, pal: null, dir: false, hex: '#b57bff' };
+  const magicEl = (id) => (id === 'root' ? ROOT_EL : MAGIC_EL.find((e) => e.id === id));
   const stoneKey = (el, n) => `ms_${el}_${n}`; // 마법석 = 내 가방 물건
-  const stoneName = (el, n) => `${(magicEl(el) || {}).name} 마법석 ${['', 'Ⅰ', 'Ⅱ', 'Ⅲ'][n]}`;
+  const stoneName = (el, n) => (el === 'root' ? '깨달음의 마법석' : `${(magicEl(el) || {}).name} 마법석 ${['', 'Ⅰ', 'Ⅱ', 'Ⅲ'][n]}`);
   const hiddenOpen = (skills, el) => { const e = magicEl(el); return !e.req || e.req.every((r) => (skills[r + '.ult'] | 0) > 0); };
-  function magicPre(key) { const M = MAGIC[key]; if (!M) return []; const e = magicEl(M.el); if (M.tier === 't1') return e.req ? e.req.map((r) => r + '.ult') : []; if (M.tier === 'ult') return [M.el + '.a', M.el + '.b']; return [M.el + '.t1']; }
+  function magicPre(key) { const M = MAGIC[key]; if (!M) return []; const e = magicEl(M.el); if (M.tier === 'root') return []; if (M.tier === 't1') return e.req ? e.req.map((r) => r + '.ult') : ['root']; if (M.tier === 'ult') return [M.el + '.a', M.el + '.b']; return [M.el + '.t1']; }
   function canLearn(skills, key) { const M = MAGIC[key]; if (!M) return '없는 마법이에요'; const lv = skills[key] | 0, T = MAGIC_TIER[M.tier]; if (lv >= T.max) return '다 배웠어요';
     if (M.tier === 'a' || M.tier === 'b') { if ((skills[M.el + '.' + (M.tier === 'a' ? 'b' : 'a')] | 0) > 0) return '다른 쪽을 골랐어요'; }
     const pre = magicPre(key); if (M.tier === 'ult' ? !pre.some((p) => skills[p]) : !pre.every((p) => skills[p])) return magicEl(M.el).req && !hiddenOpen(skills, M.el) ? '아직 알 수 없는 힘이에요' : '앞 마법을 먼저 배워요';
@@ -197,6 +200,7 @@
     for (let y = y0; y <= y1; y++) { let r = ''; for (let x = x0; x <= x1; x++) { const c = cells[y * 3 + x]; r += c ? (inv[c] || '?') : '.'; } rows.push(r); } return rows.join('/'); }
   const GRID_INDEX = {}; for (const r of RECIPES) if (r.grid) { const k = r.grid.join('/'); if (GRID_INDEX[k]) throw new Error('조합법 겹침: ' + r.id + ' / ' + GRID_INDEX[k].id); GRID_INDEX[k] = r; }
   const matchGrid = (cells) => GRID_INDEX[gridKey(cells)] || null;
+  RECIPES.push({ id: stoneKey('root', 0), cat: 'magic', el: 'root', sn: 0, name: stoneName('root', 0), mats: {}, nocraft: true, desc: '처음에 받는 마법석 · 스킬 트리 가운데 칸에 끼워요' });
   const RECIPE_BY = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
   function plantKind(t, x, y) {
     if (t !== T.GRASS) return null; const h = hash(x, y, 7);

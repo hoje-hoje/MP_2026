@@ -1953,7 +1953,7 @@
   const CRAFT = { tab: 'build', cells: null, brush: null, ghost: null, after: null };
   function craftMagicList() { // 마법석 탭: 문제를 풀어 만드는 목록 (조합 칸 없음)
     const have = (k) => (k === 'fish' ? Object.entries(MY_BAG).filter(([q]) => q.startsWith('fi_')).reduce((a, [, v]) => a + v, 0) : MY_BAG[k] | 0), mname = (k) => (k === 'fish' ? '물고기' : (MPRules.MATS[k] || MPRules.RECIPE_BY[k] || { name: k }).name);
-    $('craftBody').innerHTML = MPRules.RECIPES.filter((r) => r.cat === CRAFT.tab && (!r.hidden || MPRules.hiddenOpen(MY_SKILLS, r.el))).map((r) => { const owned = r.tool && MY_TOOLS[r.tool], ok = !owned && Object.entries(r.mats).every(([k, v]) => have(k) >= v);
+    $('craftBody').innerHTML = MPRules.RECIPES.filter((r) => r.cat === CRAFT.tab && !r.nocraft && (!r.hidden || MPRules.hiddenOpen(MY_SKILLS, r.el))).map((r) => { const owned = r.tool && MY_TOOLS[r.tool], ok = !owned && Object.entries(r.mats).every(([k, v]) => have(k) >= v);
       const need = Object.entries(r.mats).map(([k, v]) => `<span class="${have(k) >= v ? 'okm' : 'nom'}">${mname(k)} ${have(k)}/${v}</span>`).join(' ') + (r.quiz ? ` <span class="okm">+ ${r.quiz === 'hard' ? '어려운 ' : ''}수학 문제</span>` : '');
       return `<div class="hvCard"><canvas data-cr="${r.id}" width="64" height="64"></canvas><div class="hvInfo"><b>${r.name}${r.give > 1 ? ` ×${r.give}` : ''}</b><small>${r.desc || '내 가방에 들어가요 (놓기는 나중에)'}</small><i>${need}</i>${!r.tool && have(r.id) ? `<i>가진 것 ${have(r.id)}개</i>` : ''}</div><div class="hvBuy"><div><button type="button" data-craft="${r.id}" ${ok ? '' : 'disabled'}>${owned ? '✔ 있음' : '만들기'}</button></div></div></div>`; }).join('');
     for (const c of $('craftBody').querySelectorAll('[data-cr]')) { const r = MPRules.RECIPE_BY[c.dataset.cr], g = c.getContext('2d'); g.imageSmoothingEnabled = false; const T2 = r.tool && TOOL[r.tool];
@@ -2009,7 +2009,7 @@
   // 마법석 그림: 사용자 보석 그림(assets/ui/stone_1~3: Ⅰ 원석 · Ⅱ 결정 · Ⅲ 보석)을 속성 색으로 칠함
   const UIIMG = {}; for (const n of ['stone_1', 'stone_2', 'stone_3', 'mat_stone', 'mat_ore']) { const im = new Image(); im.src = 'assets/ui/' + n + '.png'; UIIMG[n] = im; }
   const stoneCache = {};
-  function stoneSprite(el, n) { const key = el + n; if (stoneCache[key]) return stoneCache[key]; const im = UIIMG['stone_' + n]; if (!im || !im.complete || !im.naturalWidth) return null;
+  function stoneSprite(el, n) { const key = el + n; if (stoneCache[key]) return stoneCache[key]; const im = UIIMG['stone_' + Math.max(1, n)]; if (!im || !im.complete || !im.naturalWidth) return null;
     const E = MPRules.magicEl(el), hex = el === 'dark' ? '#5a3f86' : E.hex, c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
     const d = g.getImageData(0, 0, c.width, c.height), px = d.data, R0 = parseInt(hex.slice(1, 3), 16), G0 = parseInt(hex.slice(3, 5), 16), B0 = parseInt(hex.slice(5, 7), 16);
     for (let i = 0; i < px.length; i += 4) { if (!px[i + 3]) continue; const L = px[i] / 255; // 어두운 곳 → 속성 색의 그림자, 밝은 곳 → 흰빛
@@ -3216,7 +3216,7 @@
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
     ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: store('mp2026.token'), lv: store('mp2026.lv') | 0, name: player.name, team: 0, look: lookPayload() }));
     ws.binaryType = 'arraybuffer';
-    ws.onmessage = (ev) => { try { if (typeof ev.data === 'string') onNet(JSON.parse(ev.data)); else onPositions(new DataView(ev.data)); } catch (e) { /* 무시 */ } };
+    ws.onmessage = (ev) => { try { if (typeof ev.data === 'string') onNet(JSON.parse(ev.data)); else onPositions(new DataView(ev.data)); } catch (e) { console.error('net', e && e.stack); } }; // 오류는 콘솔에 (조용히 삼키면 원인을 못 찾음)
     ws.onclose = (ev) => { netOn = false; remotes.clear(); if (ev && ev.code === 4002) { setNet('학교 계정으로 로그인해 주세요'); return; } setNet('연결이 끊겼어요 · 다시 연결하는 중…'); setTimeout(connect, 2000); };
   }
   // 주변 사람 위치 (서버가 이진으로 보냄): [1][접속자 u16] + [id u32][x u16][y u16][방향·걷기·얼굴] × n
@@ -3239,7 +3239,8 @@
         if (m.picked) { PICKED.clear(); const t0 = Date.now(); for (const i of m.picked) PICKED.set(i, t0); } // 뜯긴 풀·꽃
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
         if (m.name) { player.name = m.name; nameSet = !!m.nameSet; renamesLeft = m.renamesLeft; tagW.clear(); renderNameBox(); }
-        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {}; MY_JOB = m.job || null; PV.hp = m.hp ?? HPMAX; player.hp = PV.hp; loadPfxW(); // 전투 이펙트 미리 불러 둠 (첫 공격부터 보이게) MY_FRAGS = new Set(m.myFrags || []); MY_SIDE = m.side || null; FRAGS = m.frags || []; LOOTS.clear(); for (const L of m.loot || []) LOOTS.set(L.id, L); MY_PCOIN = m.pcoin | 0; MY_HATS = m.hats || {}; MY_BAG = m.bag || {}; if (player.look.hat && !MY_HATS[player.look.hat]) player.look.hat = ''; renderInv();
+        player.carry = m.carry || null; player.look.red = m.red | 0; jailUntil = m.jailUntil || 0; MY_TOOLS = m.tools || {}; MY_JOB = m.job || null; PV.hp = m.hp ?? HPMAX; player.hp = PV.hp; loadPfxW(); /* 전투 이펙트 미리 불러 둠 (첫 공격부터 보이게) */ MY_FRAGS = new Set(m.myFrags || []); MY_SIDE = m.side || null; FRAGS = m.frags || []; LOOTS.clear(); for (const L of m.loot || []) LOOTS.set(L.id, L); MY_PCOIN = m.pcoin | 0; MY_HATS = m.hats || {}; MY_BAG = m.bag || {}; if (player.look.hat && !MY_HATS[player.look.hat]) player.look.hat = ''; renderInv();
+        setTimeout(() => { if ((MY_BAG.ms_root_0 | 0) > 0 && !(MY_SKILLS.root > 0)) toast('✨ 가방에 깨달음의 마법석이 있어요 · 오른쪽 아래 작은 마법석 버튼(K)을 눌러 가운데 칸에 끼워 보세요'); }, 4000); // 첫 마법 안내
         if (m.roomEdits) for (const [id, e] of Object.entries(m.roomEdits)) applyRoomEdit(id, e);
         if (m.groundEdits) { GFLOOR.clear(); GWALL.clear(); GCLEAR.clear(); GPROPS.clear(); applyGroundEdit({ set: m.groundEdits.floor, walls: m.groundEdits.walls, clear: m.groundEdits.clear, props: m.groundEdits.props }); invalidateChunks(); mapSig = ''; }
         if (m.clock) setClock(m.clock); BATTLES = m.battles || []; applyMines(m.mines || {}); TILES = m.tiles || {}; MY_TRAPS = new Set(m.traps || []); for (const i of m.chopped || []) noTree[i] = 1; for (const i of m.dug || []) GCLEAR.add(i); MY_WEAPONS = m.weapons || {}; MY_WEAPON = m.weapon || null; if ((m.dug || []).length) invalidateChunks(); if (m.stun) stunUntil = performance.now() + m.stun;

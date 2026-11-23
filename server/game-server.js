@@ -433,6 +433,7 @@ wss.on('connection', (ws) => {
       online.set(s.id, s);
       const nat = world.nationOfPlayer(token); // 나라는 건국 화면에서 세우거나 초대 코드로 들어간다
       if (nat) { world.refreshActions(nat, actionDayKey()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
+      if (!acc.rootGiven) { acc.rootGiven = 1; acc.skills = acc.skills || {}; acc.bag = acc.bag || {}; if (Object.keys(acc.skills).length) acc.skills.root = 1; else acc.bag.ms_root_0 = (acc.bag.ms_root_0 | 0) + 1; dirty = true; } // 처음 마법석 1개 (이미 마법을 배운 사람은 마력 깨우기를 배운 걸로)
       send(ws, {
         t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander.map(({ token, ...r }) => r), board: boardPub(),
@@ -947,7 +948,7 @@ wss.on('connection', (ws) => {
         if (!(s.acc.bag[sk] > 0)) return send(ws, { t: 'err', text: `${MPRules.stoneName(M.el, MPRules.MAGIC_TIER[M.tier].n)}이(가) 필요해요` });
         s.acc.bag[sk] -= 1; if (!s.acc.bag[sk]) delete s.acc.bag[sk]; s.acc.skills[key] = (s.acc.skills[key] | 0) + 1; dirty = true;
         s.acc.slots = s.acc.slots || [null, null]; if (!s.acc.slots.includes(key)) { const i = s.acc.slots.indexOf(null); if (i >= 0) s.acc.slots[i] = key; } // 빈 칸이 있으면 바로 걸어 둠
-        send(ws, { t: 'bag', bag: s.acc.bag }); send(ws, { t: 'skills', skills: s.acc.skills, slots: s.acc.slots, text: `✨ ${M.name}${s.acc.skills[key] > 1 ? ` ${s.acc.skills[key]}단계로 강화` : '을(를) 배웠어요'}!` }); break;
+        send(ws, { t: 'bag', bag: s.acc.bag }); send(ws, { t: 'skills', skills: s.acc.skills, slots: s.acc.slots, text: key === 'root' ? '✨ 마력이 깨어났어요! R 키(패드는 오른쪽 아래 동그라미)를 눌러 첫 마법을 써 보세요' : `✨ ${M.name}${s.acc.skills[key] > 1 ? ` ${s.acc.skills[key]}단계로 강화` : '을(를) 배웠어요'}!` }); break;
       }
       case 'equipSkill': { // 마법 2칸 중 하나에 걸기
         const key = m.key ? String(m.key) : null, i = m.slot === 1 ? 1 : 0; s.acc.skills = s.acc.skills || {}; s.acc.slots = s.acc.slots || [null, null];

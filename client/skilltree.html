@@ -72,7 +72,7 @@ const CDT = (k) => (R.MAGIC_TIER[k].cd ? R.MAGIC_TIER[k].cd + '초' : '하루 1�
 const MAX = { t1: 3, a: 1, b: 1, ult: 1 }, ROMAN = { t1: 'Ⅰ', a: 'Ⅱ', b: 'Ⅱ', ult: 'Ⅲ' };
 const CX = 600, CY = 520, pt = (deg, r) => [CX + r * Math.cos(deg * Math.PI / 180), CY - r * Math.sin(deg * Math.PI / 180)];
 const UA = BASE.map((_, i) => 162 - i * (144 / (BASE.length - 1))), DA = HIDDEN.map((_, i) => -148 + i * (116 / (HIDDEN.length - 1)));
-const N = { root: { key: 'root', name: '마력 깨우기', fx: 'arcane/mana-burst', hex: '#ffffff', desc: '모두 처음부터 배워요. 작은 빛을 켤 수 있어요.', max: 1, pos: [CX, CY], big: true } };
+const N = { root: { key: 'root', name: '마력 깨우기', fx: 'arcane/mana-burst', hex: '#b57bff', tier: 'root', desc: MPRules.MAGIC.root.desc, max: 1, pos: [CX, CY], big: true } };
 const EL = [...BASE, ...HIDDEN];
 function place(e, a, RR, spread) { for (const [k, name, fx, desc, eff, pal] of e.n) { const pos = k === 't1' ? pt(a, RR[0]) : k === 'a' ? pt(a + spread, RR[1]) : k === 'b' ? pt(a - spread, RR[1]) : pt(a, RR[2]);
   N[e.id + '.' + k] = { key: e.id + '.' + k, el: e, tier: k, name, fx, pal, desc, hex: e.hex, ring: e.ring, max: MAX[k], pos, big: k === 'ult' }; } }
@@ -81,7 +81,7 @@ HIDDEN.forEach((e, i) => place(e, DA[i], [170, 290, 400], 8));
 let lv = { root: 1, 'fire.t1': 3, 'fire.a': 1, 'fire.ult': 1, 'holy.t1': 1, 'nature.t1': 1, 'nature.a': 1, 'nature.ult': 1, 'ice.t1': 2, 'ice.b': 1, 'ice.ult': 1, 'water.t1': 1 }, sel = 'poison.t1';
 let INV = { 'poison.Ⅰ': 1, 'fire.Ⅱ': 1, 'wind.Ⅰ': 2, 'water.Ⅰ': 1 };
 const GAME = new URLSearchParams(location.search).has('game') && window.parent && window.parent.MP_SKILL; let SLOTS = [null, null];
-function pull() { if (!GAME) return; const d = window.parent.MP_SKILL.get(); lv = Object.assign({ root: 1 }, d.skills || {}); SLOTS = (d.slots || [null, null]).slice(); INV = {}; for (const [k, v] of Object.entries(d.bag || {})) { const m = /^ms_(\w+)_(\d)$/.exec(k); if (m) INV[m[1] + '.' + ['', 'Ⅰ', 'Ⅱ', 'Ⅲ'][+m[2]]] = v; } }
+function pull() { if (!GAME) return; const d = window.parent.MP_SKILL.get(); lv = Object.assign({}, d.skills || {}); SLOTS = (d.slots || [null, null]).slice(); INV = {}; for (const [k, v] of Object.entries(d.bag || {})) { const m = /^ms_(\w+)_(\d)$/.exec(k); if (m) INV[m[1] + '.' + ['', 'Ⅰ', 'Ⅱ', 'Ⅲ'][+m[2]]] = v; } }
 pull(); if (GAME) sel = 'root'; if (GAME) { document.getElementById('reset').hidden = true; const nt = document.querySelector('.note'); if (nt) nt.hidden = true; document.body.style.padding = '12px'; }
 window.MP_REFRESH = () => { pull(); render(); };
 if (GAME) addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if (k === 'k' || k === 'escape') { e.preventDefault(); window.parent.MP_SKILL_CLOSE && window.parent.MP_SKILL_CLOSE(); } });
@@ -91,8 +91,8 @@ function pre(k) { const n = N[k]; if (k === 'root') return []; if (n.tier === 't
 function state(k) { const n = N[k]; if (L(k) >= n.max) return 'learned';
   if (n.tier === 'a' || n.tier === 'b') { const o = n.el.id + '.' + (n.tier === 'a' ? 'b' : 'a'); if (L(o)) return 'locked'; }
   const ok = n.tier === 'ult' ? pre(k).some((p) => L(p)) : pre(k).every((p) => L(p)); return ok ? 'open' : 'locked'; }
-const needOf = (k) => (k === 'root' ? [] : [[N[k].el.id, ROMAN[N[k].tier]]]);
-const elName = (id) => EL.find((e) => e.id === id).name, stoneName = ([id, r]) => `${elName(id)} 마법석 ${r}`, haveS = ([id, r]) => INV[id + '.' + r] | 0;
+const needOf = (k) => (k === 'root' ? [['root', '']] : [[N[k].el.id, ROMAN[N[k].tier]]]);
+const elName = (id) => EL.find((e) => e.id === id).name, stoneName = ([id, r]) => (id === 'root' ? '깨달음의 마법석' : `${elName(id)} 마법석 ${r}`), haveS = ([id, r]) => INV[id + '.' + r] | 0;
 const stage = document.getElementById('stage'), map = document.getElementById('map');
 for (const k of Object.keys(N)) { const n = N[k], b = document.createElement('button'); b.type = 'button'; b.className = 'node' + (n.big ? ' big' : ''); b.dataset.k = k; b.style.setProperty('--c', n.hex); b.style.setProperty('--r', n.ring || n.hex); b.style.left = (n.pos[0] / 12) + '%'; b.style.top = 'calc(' + n.pos[1] + ' / var(--vh, 10.6) * 1%)'; b.setAttribute('aria-label', n.name);
   if (n.el && n.el.req) b.classList.add('low'); b.innerHTML = `<canvas width="48" height="48" data-ico="${k}"></canvas><span class="pill"></span>`; b.onclick = () => { sel = k; render(); }; stage.append(b); }
@@ -125,10 +125,10 @@ async function preview(n) { const id = ++pvId, mod = await load(n.fx); if (id !=
 function info() { if (N[sel].el && N[sel].el.req && !hiddenOpen(N[sel].el)) sel = 'root'; const n = N[sel], st = state(sel), box = document.getElementById('info'); box.style.setProperty('--c', n.hex);
   const nd = needOf(sel), enough = nd.every((q) => haveS(q) >= 1), can = st === 'open' && enough;
   const lockMsg = n.el && n.el.req && !hiddenOpen(n.el) ? '아직 알 수 없는 힘이에요' : (n.tier === 'a' || n.tier === 'b') && L(n.el.id + '.' + (n.tier === 'a' ? 'b' : 'a')) ? '다른 쪽을 골랐어요' : '앞 마법을 먼저 배워요';
-  box.innerHTML = `<h2>${n.name}</h2><div class="sub">${n.el ? `${n.el.name} 마법석 ${ROMAN[n.tier]}` : '시작'} · ${L(sel)}/${n.max}</div><canvas id="pv" width="160" height="120"></canvas><p>${n.desc}</p>
+  box.innerHTML = `<h2>${n.name}</h2><div class="sub">${n.el ? `${n.el.name} 마법석 ${ROMAN[n.tier]}` : '첫 마법 · 효과 없음'} · ${L(sel)}/${n.max}</div><canvas id="pv" width="160" height="120"></canvas><p>${n.desc}</p>
     <div class="kv">${nd.length ? `끼울 마법석: <b style="color:var(--c)">${nd.map(stoneName).join(' + ')}</b> · 가진 것 ${nd.map(haveS).join('')}개${n.max > 1 ? ' (한 번 올릴 때마다 1개)' : ''}<br>` : ''}쿨타임 ${n.tier ? CDT(n.tier) : '-'}</div>
     <button id="learn" type="button" ${can ? '' : 'disabled'}>${st === 'learned' ? '다 배웠어요' : st === 'locked' ? lockMsg : !enough ? `${nd.map(stoneName).join(', ')} 필요` : `${nd.map(stoneName).join(' + ')} 끼우기`}</button>`;
-  if (GAME && L(sel) > 0 && sel !== 'root') { const sb = document.createElement('div'); sb.className = 'slotRow'; sb.innerHTML = [0, 1].map((i) => `<button type="button" data-slot="${i}" class="${SLOTS[i] === sel ? 'on' : ''}">${SLOTS[i] === sel ? '✔ ' : ''}${i ? 'F' : 'R'} 칸에 넣기</button>`).join(''); box.append(sb); for (const b of sb.querySelectorAll('[data-slot]')) b.onclick = () => window.parent.MP_SKILL.equip(+b.dataset.slot, sel); }
+  if (GAME && L(sel) > 0) { const sb = document.createElement('div'); sb.className = 'slotRow'; sb.innerHTML = [0, 1].map((i) => `<button type="button" data-slot="${i}" class="${SLOTS[i] === sel ? 'on' : ''}">${SLOTS[i] === sel ? '✔ ' : ''}${i ? 'F' : 'R'} 칸에 넣기</button>`).join(''); box.append(sb); for (const b of sb.querySelectorAll('[data-slot]')) b.onclick = () => window.parent.MP_SKILL.equip(+b.dataset.slot, sel); }
   document.getElementById('learn').onclick = () => { if (!can) return; if (GAME) { window.parent.MP_SKILL.learn(sel); return; } lv[sel] = L(sel) + 1; for (const q of nd) INV[q[0] + '.' + q[1]] -= 1; render(); }; preview(n); }
 function render() { for (const b of stage.querySelectorAll('.node')) { const k = b.dataset.k, st = state(k), n = N[k]; b.classList.toggle('learned', L(k) > 0); b.classList.toggle('open', st === 'open'); b.classList.toggle('sel', k === sel); b.classList.toggle('sealed', !!(n.el && n.el.req && !hiddenOpen(n.el))); b.querySelector('.pill').textContent = `${L(k)}/${n.max}`; }
   for (const d of stage.querySelectorAll('.brlabel')) { const e = EL.find((q) => q.id === d.dataset.el); d.innerHTML = e.req && !hiddenOpen(e) ? '???<small>아직 알 수 없는 힘</small>' : `${e.name}<small>${e.en}</small>`; d.classList.toggle('sealed', !!(e.req && !hiddenOpen(e))); }
