@@ -1930,9 +1930,29 @@
   $('skTree').addEventListener('click', (e) => { e.stopPropagation(); if (document.body.classList.contains('padEdit')) return; openSkills(); }); // 패드 위 마법석 → 스킬 트리
   function renderSkillPad() { for (const i of [0, 1]) { const b = $('sk' + i), key = MY_SLOTS[i]; b.classList.toggle('empty', !key); b.title = key ? `${MPRules.MAGIC[key].name} (${i ? 'F' : 'R'})` : `빈 칸 (${i ? 'F' : 'R'}) · 마법(K)에서 넣어요`; skillIcon(b.querySelector('canvas'), key); } }
   const fxMods = {}; async function fxMod(k) { if (!fxMods[k]) fxMods[k] = import('./assets/pixelfx/fx/' + k + '.js').catch(() => null); return fxMods[k]; }
+  // 마법 자국: 마법이 닿은 바닥에 5초쯤 남았다가 스르르 사라짐 (불=탄 자국 · 얼음=서리 · 번개=그을린 금 · 자연=꽃·풀 · 물=웅덩이 …)
+  const MARKS = [];
+  function addMark(M, x, y) { if (M.el === 'root') return; const big = M.tier === 'ult' ? 2.2 : M.tier === 'a' || M.tier === 'b' ? 1.4 : 1; MARKS.push({ el: M.el, x, y, r: 30 * big, t0: performance.now(), seed: Math.floor(Math.random() * 1e4) }); if (MARKS.length > 40) MARKS.shift(); }
+  function drawMarks() { const now = performance.now(); for (let q = MARKS.length - 1; q >= 0; q--) { const mk = MARKS[q], age = (now - mk.t0) / 1000; if (age > 5.5) { MARKS.splice(q, 1); continue; }
+      const a = age < 0.3 ? age / 0.3 : age > 4 ? Math.max(0, 1 - (age - 4) / 1.5) : 1, R = mk.r, P = 4; ctx.save(); ctx.globalAlpha = a;
+      const blob = (col, rr, al = 1, sq = 0.55) => { ctx.fillStyle = col; ctx.globalAlpha = a * al; for (let yy = -rr; yy <= rr; yy += P) for (let xx = -rr; xx <= rr; xx += P) { const d = Math.hypot(xx, yy / sq) / rr + (hash(xx, yy, mk.seed) - 0.5) * 0.35; if (d < 1) ctx.fillRect(Math.round(mk.x + xx), Math.round(mk.y + yy * sq), P, P); } };
+      const dots = (col, n, rr, sz = 3, rise = 0) => { ctx.fillStyle = col; for (let k = 0; k < n; k++) { const an = hash(k, 1, mk.seed) * 6.28, d = Math.sqrt(hash(k, 2, mk.seed)) * rr; ctx.globalAlpha = a * (0.5 + 0.5 * Math.sin(now / 200 + k)); ctx.fillRect(Math.round(mk.x + Math.cos(an) * d), Math.round(mk.y + Math.sin(an) * d * 0.55 - rise * age), sz, sz); } };
+      const e = mk.el;
+      if (e === 'fire') { blob('#2a1a12', R, 0.75); blob('#4a2a18', R * 0.6, 0.6); dots(age < 3 ? '#ff8a2a' : '#7a3a1a', 10, R * 0.8, 3, 2); } // 탄 자국 + 불씨
+      else if (e === 'ice') { blob('#cfefff', R, 0.55); blob('#ffffff', R * 0.55, 0.5); dots('#ffffff', 12, R, 2); } // 서리판
+      else if (e === 'bolt') { blob('#1e1a24', R * 0.7, 0.6); ctx.strokeStyle = '#ffe36a'; ctx.globalAlpha = a * (age < 1 ? 1 : 0.4); ctx.lineWidth = 2; for (let k = 0; k < 5; k++) { const an = hash(k, 3, mk.seed) * 6.28; ctx.beginPath(); ctx.moveTo(mk.x, mk.y); ctx.lineTo(mk.x + Math.cos(an) * R * 0.5, mk.y + Math.sin(an) * R * 0.25 + 3); ctx.lineTo(mk.x + Math.cos(an + 0.4) * R, mk.y + Math.sin(an + 0.4) * R * 0.5); ctx.stroke(); } } // 그을린 금
+      else if (e === 'nature') { blob('#3f8f3a', R, 0.45); dots('#ff9ac8', 6, R * 0.8, 3); dots('#fff1a0', 5, R * 0.8, 3); dots('#8ccf52', 10, R, 2); } // 꽃·풀
+      else if (e === 'water') { blob('#3d8bff', R, 0.4); blob('#9ad0ff', R * 0.45, 0.4); ctx.strokeStyle = '#d8ecff'; ctx.globalAlpha = a * 0.6; ctx.beginPath(); ctx.ellipse(mk.x, mk.y, R * (0.3 + (age % 1) * 0.7), R * 0.3 * (0.3 + (age % 1) * 0.7), 0, 0, 7); ctx.stroke(); } // 웅덩이
+      else if (e === 'wind') { ctx.strokeStyle = '#e8f6f0'; ctx.lineWidth = 2; for (let k = 0; k < 3; k++) { ctx.globalAlpha = a * 0.5; ctx.beginPath(); ctx.ellipse(mk.x, mk.y, R * (0.4 + k * 0.3), R * 0.18 * (1 + k * 0.6), 0, age * 2 + k, age * 2 + k + 3.6); ctx.stroke(); } dots('#c9b88a', 8, R, 2); } // 바람 소용돌이 + 흙먼지
+      else if (e === 'holy') { ctx.strokeStyle = '#fff3b0'; ctx.lineWidth = 2; ctx.globalAlpha = a * 0.7; ctx.beginPath(); ctx.ellipse(mk.x, mk.y, R, R * 0.5, 0, 0, 7); ctx.stroke(); ctx.beginPath(); ctx.ellipse(mk.x, mk.y, R * 0.6, R * 0.3, 0, 0, 7); ctx.stroke(); dots('#fffbe0', 10, R, 2, 4); } // 빛의 고리
+      else if (e === 'poison') { blob('#5a2a8a', R, 0.5); dots('#d49aff', 8, R * 0.7, 3, 3); } // 보라 독 웅덩이 + 거품
+      else if (e === 'dark') { blob('#0a0612', R, 0.65); dots('#8c78b0', 8, R, 2, 2); } // 검은 자국
+      else { ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = a * 0.6; ctx.beginPath(); ctx.ellipse(mk.x, mk.y, R, R * 0.5, 0, 0, 7); ctx.stroke(); dots('#ffffff', 12, R, 2, 3); } // 시공: 별 고리
+      ctx.restore(); } }
   async function playCast(m) { // 마법 연출 (나·다른 사람 모두)
     const M = MPRules.MAGIC[m.key]; if (!M) return; await loadPfxW(); if (!PFXW) return; const mod = await fxMod(M.fx); if (!mod) return; PFXW.fx[M.fx] = mod;
     const D = FACE_D[m.face | 0] || [0, 1], o = M.pal ? { palette: M.pal } : {}, who = m.id === myId ? player : others('ground', null).find((b) => b.id === m.id);
+    { const far = M.dir ? 170 : (M.eff === 'boulder' || M.eff === 'quake' || M.eff === 'freeze' || M.eff === 'bridge' || M.eff === 'grow') ? 36 : 0; setTimeout(() => addMark(M, m.x + D[0] * far, m.y + 6 + D[1] * far * 0.6), M.dir ? 650 : 150); } // 바닥 자국
     if (M.dir) { const e = wfx(M.fx, m.x + D[0] * 20, m.y - 20 + D[1] * 10, Object.assign({ flip: D[0] < 0, angle: D[1] ? (D[1] > 0 ? Math.PI / 2 : -Math.PI / 2) : 0 }, o), { vx: D[0] * 260, vy: D[1] * 260, life: 0.7 }); if (e && D[1]) e.f.options.angle = D[1] > 0 ? Math.PI / 2 : -Math.PI / 2; }
     else if (M.eff === 'boulder' || M.eff === 'quake' || M.eff === 'freeze' || M.eff === 'bridge' || M.eff === 'grow') wfx(M.fx, m.x + D[0] * 36, m.y + D[1] * 36 - 6, o, { life: 1.6 });
     else wfx(M.fx, m.x, m.y - 10, o, Object.assign({ life: (mod.meta && mod.meta.loop) ? 1.8 : Infinity }, who ? { follow: who, fdy: -10 } : {}));
@@ -2055,7 +2075,7 @@
   const stoneCache = {};
   function stoneSprite(el, n) { const key = el + n; if (stoneCache[key]) return stoneCache[key]; const im = UIIMG['stone_' + Math.max(1, n)]; if (!im || !im.complete || !im.naturalWidth) return null;
     const E = MPRules.magicEl(el), hex = el === 'dark' ? '#5a3f86' : E.hex, c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
-    const d = g.getImageData(0, 0, c.width, c.height), px = d.data, R0 = parseInt(hex.slice(1, 3), 16), G0 = parseInt(hex.slice(3, 5), 16), B0 = parseInt(hex.slice(5, 7), 16);
+    const d = g.getImageData(0, 0, c.width, c.height), px = d.data; let R0 = parseInt(hex.slice(1, 3), 16), G0 = parseInt(hex.slice(3, 5), 16), B0 = parseInt(hex.slice(5, 7), 16); { const Lm = R0 * 0.3 + G0 * 0.59 + B0 * 0.11, ds = 0.32; R0 = R0 + (Lm - R0) * ds; G0 = G0 + (Lm - G0) * ds; B0 = B0 + (Lm - B0) * ds; } /* 채도 조금 낮춤 */
     for (let i = 0; i < px.length; i += 4) { if (!px[i + 3]) continue; const L = px[i] / 255; // 어두운 곳 → 속성 색의 그림자, 밝은 곳 → 흰빛
       const t = L < 0.78 ? L / 0.78 : 1, w = L < 0.78 ? 0 : (L - 0.78) / 0.22 * 0.6, dk = 0.22 + 0.9 * t;
       px[i] = Math.round((R0 * dk) * (1 - w) + 255 * w * 0.92 + R0 * w * 0.08); px[i + 1] = Math.round((G0 * dk) * (1 - w) + 255 * w * 0.92 + G0 * w * 0.08); px[i + 2] = Math.round((B0 * dk) * (1 - w) + 255 * w * 0.92 + B0 * w * 0.08);
@@ -2072,7 +2092,7 @@
     else if (id === 'f_fence') { for (const x of [-6, -1, 4]) R('#c98c4a', x, -6, 2, 12); R('#9a6a35', -7, -3, 14, 2); R('#9a6a35', -7, 2, 14, 2); }
     else if (id === 'f_sign') { R(O, -7, -7, 14, 9); R('#c98c4a', -6, -6, 12, 7); R('#7a4e24', -1, 2, 2, 6); R('#7a4e24', -4, -4, 8, 1); }
     else if (id === 'f_pot') { R('#3f8f3a', -1, -6, 2, 5); R('#ff7aa8', -3, -9, 6, 4); R(O, -5, -1, 10, 8); R('#c0654a', -4, 0, 8, 6); }
-    else if (id.startsWith('ms_') && stoneSprite(MPRules.RECIPE_BY[id].el, MPRules.RECIPE_BY[id].sn)) { const r = MPRules.RECIPE_BY[id], sp = stoneSprite(r.el, r.sn), k = 52 / Math.max(sp.width, sp.height); g.imageSmoothingEnabled = false; g.drawImage(sp, 32 - sp.width * k / 2, 32 - sp.height * k / 2, sp.width * k, sp.height * k); }
+    else if (id.startsWith('ms_') && stoneSprite(MPRules.RECIPE_BY[id].el, MPRules.RECIPE_BY[id].sn)) { const r = MPRules.RECIPE_BY[id], sp = stoneSprite(r.el, r.sn), k = 52 / Math.max(sp.width, sp.height); g.imageSmoothingEnabled = false; if (g.canvas && g.canvas.classList) { g.canvas.classList.add('msShine'); g.canvas.style.setProperty('--g', r.el === 'dark' ? '#8c78b0' : MPRules.magicEl(r.el).hex); if (g.canvas.parentElement) g.canvas.parentElement.classList.add('msSpark'); } /* 빛이 일렁이는 마법석 */ g.drawImage(sp, 32 - sp.width * k / 2, 32 - sp.height * k / 2, sp.width * k, sp.height * k); }
     else if (id.startsWith('ms_')) { const r = MPRules.RECIPE_BY[id], col = MPRules.magicEl(r.el).hex, n = r.sn; R('#2b2340', -6, -8, 12, 16); R(col, -5, -7, 10, 14); R('rgba(255,255,255,.65)', -4, -6, 3, 6); R('#2b2340', -6 + n * 0, 9, 12, 0); for (let i = 0; i < n; i++) R('#fff', -5 + i * 4, 8, 2, 2); }
     else if (id === 'f_rug') { R(O, -9, -5, 18, 10); R('#b04a6a', -8, -4, 16, 8); R('#ffd35a', -6, -2, 12, 4); R('#b04a6a', -4, -1, 8, 2); }
   }
@@ -4501,6 +4521,7 @@
     list.push(player);
     drawLoots(ctx, t);
     buildShadeMask(tx0, tx1, ty0, ty1);
+    drawMarks(); // 마법 자국 (캐릭터 아래)
     drawActors(list, t);
     SHADE.on = false;
     { const c = atkCharge(); if (c >= 0.25 && !ATK.chFx && PFXW) { ATK.chFx = wfx('spell-charge', player.x, player.y, {}, { follow: player }); SND.play('charge'); ATK.full = false; } if (c >= 1 && !ATK.full) { ATK.full = true; SND.play('chargeFull'); } if (c >= 0) { ctx.strokeStyle = c >= 1 ? '#fff2a8' : 'rgba(159,211,255,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(player.x, player.y - 24, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c); ctx.stroke(); if (c >= 1) { ctx.font = `700 12px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff2a8'; ctx.fillText('차징!', player.x, player.y - 100); } } }

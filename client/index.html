@@ -646,6 +646,12 @@ body #vitals .vbar b { font-size: 10px; text-shadow: 0 1px 0 #2a1810, 1px 0 0 #2
 #craftBox .sOk { border-image: url(assets/ui/btn_ok.png) 3 fill / 9px stretch !important; color: #1e3a0e; text-shadow: 0 1px 0 rgba(255,255,255,.4); } #craftBox .sOk::before { content: '✔ '; } #craftBox .sOk:disabled { filter: grayscale(.7) brightness(.8); }
 #craftBox .sNo { border-image: url(assets/ui/btn_no.png) 3 fill / 9px stretch !important; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.4); } #craftBox .sNo::before { content: '✕ '; }
 #craftBox .pfTop { margin-top: -6px; }
+/* 마법석: 속성 빛이 일렁이고 반짝 */
+canvas.msShine { animation: msGlow 2.4s ease-in-out infinite; }
+@keyframes msGlow { 0%, 100% { filter: drop-shadow(0 0 1px var(--g, #fff)) brightness(1); } 50% { filter: drop-shadow(0 0 6px var(--g, #fff)) brightness(1.2) saturate(1.1); } }
+.msSpark { position: relative; } .msSpark::after { content: '✦'; position: absolute; right: 18%; top: 12%; font-size: 11px; color: #fff; text-shadow: 0 0 4px #fff; pointer-events: none; animation: msTw 1.9s ease-in-out infinite; }
+@keyframes msTw { 0%, 60%, 100% { opacity: 0; transform: scale(.4) rotate(0); } 75% { opacity: 1; transform: scale(1) rotate(45deg); } }
+@media (prefers-reduced-motion: reduce) { canvas.msShine, .msSpark::after { animation: none; } }
 /* ===== 설정 창 (나무 틀) ===== */
 .gearBtn { min-width: 44px; padding: 0 8px !important; display: grid; place-items: center; }
 /* 설정: 사용자 두루마리 그림을 다시 그린 픽셀 틀 (assets/ui/scroll.png) */
