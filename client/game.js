@@ -1979,7 +1979,12 @@
       else { ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = a * 0.6; ctx.beginPath(); ctx.ellipse(mk.x, mk.y, R, R * 0.5, 0, 0, 7); ctx.stroke(); dots('#ffffff', 12, R, 2, 3); } // 시공: 별 고리
       ctx.restore(); } }
   // 마법 연출: 위에서 내려다보는 화면용 (magicfx.js) · 쓴 자리에서 나가고 캐릭터를 따라다니지 않음
-  const GFX = window.MPMagicFX.create({ scale: 1.5, onMark: (key, x, y) => { const M = MPRules.MAGIC[key]; if (M) addMark(M, x, y + 6); } });
+  function pfxHandle(name, x, y, o) { // magicfx → pixelfx 그림 (모듈은 처음 쓸 때 불러옴)
+    const h = { x, y, e: null, dead: false, move(nx, ny) { this.x = nx; this.y = ny; if (this.e) { this.e.x = nx; this.e.y = ny; } }, stop() { this.dead = true; if (this.e && !this.e.stopped) { this.e.f.stop(); this.e.stopped = true; } } };
+    const life = o.life; const oo = Object.assign({}, o); delete oo.life;
+    (async () => { await loadPfxW(); if (!PFXW) return; const mod = await fxMod(name); if (!mod || h.dead) return; PFXW.fx[name] = mod; h.e = wfx(name, h.x, h.y, oo, { life: life || Infinity }); })();
+    return h; }
+  const GFX = window.MPMagicFX.create({ scale: 1.5, pfx: pfxHandle, onMark: (key, x, y) => { const M = MPRules.MAGIC[key]; if (M) addMark(M, x, y + 6); } });
   function playCast(m) { // 나·다른 사람 모두
     const M = MPRules.MAGIC[m.key]; if (!M) return;
     const D = FACE_D[m.face | 0] || [0, 1];

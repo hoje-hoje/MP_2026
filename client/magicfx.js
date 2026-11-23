@@ -11,20 +11,25 @@
     opt = opt || {};
     const S = opt.scale || 1, P = Math.max(2, Math.round(2 * S)); // 도트 한 칸 크기
     const E = [], PT = [], LT = [];
+    const CODE = !opt.pfx; // opt.pfx 가 있으면 그림은 pixelfx 로 (여기서는 움직임·맞히기·흔들림만)
+    const PFXT = R.MAGIC_PFX || {};
+    const fxOf = (key, k) => { const t = PFXT[key] || {}, M = R.MAGIC[key] || {}; return k === 'fx' ? t.fx || M.fx : k === 'trav' ? t.trav || t.fx || M.fx : k === 'hit' ? t.hit : t.each || t.hit || M.fx; };
+    const angO = (key, dx, dy, extra) => { const M = R.MAGIC[key] || {}; return Object.assign({ flip: dx < 0, angle: dy && Math.abs(dy) > Math.abs(dx) ? (dy > 0 ? Math.PI / 2 : -Math.PI / 2) : 0 }, M.pal ? { palette: M.pal } : {}, extra || {}); };
+    const spawn = (name, x, y, o) => (opt.pfx && name ? opt.pfx(name, x, y, o || {}) : null);
     let shakeT = 0, shakeA = 0, tint = null;
     const pal = (key) => R.MAGIC_PAL[R.MAGIC[key] ? R.MAGIC[key].el : 'root'] || R.MAGIC_PAL.root;
     const targets = () => (opt.targets ? opt.targets() : []);
     const q = (v) => Math.round(v / P) * P;
     const shake = (a, t) => { shakeA = Math.max(shakeA * (shakeT > 0 ? 1 : 0), a * S); shakeT = Math.max(shakeT, t); };
     const mark = (key, x, y) => { if (opt.onMark) opt.onMark(key, x, y); };
-    function part(o) { PT.push(Object.assign({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: 0, life: 0.5, t: 0, c: '#fff', s: P, drag: 0, fade: 1 }, o)); }
-    function burst(x, y, z, n, c, sp, o) { for (let i = 0; i < n; i++) { const a = rnd(0, TAU), v = rnd(sp * 0.3, sp) * S; part(Object.assign({ x, y, z, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.6, vz: rnd(20, 90) * S, g: 260 * S, life: rnd(0.3, 0.7), c: c[(Math.random() * c.length) | 0], s: P * (Math.random() < 0.3 ? 2 : 1) }, o || {})); } }
+    function part(o) { if (!CODE) return; PT.push(Object.assign({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, g: 0, life: 0.5, t: 0, c: '#fff', s: P, drag: 0, fade: 1 }, o)); }
+    function burst(x, y, z, n, c, sp, o) { if (!CODE) return; for (let i = 0; i < n; i++) { const a = rnd(0, TAU), v = rnd(sp * 0.3, sp) * S; part(Object.assign({ x, y, z, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.6, vz: rnd(20, 90) * S, g: 260 * S, life: rnd(0.3, 0.7), c: c[(Math.random() * c.length) | 0], s: P * (Math.random() < 0.3 ? 2 : 1) }, o || {})); } }
     // 맞히기: 발밑 기준 타원 거리
     function inR(t, x, y, r) { const dx = t.x - x, dy = (t.y - y) * 1.35, rr = r + (t.r || 9 * S); return dx * dx + dy * dy <= rr * rr; }
     function hit(t, e, extra) { if (!opt.onHit) return; const sp = e.spec; opt.onHit(t, Object.assign({ key: e.key, dmg: sp.dmg || 0, st: sp.st || null, knock: sp.knock || 0, fx: e.x, fy: e.y }, extra || {})); }
     function hitArea(e, x, y, r, once, extra) { for (const t of targets()) { if (once && e.hitSet.has(t.ref || t)) continue; if (!inR(t, x, y, r)) continue; if (once) e.hitSet.add(t.ref || t); hit(t, e, Object.assign({ fx: x, fy: y }, extra || {})); } }
     function impact(e, x, y, r, big) { // 착탄: 번쩍 + 땅 고리 + 파편 + 흔들림
-      const c = e.pal; E.push({ type: 'flash', x, y, r: r * 1.1, t: 0, dur: 0.18, pal: c }); E.push({ type: 'ring', x, y, r: r * 1.4, t: 0, dur: 0.35, pal: c });
+      const c = e.pal; if (CODE) { E.push({ type: 'flash', x, y, r: r * 1.1, t: 0, dur: 0.18, pal: c }); E.push({ type: 'ring', x, y, r: r * 1.4, t: 0, dur: 0.35, pal: c }); } else spawn(fxOf(e.key, 'hit') || (big ? 'explosions/small-explosion' : 'impacts/hit-spark'), x, y - 6 * S, (R.MAGIC[e.key] || {}).pal ? { palette: R.MAGIC[e.key].pal } : {});
       burst(x, y, 6 * S, big ? 26 : 12, [c[0], c[1], c[2], c[3]], big ? 150 : 90); LT.push({ x, y, r: r * 4, c: c[2], t: 0, dur: 0.4, a: 1 });
       if (e.spec.shake) shake(e.spec.shake, 0.25); else if (big) shake(2, 0.15); mark(e.key, x, y);
     }
@@ -42,8 +47,15 @@
       if (sp.shape === 'line') e.n = 0;
       if (sp.shape === 'wave') e.d = 0;
       E.push(e);
-      // 쓰는 순간: 발밑에 작은 마법진 + 반짝
-      E.push({ type: 'cast', x: c.x, y: c.y, t: 0, dur: 0.35, pal: e.pal });
+      if (CODE) E.push({ type: 'cast', x: c.x, y: c.y, t: 0, dur: 0.35, pal: e.pal }); // 쓰는 순간: 발밑에 작은 마법진
+      else { // pixelfx 주 그림: 쓴 자리 / 날아가는 구슬 / 앞쪽 땅 (캐릭터를 따라다니지 않음)
+        const life = (n) => ({ life: n });
+        if (sp.shape === 'orb') e.h = spawn(fxOf(key, 'trav'), e.x, e.y - e.z, angO(key, dx, dy, life(sp.range / sp.speed + 0.2)));
+        else if (sp.shape === 'self' || sp.shape === 'nova') spawn(fxOf(key, 'fx'), c.x, c.y - 10 * s, angO(key, 0, 1, life(sp.dur || 1.6)));
+        else if (sp.shape === 'beam') spawn(fxOf(key, 'fx'), c.x + dx * 14 * s, c.y - 14 * s + dy * 8 * s, angO(key, dx, dy, life(sp.dur + 0.3)));
+        else if (sp.shape === 'chain') spawn(fxOf(key, 'fx'), c.x + dx * 10 * s, c.y - 14 * s, angO(key, dx, dy, life(0.8)));
+        else if (sp.shape === 'zone' && (sp.delay >= 0.3 || sp.linger)) e.h = spawn(fxOf(key, 'fx'), e.x, e.y, angO(key, 0, 1, life(sp.delay + (sp.linger || 0.8))));
+      }
     }
     function chainCast(e) {
       const sp = e.spec, s = S, pts = [], used = new Set(); let cx = e.x, cy = e.y - 14 * s;
@@ -70,7 +82,7 @@
     // ---------------------------------------------------------------- 매 프레임
     function update(dt) {
       if (shakeT > 0) shakeT -= dt;
-      for (let i = E.length - 1; i >= 0; i--) { const e = E[i]; e.t += dt; if (step(e, dt) === false || (e.dur != null && e.t >= e.dur)) E.splice(i, 1); }
+      for (let i = E.length - 1; i >= 0; i--) { const e = E[i]; e.t += dt; if (step(e, dt) === false || (e.dur != null && e.t >= e.dur)) { if (e.h && e.type === 'orb') e.h.stop(); E.splice(i, 1); } }
       for (let i = PT.length - 1; i >= 0; i--) { const p = PT[i]; p.t += dt; if (p.t >= p.life) { PT.splice(i, 1); continue; } p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vz -= p.g * dt; if (p.z < 0) { p.z = 0; p.vz *= -0.3; p.vx *= 0.6; p.vy *= 0.6; } if (p.drag) { const k = Math.pow(p.drag, dt); p.vx *= k; p.vy *= k; } }
       for (let i = LT.length - 1; i >= 0; i--) { LT[i].t += dt; if (LT[i].t >= LT[i].dur) LT.splice(i, 1); }
     }
@@ -80,6 +92,7 @@
         case 'orb': {
           const v = sp.speed * s * dt; e.x += e.dx * v; e.y += e.dy * v * 0.85; e.d += v; const u = e.d / e.range;
           if (sp.lob) e.z = 10 * s + Math.sin(Math.min(1, u) * Math.PI) * 46 * s;
+          if (e.h) e.h.move(e.x, e.y - e.z);
           if (Math.random() < 0.9) part({ x: e.x + rnd(-2, 2) * s, y: e.y + rnd(-1, 1) * s, z: e.z + rnd(-2, 2) * s, vx: -e.dx * 20 * s, vy: -e.dy * 20 * s, life: sp.roll ? 0.5 : 0.3, c: e.pal[(1 + Math.random() * 3) | 0], s: P, fade: 1 });
           if (sp.look === 'tornado' || sp.look === 'boulder') { if (Math.random() < 0.5) part({ x: e.x + rnd(-sp.r, sp.r) * s, y: e.y, z: 0, vx: rnd(-30, 30) * s, vy: rnd(-10, 10) * s, vz: rnd(20, 60) * s, g: 200 * s, life: 0.4, c: '#8a7a60' }); }
           LT.length < 40 && (e.lt = true);
@@ -110,10 +123,10 @@
           const life = sp.delay + (sp.linger || 0.5);
           if (e.t < sp.delay) { if (sp.look === 'meteor' && Math.random() < 0.8) part({ x: e.x - 70 * s * (1 - e.t / sp.delay) + rnd(-3, 3) * s, y: e.y, z: 160 * s * (1 - e.t / sp.delay), vx: 0, vy: 0, life: 0.3, c: e.pal[(1 + Math.random() * 3) | 0], s: P * 1.5 }); return true; }
           if (!e.landed) { e.landed = true;
-            if (!sp.strikes && !sp.linger) { impact(e, e.x, e.y, sp.r * s, sp.look === 'meteor'); hitArea(e, e.x, e.y, sp.r * s, true); if (sp.look === 'strike') E.push({ type: 'skybolt', x: e.x, y: e.y, t: 0, dur: 0.18, pal: e.pal }); if (sp.look === 'roots') burst(e.x, e.y, 0, 14, ['#5a3a1e', '#2f7a34', '#4cbf4a'], 60); return true; }
+            if (!sp.strikes && !sp.linger) { if (!CODE && sp.delay < 0.3) spawn(fxOf(e.key, 'fx'), e.x, e.y, angO(e.key, 0, 1, { life: 1.4 })); impact(e, e.x, e.y, sp.r * s, sp.look === 'meteor'); hitArea(e, e.x, e.y, sp.r * s, true); if (sp.look === 'strike') E.push({ type: 'skybolt', x: e.x, y: e.y, t: 0, dur: 0.18, pal: e.pal }); if (sp.look === 'roots') burst(e.x, e.y, 0, 14, ['#5a3a1e', '#2f7a34', '#4cbf4a'], 60); return true; }
             if (sp.linger && !sp.strikes) { E.push({ type: 'ring', x: e.x, y: e.y, r: sp.r * s, t: 0, dur: 0.4, pal: e.pal }); if (sp.shake) shake(sp.shake * 0.5, 0.2); } }
           if (sp.strikes) { e.strikeT -= dt; if (e.strikeT <= 0 && e.struck < sp.strikes) { e.strikeT = (sp.linger || 1) / sp.strikes; e.struck++; const a = rnd(0, TAU), r0 = Math.sqrt(Math.random()) * sp.r * s, x = e.x + Math.cos(a) * r0, y = e.y + Math.sin(a) * r0 * 0.6;
-            E.push({ type: sp.look === 'stars' ? 'star' : 'skybolt', x, y, t: 0, dur: sp.look === 'stars' ? 0.3 : 0.16, pal: e.pal }); setTimeout(() => { impact({ key: e.key, spec: { shake: sp.shake }, pal: e.pal }, x, y, 16 * s, false); for (const t of targets()) if (inR(t, x, y, 20 * s)) hit(t, e, { fx: x, fy: y }); }, sp.look === 'stars' ? 260 : 20); } }
+            if (CODE) E.push({ type: sp.look === 'stars' ? 'star' : 'skybolt', x, y, t: 0, dur: sp.look === 'stars' ? 0.3 : 0.16, pal: e.pal }); else spawn(fxOf(e.key, 'each'), x, y, angO(e.key, 0, 1, { life: 1 })); setTimeout(() => { impact({ key: e.key, spec: { shake: sp.shake }, pal: e.pal }, x, y, 16 * s, false); for (const t of targets()) if (inR(t, x, y, 20 * s)) hit(t, e, { fx: x, fy: y }); }, sp.look === 'stars' ? 260 : 20); } }
           else if (sp.linger) {
             e.tick -= dt; if (e.tick <= 0) { e.tick = sp.tick || 0.5; hitArea(e, e.x, e.y, sp.r * s, false, sp.pull ? { pull: sp.pull, knock: 0 } : {}); }
             if (sp.pull) for (let k = 0; k < 2; k++) { const a = rnd(0, TAU), r0 = sp.r * s * rnd(0.7, 1.2); part({ x: e.x + Math.cos(a) * r0, y: e.y + Math.sin(a) * r0 * 0.6, z: rnd(0, 10) * s, vx: -Math.cos(a) * r0 * 1.6, vy: -Math.sin(a) * r0 * 1.0, life: 0.55, c: e.pal[(Math.random() * 3) | 0], drag: 0.6 }); }
@@ -124,12 +137,13 @@
         }
         case 'line': {
           const want = Math.min(Math.floor(sp.len / sp.step), Math.floor(e.t / 0.045) + 1);
-          while (e.n < want) { e.n++; const x = e.x + e.dx * sp.step * e.n * s, y = e.y + e.dy * sp.step * e.n * s * 0.85; E.push({ type: 'spike', x, y, t: 0, dur: 0.7, pal: e.pal }); burst(x, y, 0, 3, e.pal.slice(1, 4), 50); hitArea(e, x, y, 12 * s, true); if (e.n === 1) shake(1.5, 0.2); }
+          while (e.n < want) { e.n++; const x = e.x + e.dx * sp.step * e.n * s, y = e.y + e.dy * sp.step * e.n * s * 0.85; if (CODE) E.push({ type: 'spike', x, y, t: 0, dur: 0.7, pal: e.pal }); else if (e.n % 2 === 1) spawn(fxOf(e.key, 'each'), x, y, angO(e.key, e.dx, e.dy, { life: 1 })); burst(x, y, 0, 3, e.pal.slice(1, 4), 50); hitArea(e, x, y, 12 * s, true); if (e.n === 1) shake(1.5, 0.2); }
           return e.t < sp.len / sp.step * 0.045 + 0.1;
         }
         case 'wave': {
           const v = sp.speed * s * dt; e.d += v; const cx = e.x + e.dx * e.d, cy = e.y + e.dy * e.d * 0.85;
           for (const t of targets()) { if (e.hitSet.has(t.ref || t)) continue; const vx = t.x - cx, vy = (t.y - cy) / 0.85, al = vx * e.dx + vy * e.dy, pe = Math.abs(-vx * e.dy + vy * e.dx); if (Math.abs(al) < 14 * s && pe < sp.w * s / 2) { e.hitSet.add(t.ref || t); hit(t, e, { fx: cx - e.dx * 30, fy: cy - e.dy * 30, dirx: e.dx, diry: e.dy }); shake(3, 0.15); } }
+          if (!CODE && Math.floor(e.d / (36 * s)) !== Math.floor((e.d - v) / (36 * s))) for (const o of [-0.35, 0, 0.35]) spawn(fxOf(e.key, 'each'), cx + -e.dy * o * sp.w * s, cy + e.dx * o * sp.w * s * 0.85, angO(e.key, e.dx, e.dy, { life: 0.8 }));
           for (let k = 0; k < 3; k++) { const o = rnd(-0.5, 0.5) * sp.w * s; part({ x: cx + -e.dy * o, y: cy + e.dx * o * 0.85, z: rnd(4, 16) * s, vx: e.dx * sp.speed * s * 0.6, vy: e.dy * sp.speed * s * 0.5, vz: rnd(20, 60) * s, g: 300 * s, life: 0.4, c: e.pal[(Math.random() * 3) | 0] }); }
           return e.d < sp.range * s;
         }
@@ -144,6 +158,7 @@
     function hexA(c, a) { const n = parseInt(c.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
     function jag(g, pts, c, w, amp) { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); for (let i = 0; i < pts.length - 1; i++) { const [x1, y1] = pts[i], [x2, y2] = pts[i + 1]; if (i === 0) g.moveTo(x1, y1); const n = 5; for (let k = 1; k <= n; k++) { const u = k / n, j = k === n ? 0 : rnd(-amp, amp); g.lineTo(x1 + (x2 - x1) * u + (-(y2 - y1)) / (Math.hypot(x2 - x1, y2 - y1) || 1) * j, y1 + (y2 - y1) * u + (x2 - x1) / (Math.hypot(x2 - x1, y2 - y1) || 1) * j); } } g.stroke(); }
     function drawGround(g) { // 땅에 붙는 것: 그림자·마법진·고리·장판
+      if (!CODE) { for (const e of E) if (e.type === 'orb' && e.z > 1) { g.globalAlpha = 0.28; g.fillStyle = '#000'; g.beginPath(); g.ellipse(e.x, e.y, e.spec.r * S * 1.1, e.spec.r * S * 0.45, 0, 0, TAU); g.fill(); g.globalAlpha = 1; } return; } // pixelfx 모드: 날아가는 구슬 그림자만
       const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
       for (const e of E) {
         const c = e.pal, s = S, sp = e.spec || {};
@@ -173,6 +188,7 @@
     }
     function runes(g, x, y, r, c, t) { oval(g, x, y, r, r * 0.55, c[2]); oval(g, x, y, r * 0.72, r * 0.4, c[3]); g.fillStyle = c[1]; for (let k = 0; k < 6; k++) { const a = t + k / 6 * TAU; g.fillRect(q(x + Math.cos(a) * r * 0.86 - P), q(y + Math.sin(a) * r * 0.86 * 0.55 - P), P * 2, P * 2); } }
     function drawTop(g) { // 공중에 뜬 것: 구슬·번개·기둥·파편
+      if (!CODE) return;
       const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; const now = performance.now() / 1000;
       for (const p of PT) { const u = p.t / p.life; g.globalAlpha = p.fade ? Math.min(1, (1 - u) * 1.6) : 1; g.fillStyle = p.c; g.fillRect(q(p.x), q(p.y - p.z), p.s, p.s); }
       g.globalAlpha = 1;

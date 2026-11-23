@@ -1051,7 +1051,13 @@ function bars(e, S, ox, oy) { // HP·차징 바는 큰 화면에 바로 (선명�
 }
 // ── ✨ 마법: 스킬 트리 마법 전부 (rules.js MAGIC_COMBAT · magicfx.js) · 실제로 맞고 상태이상이 걸려요 ──
 const R = window.MPRules, LABM = { key: 'fire.a', el: 'fire' }, magicCd = {};
-const MFX = window.MPMagicFX.create({ scale: 1,
+const pfxMods = {}; const pfxLoad = (n) => (pfxMods[n] = pfxMods[n] || import(P + 'fx/' + n + '.js').catch(() => null));
+function labPfx(name, x, y, o) { // magicfx → pixelfx 그림
+  const h = { f: null, dead: false, x, y, move(nx, ny) { this.x = nx; this.y = ny; if (this.f) { this.f.options.x = nx; this.f.options.y = ny; } }, stop() { this.dead = true; if (this.f) kill(this.f); } };
+  const life = o.life, oo = Object.assign({}, o); delete oo.life;
+  pfxLoad(name).then((mod) => { if (!mod || h.dead) return; h.f = core.createFx(mod, Object.assign({ x: h.x, y: h.y }, oo)); fx.push(h.f); if (life) setTimeout(() => h.stop(), life * 1000); });
+  return h; }
+const MFX = window.MPMagicFX.create({ scale: 1, pfx: labPfx,
   targets: () => all.filter((t) => t.team !== me.team && !t.dead).map((t) => ({ x: t.x, y: t.y, r: 9, ref: t })),
   onHit: (t, info) => magicHit(t.ref, info),
   onSelf: (info) => { if (info.heal) { const h = Math.min(me.max - me.hp, info.heal); me.hp += h; if (h > 0) labels.push({ text: '+' + h, x: me.x, y: me.y - 40, t: 0.7 }); } if (info.shield) me.shield = info.shield; if (info.haste) me.haste = info.haste; },

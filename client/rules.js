@@ -932,6 +932,18 @@
     'chrono.t1': { shape: 'nova', r: 64, dur: 0.8, st: { slow: 2.5 }, look: 'circle' }, 'chrono.a': { shape: 'blink', dist: 128 },
     'chrono.b': { shape: 'zone', at: 90, r: 62, delay: 0.25, linger: 1.4, strikes: 6, dmg: 12, look: 'stars', shake: 2 }, 'chrono.ult': { shape: 'nova', r: 170, dur: 0.6, st: { freeze: 2.5 }, look: 'timestop', shake: 3 },
   };
+  // 마법 그림은 pixelfx: fx = 주 그림 (기본은 MAGIC.fx) · trav = 날아가는 그림 · hit = 맞은 자리 그림 · each = 줄·물결 칸마다
+  const MAGIC_PFX = {
+    'nature.b': { hit: 'explosions/dirt-explosion' }, 'nature.ult': { hit: 'impacts/ground-slam' },
+    'fire.a': { hit: 'explosions/small-explosion' }, 'fire.ult': { hit: 'explosions/big-explosion' },
+    'bolt.t1': { fx: 'lightning/lightning-strike', hit: 'lightning/zap-hit' }, 'bolt.a': { hit: 'lightning/zap-hit' }, 'bolt.b': { hit: 'lightning/zap-hit' }, 'bolt.ult': { each: 'lightning/lightning-strike', hit: 'lightning/zap-hit' },
+    'wind.ult': { hit: 'impacts/hit-spark' }, 'wind.a': { hit: 'impacts/hit-spark' },
+    'ice.a': { hit: 'ice/ice-shatter' }, 'ice.b': { each: 'ice/ice-spikes' }, 'ice.t1': { hit: 'ice/freeze' },
+    'water.a': { hit: 'impacts/hit-spark' }, 'water.ult': { each: 'nature/acid-splash' },
+    'poison.b': { trav: 'projectiles/magic-missile', hit: 'nature/acid-splash' },
+    'dark.t1': { trav: 'projectiles/magic-missile', hit: 'status/cursed' }, 'dark.a': { hit: 'spawn/soul-rise' }, 'dark.b': { hit: 'spawn/disintegrate' },
+    'chrono.a': { fx: 'arcane/blink-out', hit: 'arcane/blink-in' }, 'chrono.b': { each: 'arcane/star-fall' },
+  };
   const MAGIC_PAL = { // 속성 색 (밝은 → 어두운)
     fire: ['#fff4c4', '#ffd23f', '#ff8a24', '#d8402a', '#7a2440'], ice: ['#ffffff', '#d9f1ff', '#9fd3f2', '#5aa0e0', '#2a4f8a'], bolt: ['#ffffff', '#fff8a0', '#ffd23d', '#c9a020', '#5a4a10'],
     wind: ['#ffffff', '#e8fff4', '#b8f0d8', '#7ad0b0', '#3a8070'], nature: ['#f0ffd0', '#9cf06a', '#4cbf4a', '#2f7a34', '#1a3d20'], holy: ['#ffffff', '#fffbe0', '#ffe9a0', '#f0c050', '#a07020'],
@@ -953,5 +965,5 @@
     torchBag: { r: 150, a: 0.9, c: '#ffb050', flick: 0.1 }, self: { r: 75, a: 0.45, c: null }, lightBuff: { r: 240, a: 1, c: '#fff0b0', flick: 0.03 },
     spell: { r: 130, a: 0.9 }, flash: { r: 150, a: 0.8 }, rootFlash: { r: 520, a: 1 },
   };
-  return { MAGIC_COMBAT, MAGIC_PAL, GARDEN, LIGHT_OF, FISH_W0, applyTune, magicCost, fishOdds, applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { MAGIC_COMBAT, MAGIC_PFX, MAGIC_PAL, GARDEN, LIGHT_OF, FISH_W0, applyTune, magicCost, fishOdds, applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
