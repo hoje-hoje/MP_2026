@@ -362,6 +362,7 @@
       return Promise.all([...j.chars, ...j.animals, ...j.monsters].map(async (k) => { ART['u_' + k] = await loadImg('assets/user/' + k + '.png'); }));
     });
     for (const k of EXTRA) names['x_' + k] = 'extra/' + k + '.png';
+    for (const k of ['lily', 'whitelily', 'lavender', 'marigold']) names['x_fl_' + k] = 'flora/' + k + '.png'; // 받은 꽃 그림
     for (const k of TEMPLE) names['x_' + k] = 'na/' + k + '.png';
     const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
     await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
@@ -830,7 +831,7 @@
           if (pickedNow(y * W + x)) { /* 뜯은 자리 */ }
           else if (h < 0.004) { /* 나무 자리 */ }
           else if (h < 0.010) spr(g, 'bush', px + 16, py + 30);
-          else if (h < 0.016) pix(g, h < 0.013 ? 'flower_r' : 'flower_y', px + 16, py + 30);
+          else if (h < 0.016) { const fl = ['flower_r', 'fl_lavender', 'flower_y', 'fl_marigold', 'fl_lily', 'fl_whitelily'][Math.floor((h - 0.010) / 0.001)] || 'flower_r'; if (fl.startsWith('fl_')) pix(g, fl, px + 16, py + 31, 2, fl === 'fl_marigold' ? 22 : 28); else pix(g, fl, px + 16, py + 30); }
           else if (h < 0.019) pix(g, 'mushroom', px + 16, py + 30);
           else if (h < 0.023) pix(g, 'fern', px + 16, py + 30);
         } else if (t === T.MOUNTAIN && h < 0.16 && (x + y) % 2 === 0) spr(g, 'stone', px + 16, py + 30);
@@ -1305,7 +1306,7 @@
         natRibbon(g, x, y - 40, e.n); return;
       }
       case 'd_urn': urn(g, x, y); return;
-      case 'd_flower': pix(g, 'flower_r', x - 8, y - 2, 2); pix(g, 'flower_y', x + 8, y, 2); pix(g, 'fern', x, y + 4, 2); return;
+      case 'd_flower': pix(g, 'fl_lavender', x - 10, y - 2, 2, 30); pix(g, 'fl_whitelily', x + 9, y, 2, 30); pix(g, 'fl_marigold', x, y + 6, 2, 22); return;
       case 'd_mush': pix(g, 'mushroom', x - 6, y, 2); pix(g, 'mushroom', x + 8, y + 2, 1.5); return;
       case 'd_torch': drawTorch(g, x, y, x * 7 + y); return;
       case 'd_campfire': drawCampfire(g, x, y + 4, !e.off, x * 7 + y); return;
@@ -2995,6 +2996,8 @@
   function resIcon(cv, kind) { // 저장소 재료 그림 (직접 그림)
     const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, cv.width, cv.height); g.save(); g.translate(cv.width / 2, cv.height / 2); g.scale(2, 2);
     if (kind === 'stone' || kind === 'ore') { g.restore(); matIcon(g, 'm_' + kind, cv.width, cv.height); return; } // 저장소: 돌·광석
+    if (kind === 'wood') { g.restore(); matIcon(g, 'm_wood', cv.width, cv.height); return; } // 통나무 그림
+    if (kind === 'army' && TOOL.sword && TOOL.sword.diag) { g.restore(); const c = TOOL.sword.cv, k = Math.floor(Math.min(cv.width * 0.8 / c.width, cv.height * 0.8 / c.height)) || 1; g.imageSmoothingEnabled = false; g.drawImage(c, Math.round((cv.width - c.width * k) / 2), Math.round((cv.height - c.height * k) / 2), c.width * k, c.height * k); return; } // 철검 그림
     if (kind === 'coin' && ART.x_coin) { g.drawImage(ART.x_coin, -10, -10, 20, 20); } /* 저장소: 받은 코인 그림 (멈춤) */ else if (kind === 'coin') { g.fillStyle = '#2b2340'; pxDisc(g, 0, 0, 10); g.fillStyle = '#b8862b'; pxDisc(g, 0, 0, 8); g.fillStyle = '#ffd84d'; pxDisc(g, -1, -1, 7); g.fillStyle = '#fff6c8'; g.fillRect(-4, -5, 4, 2); g.fillStyle = '#b8862b'; g.fillRect(-1, -4, 2, 8); }
     if (kind === 'army') { g.fillStyle = '#2b2340'; g.fillRect(-2, -12, 4, 18); g.fillStyle = '#e8ecf4'; g.fillRect(-1, -11, 2, 15); g.fillStyle = '#e8c260'; g.fillRect(-6, 4, 12, 3); g.fillStyle = '#8a5a2b'; g.fillRect(-1, 7, 2, 5); g.fillStyle = '#ffd84d'; g.fillRect(-2, 11, 4, 2); }
     if (kind === 'wood') { for (const [x, y] of [[-6, 2], [4, 2], [-1, -6]]) { g.fillStyle = '#2b2340'; g.fillRect(x - 6, y - 4, 12, 9); g.fillStyle = '#9a6a3a'; g.fillRect(x - 5, y - 3, 10, 7); g.fillStyle = '#e0aa6a'; pxDisc(g, x + 3, y, 3); g.fillStyle = '#b07a44'; g.fillRect(x + 2, y - 1, 2, 2); } }
