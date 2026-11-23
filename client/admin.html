@@ -64,6 +64,11 @@ tr.off td { opacity: .5; }
 tr.editing td { background: #fff1b8; }
 .danger-zone { border-color: var(--red); box-shadow: 4px 4px 0 var(--red); }
 @media (max-width: 560px) { main { padding: 12px; } .card { padding: 12px; } }
+#sheetTabs { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 2px; padding: 0 8px; background: #d9d4c7; border-top: 2px solid var(--line); z-index: 50; overflow-x: auto; }
+#sheetTabs button { border: 1px solid #a9a290; border-top: 0; border-radius: 0 0 8px 8px; background: #efe9dc; padding: 7px 14px; font-size: 14px; white-space: nowrap; box-shadow: none; margin: 0; cursor: pointer; }
+#sheetTabs button.on { background: #fff; font-weight: 700; border-color: var(--line); color: #000; position: relative; top: -2px; }
+body.tabbed main { padding-bottom: 70px; }
+main > .tabHide { display: none !important; }
 </style>
 </head>
 <body>
@@ -664,6 +669,48 @@ tr.editing td { background: #fff1b8; }
   };
 
   if (key) load().then(start).catch(() => logout()); else logout();
+})();
+</script>
+<script>
+/* 관리자 화면을 스프레드시트처럼 아래 탭으로 나눔 */
+(function () {
+  const TABS = [
+    ['now', '📊 현황', ['지금 상황', '게임 시계', '전체 공지', '전투']],
+    ['people', '🎓 학생·나라', ['직업', '학생 명단', '게시판', '내 코인', '나라', '쿠폰']],
+    ['game', '🎮 게임 조정', ['말투', '조합법', '관리자 계정', '낚시', '쿨타임', '빛']],
+    ['puzzle', '📚 문제', ['문제']],
+    ['sys', '⚙ 설정·음악', ['설정', '배경음악', '서버']],
+    ['lab', '🧪 실험실', ['실험실']],
+    ['reset', '🧨 초기화', ['초기화']],
+  ];
+  const main = document.querySelector('main'); if (!main) return;
+  const ORDER = [['실험실', 'lab'], ['초기화', 'reset'], ['문제 · 서버', 'sys'], ['문제', 'puzzle'], ['배경음악', 'sys'], ['설정', 'sys']];
+  for (const [id, , keys] of TABS) for (const k of keys) ORDER.push([k, id]);
+  const tabOf = (el) => {
+    const h = el.querySelector('h2'); if (!h) return 'now';
+    let t = ''; for (const n of h.childNodes) if (!(n.classList && n.classList.contains('hint'))) t += n.textContent;
+    for (const [k, id] of ORDER) if (t.includes(k)) return id;
+    return 'now';
+  };
+  const bar = document.createElement('nav'); bar.id = 'sheetTabs';
+  let cur = 'now'; try { cur = localStorage.getItem('mpAdminTab') || 'now'; } catch (e) {}
+  const show = (id) => {
+    cur = id; try { localStorage.setItem('mpAdminTab', id); } catch (e) {}
+    for (const el of main.children) {
+      if (el.tagName === 'STYLE' || el.tagName === 'SCRIPT') continue;
+      const kids = el.matches('.grid2') ? [...el.children] : [el];
+      let any = false;
+      for (const k of kids) { const on = (k.dataset.tab ||= tabOf(k)) === id; if (kids.length > 1) k.classList.toggle('tabHide', !on), k.style.display = on ? '' : 'none'; any = any || on; }
+      el.classList.toggle('tabHide', !any);
+    }
+    for (const b of bar.children) b.classList.toggle('on', b.dataset.id === id);
+    window.scrollTo(0, 0);
+    window.dispatchEvent(new CustomEvent('admintab', { detail: id }));
+  };
+  for (const [id, label] of TABS) { const b = document.createElement('button'); b.type = 'button'; b.dataset.id = id; b.textContent = label; b.onclick = () => show(id); bar.appendChild(b); }
+  document.body.appendChild(bar); document.body.classList.add('tabbed');
+  window.MP_ADMIN_TAB = show;
+  show(TABS.some((t) => t[0] === cur) ? cur : 'now');
 })();
 </script>
 <script>document.getElementById('ckWeather').addEventListener('change', async (e) => { let key = ''; try { key = sessionStorage.getItem('mpAdminKey') || ''; } catch (er) {} await fetch('/admin/api', { method: 'POST', body: JSON.stringify({ key, op: 'weather', w: e.target.value }) }); });</script>
