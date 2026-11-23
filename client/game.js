@@ -430,6 +430,31 @@
       g.drawImage(im, 0, sy, im.width, Math.min(2, im.height - sy), Math.round(X - w / 2) + o, Math.round(Y - h) + sy * 2, w, Math.min(2, im.height - sy) * 2); }
     g.imageSmoothingEnabled = pv;
   }
+  // 나무 쓰러짐: 베인 나무가 플레이어 반대쪽으로 점점 빠르게 넘어가 → 쿵(살짝 튐 + 나뭇잎·나무 조각·먼지) → 스르르 사라짐
+  const FALLING = [];
+  function treeFall(i) { const tx = i % W, ty = Math.floor(i / W), k = treeAt(tx, ty); if (!k) return;
+    const x = tx * TILE + 16, y = ty * TILE + 30, dir = x >= player.x ? 1 : -1; FALLING.push({ i, k, tx, ty, x, y, dir, t0: performance.now(), fx: null }); if (FALLING.length > 12) FALLING.shift(); }
+  function drawFallingTree(g, f, X, Y, now) {
+    const t = now - f.t0; if (t > 1700) return false;
+    let ang = 0, a = 1;
+    if (t < 140) ang = Math.sin(t / 140 * Math.PI * 3) * 0.035 * f.dir; // 금 가는 떨림
+    else if (t < 860) { const u = (t - 140) / 720; ang = f.dir * Math.PI / 2 * Math.pow(u, 2.3); }
+    else if (t < 1020) ang = f.dir * (Math.PI / 2 - 0.09 * Math.sin(Math.PI * (t - 860) / 160)); // 쿵 하고 살짝 튐
+    else { ang = f.dir * Math.PI / 2; a = Math.max(0, 1 - (t - 1020) / 680); }
+    if (t >= 860 && !f.fx) { f.fx = []; SND.play('place', 0.7); const set = f.k === 'treeA' || f.k === 'treeB' ? WT.big : WT.mid, T2 = worldTrees() && set[Math.floor(hash(f.tx, f.ty, 13) * set.length)], len = T2 ? T2.im.height * 2 : 80;
+      for (let n = 0; n < 34; n++) { const along = Math.random(), kind = n < 18 ? 'leaf' : n < 26 ? 'chip' : 'dust';
+        f.fx.push({ kind, x: f.dir * along * len * 0.95, y: -4 - Math.random() * 10, vx: (Math.random() - 0.5) * (kind === 'dust' ? 30 : 90), vy: kind === 'dust' ? -10 - Math.random() * 15 : -60 - Math.random() * 90, r: kind === 'dust' ? 4 + Math.random() * 5 : 2 + Math.random() * 2, c: kind === 'leaf' ? ['#3f8f3a', '#5fae3e', '#8ccf52', '#2d6e33'][n % 4] : kind === 'chip' ? ['#8a5a2e', '#b07a42', '#5e3a1c'][n % 3] : '#e8dcc0', spin: Math.random() * 6 }); } }
+    const set = f.k === 'treeA' || f.k === 'treeB' ? WT.big : WT.mid, T2 = worldTrees() ? set[Math.floor(hash(f.tx, f.ty, 13) * set.length)] : null;
+    g.save(); g.globalAlpha = a; g.translate(Math.round(X), Math.round(Y)); g.rotate(ang); g.scale(1, 1 - 0.12 * Math.abs(Math.sin(ang)));
+    if (T2) { const im = T2.im, w = im.width * 2, h = im.height * 2, pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(im, -w / 2, -h, w, h); g.imageSmoothingEnabled = pv; } else spr(g, f.k, 0, 0);
+    g.restore();
+    if (f.fx) { const dt = (t - 860) / 1000; for (const p of f.fx) { // 나뭇잎·조각은 튀었다 떨어지고, 먼지는 퍼지며 옅어짐
+        const px = X + p.x + p.vx * dt, py = Y + p.y + (p.kind === 'dust' ? p.vy * dt : Math.min(10, p.vy * dt + 260 * dt * dt)), al = Math.max(0, (p.kind === 'dust' ? 0.35 : 1) * (1 - dt / 0.84));
+        if (al <= 0) continue; g.globalAlpha = al; g.fillStyle = p.c;
+        if (p.kind === 'dust') { g.beginPath(); g.arc(px, py, p.r * (1 + dt * 2.2), 0, 7); g.fill(); }
+        else { g.save(); g.translate(px, py); g.rotate(p.spin + dt * 9); g.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); g.restore(); } }
+      g.globalAlpha = 1; }
+    return true; }
   function spr(g, name, cx, bottom, k = 2) { const [x, y, w, h] = SP[name]; g.drawImage(ART.village, x, y, w, h, Math.round(cx - w * k / 2), Math.round(bottom - h * k), w * k, h * k); }
 
   // 캐릭터: 16px 칸, 열 = 방향(아래·위·왼쪽·오른쪽), 행 = 걷기 프레임. 팀/꾸미기 색은 색상 회전으로.
@@ -2602,7 +2627,7 @@
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) $('prompt').addEventListener(ev, releaseE);
   addEventListener('blur', () => keys.clear());
   // 확대·축소는 지도만 (브라우저 화면 확대 대신): 휠, Ctrl+휠(터치패드 핀치), Ctrl +/−/0, 두 손가락 핀치, ＋/－ 버튼
-  const setZoom = (z) => { zoom = Math.max(0.5, Math.min(1.8, z)); };
+  const setZoom = (z) => { if (!EDIT_MODE) return; zoom = Math.max(0.5, Math.min(1.8, z)); }; // 화면 확대·축소 막음 (배율 고정) — 관리자 맵 고치기만 허용
   addEventListener('wheel', (e) => {
     const onMap = e.target === canvas;
     if (!onMap && !e.ctrlKey) return; // 창 안 스크롤은 그대로
@@ -3278,7 +3303,7 @@
       case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
       case 'tile': { const prev = TILES[m.i]; if (m.e && prev && m.e.hp != null && m.e.hp !== (prev.hp ?? (prev.max || MPRules.NUM.buildHp))) { HPSEEN.set(m.i, performance.now()); SND.play(m.e.hp < (prev.hp ?? 1e9) ? 'hit' : 'place'); } else if (m.e && m.e.n === MY_NID && !prev) SND.play('place'); const wasW = prev && (prev.k === 'water' || prev.k === 'bridge'), isW = m.e && (m.e.k === 'water' || m.e.k === 'bridge'); if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); if (wasW || isW) { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx || dy) dirtyTile(m.i + dy * W + dx); if ((m.e || prev).k === 'bridge') for (let k = 3; k <= 16; k++) { dirtyTile(m.i + k); dirtyTile(m.i - k); dirtyTile(m.i + k * W); dirtyTile(m.i - k * W); } } break; } // 수로가 바뀌면 이웃 밭·수로 다시 그림
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
-      case 'chopped': noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break;
+      case 'chopped': treeFall(m.i); noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break; // 쓰러지는 그림은 나무가 사라지기 전에 기억
       case 'picked': PICKED.set(m.i, Date.now()); dirtyTile(m.i); SND.play('place'); break;
       case 'dug': GCLEAR.add(m.i); invalidateChunks(); mapSig = ''; SND.play('chop'); break;
       case 'weapons': MY_WEAPONS = m.weapons || {}; MY_WEAPON = m.weapon || null; swapIcon.w = null; if (m.pcoin != null) { MY_PCOIN = m.pcoin; renderInv(); } if (m.text) toast(m.text); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
@@ -3789,7 +3814,7 @@
     if ($('castAll')) $('castAll').onclick = () => { $('warCast').hidden = true; playBattles(w.reports, () => {}); };
     $('warCast').hidden = false;
   }
-  window.MP_DEBUG = { benchPos: () => { for (const [i, nid] of STORE_AT) if (nid === MY_NID) return [(i % W) + 0.5 + BENCH_DX / TILE, Math.floor(i / W) + 0.5]; return null; }, playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), face: (f) => { if (testMode) player.face = f; }, near: () => (testMode ? JSON.stringify(near && { kind: near.kind, text: near.text }) + ' ft=' + facingTile() + ' ga=' + JSON.stringify(groundAction()) + ' tA=' + treeAt(...facingTile()) + ' on=' + ONLINE : null), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
+  window.MP_DEBUG = { fallNear: () => { if (!testMode) return null; const px = Math.floor(player.x / TILE), py = Math.floor(player.y / TILE); for (let r = 1; r < 12; r++) for (let y = py - r; y <= py + r; y++) for (let x = px - r; x <= px + r; x++) if (treeAt(x, y)) { treeFall(y * W + x); noTree[y * W + x] = 1; dirtyTile(y * W + x); return [x, y]; } return null; }, benchPos: () => { for (const [i, nid] of STORE_AT) if (nid === MY_NID) return [(i % W) + 0.5 + BENCH_DX / TILE, Math.floor(i / W) + 0.5]; return null; }, playBattles: (reps) => { if (testMode || !ONLINE) playBattles(reps, () => {}); }, openStore: () => { if (testMode) openStore(); }, openShop: (k) => { if (testMode) openShop(k); }, pos: () => (testMode ? [player.x, player.y, player.scene] : null), story: () => (testMode ? { FRAGS, have: [...MY_FRAGS], side: MY_SIDE } : null), tp: (x, y) => testMode && teleportTo(x, y), scene: (k) => testMode && startOpening(k), sfx: (n, v) => testMode && SND.play(n, v), room: (id) => testMode && enterRoom(id, 'ground'), face: (f) => { if (testMode) player.face = f; }, near: () => (testMode ? JSON.stringify(near && { kind: near.kind, text: near.text }) + ' ft=' + facingTile() + ' ga=' + JSON.stringify(groundAction()) + ' tA=' + treeAt(...facingTile()) + ' on=' + ONLINE : null), shadeAt: (x, y) => { if (!testMode || !SHADE.cv.width) return -1; const d = SHADE.cv.getContext('2d').getImageData(Math.round(x - SHADE.x0), Math.round(y - SHADE.y0), 1, 1).data; return d[3]; }, noShade: (v) => { if (testMode) SHADE.disabled = !!v; }, cliffSpots: () => { if (!testMode) return null; const out = { l1: 0, l2: 0, walls: 0, stairs: 0, sample: null }; for (let y = PILOT.y0; y < PILOT.y1; y++) for (let x = PILOT.x0; x < PILOT.x1; x++) { const h0 = hgt(x, y); if (h0 === 1) out.l1++; if (h0 === 2) out.l2++; if (wallRow(x, y)) { out.walls++; if (isStair(x, y)) out.stairs++; else if (!out.sample && wallRow(x, y) === 1 && wallRow(x - 1, y) && wallRow(x + 1, y) && !isStair(x - 1, y) && !isStair(x + 1, y)) out.sample = [x, y]; } if (isStair(x, y) && wallRow(x, y) === 1 && !out.stair) out.stair = [x, y]; } out.list = out.list || []; return out; }, quiz: () => testMode && showQuiz('🎣 입질! 정답을 골라 낚아 올려요', 6000, (g) => console.log('grade', g)) }; // 테스트 모드에서만 (전선 많은 장면 확인용)
   $('btnCast').addEventListener('click', () => { if (ONLINE && netOn) ws.send(JSON.stringify({ t: 'warCast' })); openWarCast(); });
   $('castClose').addEventListener('click', () => { $('warCast').hidden = true; });
 
@@ -4361,6 +4386,7 @@
     const list = [];
     for (const s of sprites) if (s.x > x0 && s.x < x1 && s.y > y0 && s.y < y1) list.push(s);
     const tx0 = Math.floor(x0 / TILE), tx1 = Math.ceil(x1 / TILE), ty0 = Math.floor(y0 / TILE), ty1 = Math.ceil(y1 / TILE);
+    { const nowF = performance.now(); for (let q = FALLING.length - 1; q >= 0; q--) { const f = FALLING[q]; if (nowF - f.t0 > 1700) { FALLING.splice(q, 1); continue; } if (player.scene === 'ground' && f.x > x0 && f.x < x1 && f.y > y0 && f.y < y1) list.push({ x: f.x, y: f.y, draw: (g, X, Y) => drawFallingTree(g, f, X, Y, performance.now()) }); } } // 쓰러지는 나무
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const k = treeAt(tx, ty);
       if (k) list.push({ x: tx * TILE + 16, y: ty * TILE + 30, draw: (g, X, Y) => drawWorldTree(g, k, tx, ty, X, Y, t) });
