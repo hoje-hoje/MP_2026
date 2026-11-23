@@ -330,17 +330,8 @@
   }
 
   // 팻말: 각진 픽셀 나무판 + 픽셀 글꼴
-  function sign(g, x, y, text) {
-    g.font = `700 22px ${PFONT}`;
-    const w = Math.ceil(g.measureText(text).width / 2) * 2 + 24, h = 32;
-    const L = Math.round(x - w / 2), T = Math.round(y - h / 2);
-    g.fillStyle = '#2b2340'; g.fillRect(L - 2, T - 2, w + 4, h + 4);
-    g.fillStyle = '#c9915c'; g.fillRect(L, T, w, h);
-    g.fillStyle = '#e0b07a'; g.fillRect(L, T, w, 4);
-    g.fillStyle = '#9a6a3c'; g.fillRect(L, T + h - 4, w, 4);
-    g.fillStyle = '#fff6d6'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = '#5a3a20'; g.fillText(text, x + 1, y + 2);
-    g.fillStyle = '#fff6d6'; g.fillText(text, x, y + 1);
+  function sign(g, x, y, text) { // 팻말: 사용자 명찰 그림
+    const c = plateTag(text, '#c9915c'); if (!c) return; const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = true; g.drawImage(c.cv, Math.round(x - c.w / 2), Math.round(y - c.h / 2), c.w, c.h); g.imageSmoothingEnabled = p;
   }
   const PFONT = "'Galmuri11', 'Galmuri11Full', sans-serif";
 
@@ -367,7 +358,7 @@
     const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
     await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
-  const EXTRA = ['coin_spin', 'door_isaac', 'door_isaac_down', 'sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry'];
+  const EXTRA = ['coin_spin', 'door_isaac', 'door_isaac_down', 'sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry', 'skycloud_0', 'skycloud_1', 'skycloud_2', 'skycloud_3'];
   const TEMPLE = ['emote0', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'emote6', 'emote7', 'statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
@@ -977,32 +968,22 @@
     return out;
   }
   function plazaStage(g, x, y) {
-    const cols = ['#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#4dabf7', '#9775fa']; // 픽셀 무지개
-    for (let b = 0; b < cols.length; b++) { const r = 210 - b * 10; g.fillStyle = cols[b]; for (let a = 0; a <= 64; a++) { const t = Math.PI + a / 64 * Math.PI, px = Math.round((x + Math.cos(t) * r) / 4) * 4, py = Math.round((y - 20 + Math.sin(t) * r * 0.55) / 4) * 4; g.fillRect(px, py, 8, 8); } }
     for (const dx of [-200, -120, 120, 200]) pix(g, dx < 0 ? 'banner3' : 'banner6', x + dx, y + 4, 2);
     sign(g, x, y - 40, '이벤트 무대');
   }
   let BOARD = [];
-  function bigBoard(g, x, y) { // 하늘 신전 자유 게시판: 최근 글 4개가 쪽지로 붙어 보임
-    g.fillStyle = '#5a4630'; g.fillRect(x - 128, y - 50, 8, 50); g.fillRect(x + 120, y - 50, 8, 50);
-    g.fillStyle = '#2b2340'; g.fillRect(x - 140, y - 150, 280, 108); g.fillStyle = '#8a6a44'; g.fillRect(x - 136, y - 146, 272, 100); g.fillStyle = '#6b5034'; g.fillRect(x - 128, y - 138, 256, 84);
-    g.fillStyle = '#e8c260'; g.fillRect(x - 136, y - 146, 272, 4); g.fillRect(x - 136, y - 50, 272, 4);
-    const last = BOARD.slice(-4).reverse(), cols = ['#fff6d6', '#ffe3e3', '#e3f6ff', '#e8ffe3'];
-    g.font = `700 10px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (let i = 0; i < 4; i++) { const px = x - 122 + i * 62, py = y - 132 + (i % 2) * 6, q = last[i];
-      g.fillStyle = q ? cols[i] : 'rgba(255,255,255,0.18)'; g.fillRect(px, py, 54, 64); g.fillStyle = '#c0392b'; g.fillRect(px + 25, py - 2, 4, 4);
-      if (q) { g.fillStyle = q.color || '#2b2340'; const t = q.title; for (let L = 0; L < 4; L++) { const seg = t.slice(L * 5, L * 5 + 5); if (!seg) break; g.fillText(seg, px + 27, py + 12 + L * 13); } } }
-    plaque(g, x, y - 166, '자유 게시판');
+  function bigBoard(g, x, y) { // 하늘 신전 자유 게시판: 타이니 타운 팻말 그림을 크게 + 최근 글 제목
+    drawArt(g, kTile('k_town', 83), x, y + 4, 11);
+    const last = BOARD.slice(-4).reverse(); g.font = `700 12px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 0; i < 4; i++) { const q = last[i]; if (!q) continue; g.fillStyle = '#3a2410'; g.fillText(q.title.slice(0, 9), x, y - 138 + i * 18); }
+    plaque(g, x, y - 196, '자유 게시판');
   }
-  function posterBoard(g, x, y) {
-    g.fillStyle = '#5a4630'; g.fillRect(x - 56, y - 60, 6, 60); g.fillRect(x + 50, y - 60, 6, 60);
-    g.fillStyle = '#8a6a44'; g.fillRect(x - 60, y - 96, 120, 50); g.fillStyle = '#6b5034'; g.fillRect(x - 60, y - 50, 120, 4);
-    const papers = [['용병', '구함', '#fff6d6'], ['건국', '동료', '#ffe3e3'], ['귀화', '환영', '#e3f6ff']];
-    papers.forEach(([a, b, c], i) => { const px = x - 52 + i * 38; g.fillStyle = c; g.fillRect(px, y - 90, 32, 38); g.fillStyle = '#c0392b'; g.fillRect(px + 14, y - 92, 4, 4); g.fillStyle = '#2b2340'; g.font = `700 11px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(a, px + 16, y - 77); g.fillText(b, px + 16, y - 63); });
-    sign(g, x, y - 112, '모집 게시판');
+  function posterBoard(g, x, y) { // 모집 게시판: 타이니 타운 팻말 그림
+    drawArt(g, kTile('k_town', 83), x, y + 4, 7); g.font = `700 11px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#3a2410';
+    ['용병 구함', '건국 동료', '귀화 환영'].forEach((t, i) => g.fillText(t, x, y - 88 + i * 14)); plaque(g, x, y - 128, '모집 게시판');
   }
   // 감옥 창살: 가로 줄(y=8)과 방 사이 세로 줄(x=5,10,15,20,25), 방 이름표
-  const drawBars = (g, x, y) => { g.fillStyle = '#3b3b4a'; g.fillRect(x - 16, y - 30, 32, 4); for (let k = -12; k <= 12; k += 8) { g.fillStyle = '#6d6d82'; g.fillRect(x + k - 1, y - 30, 3, 34); g.fillStyle = '#a3a3b8'; g.fillRect(x + k - 1, y - 30, 1, 34); } };
+  const drawBars = (g, x, y) => { const t = recolor(kTile('k_dungeon', 77), 'brightness(1.05)'); drawArt(g, t, x, y + 4, 2); }; // 감옥 창살: 타이니 던전 쇠울타리
   const JAIL_BARS = [];
   for (let x = 1; x <= 29; x++) JAIL_BARS.push({ x, y: 8, w: 1, h: 1, draw: x % 5 === 3 ? (g, X, Y) => { drawBars(g, X, Y); sign(g, X, Y - 40, `감옥 ${Math.floor(x / 5) + 1}`); } : drawBars });
   for (let k = 1; k <= 5; k++) for (let y = 9; y <= 14; y++) JAIL_BARS.push({ x: 5 * k, y, w: 1, h: 1, draw: drawBars });
@@ -1010,6 +991,14 @@
   function artCanvas(w, h, fn) { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingEnabled = false; fn(g, w, h); return c; }
   function pxRows(rows, pal) { return artCanvas(rows[0].length, rows.length, (g) => rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) { const c = pal[r[x]]; if (c) { g.fillStyle = c; g.fillRect(x, y, 1, 1); } } })); }
   function blit(g, c, x, bottom, k = 2, flip = false) { const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; const w = c.width * k, h = c.height * k; if (flip) { g.save(); g.translate(Math.round(x), 0); g.scale(-1, 1); g.drawImage(c, Math.round(-w / 2), Math.round(bottom - h), w, h); g.restore(); } else g.drawImage(c, Math.round(x - w / 2), Math.round(bottom - h), w, h); g.imageSmoothingEnabled = p; }
+  // ---- 받은 픽셀 그림을 색만 바꿔 쓰는 도우미 (하늘은 직접 그린 그림 대신 이걸로)
+  const RECOL = new Map();
+  function recolor(src, filter) { if (!src) return null; const key = (src.src || src.id || '') + '|' + filter; let c = RECOL.get(key); if (c) return c; c = document.createElement('canvas'); c.width = src.width; c.height = src.height; const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.filter = filter; g.drawImage(src, 0, 0); RECOL.set(key, c); return c; }
+  function kTile(sheet, i) { const im = ART[sheet]; if (!im) return null; const key = sheet + ':' + i; let c = RECOL.get(key); if (c) return c; c = document.createElement('canvas'); c.width = c.height = 16; c.getContext('2d').drawImage(im, (i % 12) * 16, Math.floor(i / 12) * 16, 16, 16, 0, 0, 16, 16); c.src = key; RECOL.set(key, c); return c; }
+  function tilesTo(g, sheet, ids, filter) { g.imageSmoothingEnabled = false; ids.forEach((id, k) => { let t = kTile(sheet, id); if (filter) t = recolor(t, filter); if (t) g.drawImage(t, (k % 2) * 32, Math.floor(k / 2) * 32, 32, 32); }); }
+  function imgTo(g, im, filter) { if (!im) return; const t = filter ? recolor(im, filter) : im, k = im.width <= 32 ? 2 : 1, w = im.width * k, h = im.height * k; g.imageSmoothingEnabled = false; for (let y = 0; y < 64; y += h) for (let x = 0; x < 64; x += w) g.drawImage(t, x, y, w, h); }
+  const hueOf = (hex) => { const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, gg = ((n >> 8) & 255) / 255, b = (n & 255) / 255, mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), d = mx - mn; if (!d) return 0; const h = mx === r ? ((gg - b) / d) % 6 : mx === gg ? (b - r) / d + 2 : (r - gg) / d + 4; return (h * 60 + 360) % 360; };
+  function drawArt(g, im, x, bottom, k = 2, flip = false) { if (!im) return; const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; const w = im.width * k, h = im.height * k; if (flip) { g.save(); g.translate(Math.round(x), 0); g.scale(-1, 1); g.drawImage(im, Math.round(-w / 2), Math.round(bottom - h), w, h); g.restore(); } else g.drawImage(im, Math.round(x - w / 2), Math.round(bottom - h), w, h); g.imageSmoothingEnabled = p; }
   function pxDisc(g, cx, cy, r, wrap) { for (let y = -r; y <= r; y += 2) for (let x = -r; x <= r; x += 2) if (x * x + y * y <= r * r) { const X = cx + x, Y = cy + y; g.fillRect(X, Y, 2, 2); if (wrap) { g.fillRect(X - 64, Y, 2, 2); g.fillRect(X + 64, Y, 2, 2); g.fillRect(X, Y - 64, 2, 2); g.fillRect(X, Y + 64, 2, 2); } } }
   Object.assign(GEN_FLOOR, {
     marble_w: (g) => { // 흰 대리석 + 금 장식
@@ -1031,6 +1020,16 @@
       g.fillStyle = '#9aa2bb'; g.fillRect(0, 0, 64, 64);
       for (let y = 0; y < 64; y += 16) for (let x = (y / 16 % 2) * 16; x < 80; x += 32) { g.fillStyle = hash(x, y, 5) > 0.5 ? '#a7afc6' : '#a2aac1'; g.fillRect(x - 14, y + 2, 28, 12); g.fillStyle = '#8890a8'; g.fillRect(x - 14, y + 14, 28, 2); }
     },
+  });
+  Object.assign(GEN_FLOOR, { // 하늘 바닥: 받은 타일(kenney 타이니 타운·고딕·숲)을 색만 바꿔서
+    lawn: (g) => tilesTo(g, 'k_town', [0, 0, 1, 0]),
+    meadow: (g) => tilesTo(g, 'k_town', [1, 2, 2, 1]),
+    cobble: (g) => tilesTo(g, 'k_town', [43, 43, 43, 43], 'brightness(1.15) saturate(0.7)'),
+    planks: (g) => tilesTo(g, 'k_town', [25, 25, 25, 25]),
+    marble_w: (g) => imgTo(g, ART.x_marble, 'brightness(1.25) saturate(0.5)'),
+    cloud: (g) => imgTo(g, ART.x_marble, 'brightness(1.35) saturate(0.3) hue-rotate(190deg)'),
+    aisle: (g) => imgTo(g, ART.x_marble, 'sepia(0.8) hue-rotate(175deg) saturate(2.2) brightness(1.08)'), // 하늘색 융단: 고딕 대리석을 하늘색으로
+    silver: (g) => imgTo(g, ART.x_stonefloor, 'saturate(0.3) brightness(0.85) hue-rotate(200deg)'),
   });
 
   const ART_COL = artCanvas(12, 46, (g) => { // 흰 기둥 + 금 머리
@@ -1068,75 +1067,30 @@
     g.filter = 'none';
     if (!statue) { g.fillStyle = 'rgba(255,230,120,0.25)'; ell(g, x, y - 36 + bob, 14, 5); blit(g, HALO, x, y - 32 + bob, 2); }
   }
-  function holyAltar(g, x, y, wide = 40, top = 'book') { // 흰 대리석 제단 + 금 띠 + 하늘색 천 + 위에 책/성배
-    const t = performance.now() / 1000;
-    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 2, wide + 10, 8);
-    g.fillStyle = '#2b2340'; g.fillRect(x - wide - 2, y - 38, wide * 2 + 4, 40);
-    g.fillStyle = '#efe8dc'; g.fillRect(x - wide, y - 30, wide * 2, 30); g.fillStyle = '#fffdf8'; g.fillRect(x - wide, y - 36, wide * 2, 8);
-    g.fillStyle = '#e8c260'; g.fillRect(x - wide, y - 28, wide * 2, 3); g.fillRect(x - wide, y - 4, wide * 2, 3);
-    g.fillStyle = '#7fa6ec'; g.fillRect(x - 12, y - 36, 24, 30); g.fillStyle = '#e8c260'; for (let i = 0; i < 6; i++) g.fillRect(x - 12 + i * 4, y - 6, 2, 4);
-    g.fillStyle = '#ffd84d'; g.fillRect(x - 3, y - 24, 6, 6); g.fillRect(x - 1, y - 28, 2, 14); g.fillRect(x - 6, y - 22, 12, 2);
-    const grd = g.createRadialGradient(x, y - 46, 2, x, y - 46, 34); grd.addColorStop(0, `rgba(255,240,170,${0.45 + Math.sin(t * 2) * 0.1})`); grd.addColorStop(1, 'rgba(255,240,170,0)'); g.fillStyle = grd; g.fillRect(x - 34, y - 80, 68, 68);
-    if (top === 'book') { g.fillStyle = '#b8862b'; g.fillRect(x - 16, y - 44, 32, 8); g.fillStyle = '#ffffff'; g.fillRect(x - 15, y - 48, 14, 8); g.fillRect(x + 1, y - 48, 14, 8); g.fillStyle = '#c9c0d8'; g.fillRect(x - 12, y - 46, 8, 2); g.fillRect(x + 4, y - 46, 8, 2); g.fillRect(x - 1, y - 48, 2, 10); }
-    else { g.fillStyle = '#e8c260'; g.fillRect(x - 8, y - 56, 16, 10); g.fillRect(x - 2, y - 46, 4, 6); g.fillRect(x - 6, y - 40, 12, 4); g.fillStyle = '#fff0b0'; g.fillRect(x - 6, y - 56, 4, 6); g.fillStyle = '#d6455b'; g.fillRect(x - 6, y - 58, 12, 2); }
+  function holyAltar(g, x, y, wide = 40, top = 'book') { // 제단: 고딕 석제 제단 + 성서/성배 (받은 그림)
+    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 2, wide + 6, 7); const k = Math.max(2, Math.round(wide / 16)); drawArt(g, recolor(ART.x_altar, 'brightness(2.1) saturate(0.3)'), x, y + 2, k);
+    if (ART.x_altar) drawArt(g, top === 'book' ? ART.x_book : ART.x_chalice, x, y + 2 - ART.x_altar.height * k + 6, 2);
   }
-  function plaque(g, x, y, text) { // 금테 이름판
-    g.font = `700 13px ${PFONT}`; const w = Math.ceil(g.measureText(text).width) + 22, L = Math.round(x - w / 2), T = Math.round(y - 11);
-    g.fillStyle = '#2b2340'; g.fillRect(L - 4, T - 4, w + 8, 30); g.fillStyle = '#b8862b'; g.fillRect(L - 2, T - 2, w + 4, 26); g.fillStyle = '#e8c260'; g.fillRect(L, T, w, 22);
-    g.fillStyle = '#fffaf0'; g.fillRect(L + 3, T + 3, w - 6, 16); g.fillStyle = '#ffd84d'; g.fillRect(L - 8, T + 8, 4, 6); g.fillRect(L + w + 4, T + 8, 4, 6);
-    g.fillStyle = '#5a3d10'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, Math.round(x), T + 12);
+  function plaque(g, x, y, text) { // 이름판: 사용자 명찰 그림 (금빛으로)
+    const c = plateTag(text, '#e8c260'); if (!c) return; const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = true; g.drawImage(c.cv, Math.round(x - c.w / 2), Math.round(y - c.h / 2), c.w, c.h); g.imageSmoothingEnabled = p;
   }
-  function lantern(g, x, y) { // 떠 있는 빛 수정 등불
-    const t = performance.now() / 1000, b = Math.round(Math.sin(t * 2.2 + x) * 2) * 2, cy = y - 58 + b;
-    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 1, 10, 3);
-    g.fillStyle = '#b8862b'; g.fillRect(x - 6, y - 4, 12, 4); g.fillStyle = '#e8c260'; g.fillRect(x - 2, y - 40, 4, 36); g.fillRect(x - 8, y - 44, 16, 4); g.fillStyle = '#fff0b0'; g.fillRect(x - 2, y - 40, 2, 36);
-    const grd = g.createRadialGradient(x, cy, 2, x, cy, 30); grd.addColorStop(0, 'rgba(200,240,255,0.55)'); grd.addColorStop(1, 'rgba(200,240,255,0)'); g.fillStyle = grd; g.fillRect(x - 30, cy - 30, 60, 60);
-    g.fillStyle = '#7fc8ff'; g.fillRect(x - 6, cy - 4, 12, 8); g.fillRect(x - 4, cy - 10, 8, 20); g.fillRect(x - 2, cy - 14, 4, 28);
-    g.fillStyle = '#d6f1ff'; g.fillRect(x - 4, cy - 6, 4, 8); g.fillStyle = '#ffffff'; g.fillRect(x - 2, cy - 10, 2, 4);
+  function lantern(g, x, y) { // 등불: 고딕 쇠 촛대 (받은 그림)
+    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 1, 10, 3); drawArt(g, ART.x_candelabra, x, y + 2, 2.5);
   }
-  function urn(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); blit(g, ART_URN, x, y + 2, 2); }
-  function column(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); blit(g, ART_COL, x, y + 4, 2); }
-  function lightFountain(g, x, y) { // 2단 분수: 아래 큰 못 + 가운데 기둥 위 작은 그릇 + 물줄기가 아치로 떨어짐
-    const t = performance.now() / 1000;
-    g.fillStyle = 'rgba(40,40,90,0.15)'; ell(g, x, y + 2, 78, 20);
-    // 아래 못
-    g.fillStyle = '#cfc4b0'; ell(g, x, y - 4, 74, 22); g.fillStyle = '#fffdf8'; ell(g, x, y - 8, 72, 21); g.fillStyle = '#e8c260'; ell(g, x, y - 10, 66, 18); g.fillStyle = '#fffaf0'; ell(g, x, y - 11, 62, 16);
-    g.fillStyle = '#6cc4ee'; ell(g, x, y - 11, 58, 14); g.fillStyle = '#9fdcff'; ell(g, x - 10, y - 14, 36, 7);
-    for (let i = 0; i < 3; i++) { const k = (t * 0.6 + i / 3) % 1; g.strokeStyle = `rgba(255,255,255,${0.7 * (1 - k)})`; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y - 11, 14 + k * 40, 4 + k * 10, 0, 0, Math.PI * 2); g.stroke(); }
-    // 기둥
-    g.fillStyle = '#2b2340'; g.fillRect(x - 9, y - 46, 18, 36); g.fillStyle = '#fffdf8'; g.fillRect(x - 7, y - 44, 14, 34); g.fillStyle = '#e9e3f2'; g.fillRect(x + 3, y - 44, 4, 34); g.fillStyle = '#e8c260'; g.fillRect(x - 9, y - 28, 18, 3);
-    // 위 그릇
-    g.fillStyle = '#2b2340'; ell(g, x, y - 48, 26, 9); g.fillStyle = '#fffdf8'; ell(g, x, y - 50, 25, 8); g.fillStyle = '#e8c260'; ell(g, x, y - 51, 22, 6); g.fillStyle = '#7fd0f4'; ell(g, x, y - 52, 19, 5);
-    // 물줄기: 꼭대기에서 솟아 네 방향 아치로 아래 못에 떨어짐
-    const top = y - 72 + Math.sin(t * 6) * 2;
-    g.fillStyle = '#bfe9ff'; g.fillRect(x - 2, top, 4, y - 52 - top); g.fillStyle = '#ffffff'; g.fillRect(x - 1, top, 2, y - 52 - top);
-    for (const s2 of [-1, 1]) for (let k = 0; k < 14; k++) { const u = ((t * 1.4 + k / 14) % 1), px = x + s2 * (6 + u * 46), py = top + 4 - Math.sin(u * Math.PI) * 6 + u * u * 66; g.fillStyle = k % 3 ? '#a9e4ff' : '#ffffff'; g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3); }
-    for (let k = 0; k < 6; k++) { const a = t * 2 + k, px = x + Math.cos(a) * 18, py = y - 52 + Math.sin(a) * 4; g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(Math.round(px), Math.round(py), 2, 2); }
-    if (Math.sin(t * 3) > 0.7) { g.fillStyle = '#fff6c8'; g.fillRect(x + 22, y - 30, 2, 6); g.fillRect(x + 20, y - 28, 6, 2); }
+  function urn(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); drawArt(g, ART.x_plant, x, y + 2, 2); } // 화분: NA 화분 그림
+  function column(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); drawArt(g, recolor(ART.x_pillar, 'brightness(2.2) saturate(0.25)'), x, y + 4, 2); } // 기둥: 고딕 기둥 (밝게)
+  function lightFountain(g, x, y) { // 분수: NA 연못 그림
+    g.fillStyle = 'rgba(40,40,90,0.15)'; ell(g, x, y + 2, 70, 18); drawArt(g, ART.x_pool, x, y + 8, 3);
   }
-  function cloudBench(g, x, y) { // 구름 의자
-    g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 40, 6);
-    g.fillStyle = '#dbe6fb'; for (const [dx, r] of [[-26, 12], [-8, 16], [10, 15], [28, 11]]) pxDisc(g, x + dx, y - 10, r);
-    g.fillStyle = '#ffffff'; for (const [dx, r] of [[-26, 10], [-8, 14], [10, 13], [28, 9]]) pxDisc(g, x + dx, y - 14, r);
+  function cloudBench(g, x, y) { // 쉼터 의자: 숲 통나무 그림
+    g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 36, 5); drawArt(g, ART.x_log, x - 18, y + 2, 1.5); drawArt(g, ART.x_log, x + 18, y + 2, 1.5, true);
   }
-  function pavilion(g, x, y, c1, label, keeper) { // 상점 정자: 줄무늬 차양 + 금 지붕 + 대리석 계산대 + 천사 상인
-    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 2, 72, 10);
-    blit(g, ART_COL, x - 56, y - 8, 2); blit(g, ART_COL, x + 56, y - 8, 2);
-    if (keeper) drawAngel(g, keeper, x, y - 44);
-    // 지붕
-    g.fillStyle = '#b8862b'; g.fillRect(x - 70, y - 124, 140, 6);
-    g.fillStyle = '#e8c260'; for (let i = 0; i < 9; i++) g.fillRect(x - 66 + i * 6, y - 130 - i * 3, 132 - i * 12, 6);
-    g.fillStyle = '#fff0b0'; for (let i = 0; i < 9; i++) g.fillRect(x - 66 + i * 6, y - 130 - i * 3, 132 - i * 12, 2);
-    g.fillStyle = '#ffd84d'; pxDisc(g, x, y - 162, 6); g.fillStyle = '#ffffff'; g.fillRect(x - 2, y - 166, 2, 2);
-    // 줄무늬 차양 + 물결 끝
-    for (let i = 0; i < 9; i++) { g.fillStyle = i % 2 ? '#ffffff' : c1; g.fillRect(x - 72 + i * 16, y - 118, 16, 22); pxDisc(g, x - 64 + i * 16, y - 96, 8); g.fillRect(x - 72 + i * 16, y - 104, 16, 8); }
-    g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(x - 72, y - 100, 144, 4);
-    // 계산대
-    g.fillStyle = '#2b2340'; g.fillRect(x - 58, y - 36, 116, 30); g.fillStyle = '#fffdf8'; g.fillRect(x - 56, y - 34, 112, 26);
-    g.fillStyle = '#e8c260'; g.fillRect(x - 58, y - 38, 116, 6); g.fillStyle = '#fff0b0'; g.fillRect(x - 58, y - 38, 116, 2);
-    g.fillStyle = '#efe6d4'; for (let i = -2; i <= 2; i++) { g.fillRect(x + i * 22 - 4, y - 24, 8, 8); } g.fillStyle = '#e8c260'; for (let i = -2; i <= 2; i++) g.fillRect(x + i * 22 - 2, y - 22, 4, 4);
-    g.fillStyle = '#e6dccb'; g.fillRect(x - 56, y - 10, 112, 2);
-    plaque(g, x, y - 108, label);
+  function pavilion(g, x, y, c1, label, keeper) { // 상점: 숲 천막 그림을 상점 색으로 + 통·상자 (타이니 타운·던전)
+    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 2, 70, 10);
+    drawArt(g, recolor(ART.x_tent, `hue-rotate(${Math.round(hueOf(c1) - 30)}deg) saturate(1.1) brightness(1.15)`), x, y - 20, 5);
+    if (keeper) drawAngel(g, keeper, x, y - 18);
+    drawArt(g, kTile('k_town', 107), x - 52, y + 2, 2); drawArt(g, kTile('k_dungeon', 89), x + 52, y + 2, 2);
+    plaque(g, x, y - 150, label);
   }
   // ------------------------------------------------------------ NPC 말 걸기 (대화창) · 천상 상점 · 영역전 규칙서
   const NPCS = {
@@ -2347,10 +2301,8 @@
     const x0 = Math.min(...keys.map((k) => k[0])) - 2, y0 = Math.min(...keys.map((k) => k[1])) - 2, x1 = Math.max(...keys.map((k) => k[0])) + 3, y1 = Math.max(...keys.map((k) => k[1])) + 3;
     const c = document.createElement('canvas'); c.width = (x1 - x0) * TILE; c.height = (y1 - y0) * TILE; const g = c.getContext('2d'), NC = ROOM_NIGHT;
     const pts = keys.map(([x, y]) => [(x - x0) * TILE + 16, (y - y0) * TILE + 16]);
-    g.fillStyle = NC ? 'rgba(14,8,40,0.4)' : 'rgba(110,130,200,0.22)'; for (const [x, y] of pts) circ(g, x, y + 26, 22 + hash(x, y) * 6);
-    g.fillStyle = NC ? '#2c2860' : '#e4ebfb'; for (const [x, y] of pts) circ(g, x, y + 6, 22 + hash(x, y, 2) * 6);
-    g.fillStyle = NC ? '#463f86' : '#ffffff'; for (const [x, y] of pts) circ(g, x, y, 20 + hash(x, y, 3) * 6);
-    g.fillStyle = NC ? 'rgba(120,110,190,0.5)' : 'rgba(225,235,252,0.9)'; for (const [x, y] of pts) if (hash(x, y, 5) < 0.35) circ(g, x + 6, y + 4, 5); // 구름 결
+    const CLS = [ART.x_skycloud_3, ART.x_skycloud_2].filter(Boolean).map((cl) => (NC ? recolor(cl, 'brightness(0.42) saturate(1.5) hue-rotate(205deg)') : cl)); g.imageSmoothingEnabled = false; // 구름다리: 사용자 픽셀 구름을 이어 붙임
+    for (const [x, y] of pts) if (CLS.length) { const cl = CLS[(hash(x, y, 5) * CLS.length) | 0], k = 0.9 + hash(x, y, 6) * 0.3; g.drawImage(cl, Math.round(x - cl.width * k / 2), Math.round(y - cl.height * k / 2 + 6), Math.round(cl.width * k), Math.round(cl.height * k)); }
     SKY.bcv = c; SKY.bx0 = x0 * TILE; SKY.by0 = y0 * TILE;
   }
   const SKY_M = 90;
@@ -2471,15 +2423,11 @@
     const step = 26;
     for (let x = 0; x <= w; x += step) { rim.push([x, 0]); rim.push([x, h]); }
     for (let y = 0; y <= h; y += step) { rim.push([0, y]); rim.push([w, y]); }
-    const NC = ROOM_NIGHT; // 밤: 구름 둘레를 어둡고 보랏빛으로, 가장자리는 은은하게 빛나게 (몽환적)
-    if (NC) { g.fillStyle = 'rgba(190,160,255,0.16)'; for (const [x, y] of rim) circ(g, x, y, 34 + hash(x, y, 3) * 16); }
-    g.fillStyle = NC ? 'rgba(14,8,40,0.45)' : 'rgba(110,130,200,0.22)';
-    for (const [x, y] of rim) circ(g, x, y + 30, 30 + hash(x, y) * 14);
-    g.fillStyle = NC ? '#2c2860' : '#e4ebfb';
-    for (const [x, y] of rim) circ(g, x, y + 8, 28 + hash(x, y, 2) * 14);
-    g.fillStyle = NC ? '#463f86' : '#ffffff';
-    for (const [x, y] of rim) circ(g, x, y, 26 + hash(x, y, 3) * 14);
-    if (NC) { g.fillStyle = 'rgba(214,196,255,0.35)'; for (const [x, y] of rim) circ(g, x - 6, y - 8, 10 + hash(x, y, 4) * 8); }
+    const NC = ROOM_NIGHT; // 섬 둘레 구름: 사용자가 준 픽셀 구름 (밤엔 어둡고 보랏빛으로 색만 바꿈)
+    { const CLS = [ART.x_skycloud_3, ART.x_skycloud_2].filter(Boolean).map((c) => (NC ? recolor(c, 'brightness(0.42) saturate(1.5) hue-rotate(205deg)') : c)); const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+      if (CLS.length) for (let x = -10; x <= w + 10; x += 46) for (const y of [0, h]) { const c = CLS[(hash(x, y, 7) * CLS.length) | 0], k = 1.6 + hash(x, y, 3) * 0.5; g.drawImage(c, Math.round(x - c.width * k / 2), Math.round(y - c.height * k / 2 + (y ? 14 : 4)), Math.round(c.width * k), Math.round(c.height * k)); }
+      if (CLS.length) for (let y = 20; y <= h - 20; y += 40) for (const x of [0, w]) { const c = CLS[(hash(x, y, 8) * CLS.length) | 0], k = 1.5 + hash(x, y, 4) * 0.4; g.drawImage(c, Math.round(x - c.width * k / 2), Math.round(y - c.height * k / 2 + 8), Math.round(c.width * k), Math.round(c.height * k)); }
+      g.imageSmoothingEnabled = pv; void rim; }
     const pat = (key) => {
       const tc = document.createElement('canvas'); const tg = tc.getContext('2d');
       if ((key === 'marble_w' || key === 'cloud') && ART.x_sky_floor) key = 'sky_floor'; // 하늘 바닥: 받은 돌 타일을 하얗게
@@ -2491,9 +2439,8 @@
     g.fillStyle = pat(R.floor); rr(g, 18, 18, w - 36, h - 36, 18);
     if (R.dark) { g.fillStyle = 'rgba(30,20,60,0.35)'; rr(g, 18, 18, w - 36, h - 36, 18); }
     else if (R.floor === 'stonefloor') { g.fillStyle = 'rgba(255,248,235,0.22)'; rr(g, 18, 18, w - 36, h - 36, 18); }
-    if (R.floor !== 'lawn') { g.strokeStyle = '#e8c260'; g.lineWidth = 4; g.beginPath(); if (g.roundRect) g.roundRect(26, 26, w - 52, h - 52, 12); else g.rect(26, 26, w - 52, h - 52); g.stroke(); g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 2; g.beginPath(); if (g.roundRect) g.roundRect(32, 32, w - 64, h - 64, 10); else g.rect(32, 32, w - 64, h - 64); g.stroke(); } // 금테
-    for (const [cx, cy, cw, ch] of R.carpets || []) { g.fillStyle = pat(R.carpet || 'aisle'); g.fillRect(cx * TILE, cy * TILE, cw * TILE, ch * TILE); g.strokeStyle = '#e8c260'; g.lineWidth = 4; g.strokeRect(cx * TILE + 2, cy * TILE + 2, cw * TILE - 4, ch * TILE - 4); g.strokeStyle = '#fff0b0'; g.lineWidth = 2; g.strokeRect(cx * TILE + 6, cy * TILE + 6, cw * TILE - 12, ch * TILE - 12); }
-    for (const [px, py, pw, ph, key, rad] of R.patches || []) { g.fillStyle = pat(key); rr(g, px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0); g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 3; g.beginPath(); g.roundRect ? g.roundRect(px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0) : g.rect(px * TILE, py * TILE, pw * TILE, ph * TILE); g.stroke(); } // 꽃밭·길·광장 바닥
+    for (const [cx, cy, cw, ch] of R.carpets || []) { g.fillStyle = pat(R.carpet || 'aisle'); g.fillRect(cx * TILE, cy * TILE, cw * TILE, ch * TILE); }
+    for (const [px, py, pw, ph, key, rad] of R.patches || []) { g.fillStyle = pat(key); rr(g, px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0); }
     if (R.wall && R.wallStyle !== 'iron') heavenWall(g, w, R);
     else if (R.wall) {
       const bt = document.createElement('canvas'); bt.width = bt.height = TILE; const bg2 = bt.getContext('2d'); bg2.imageSmoothingEnabled = false; bg2.drawImage(ART.x_brick, 0, 0, TILE, TILE);
