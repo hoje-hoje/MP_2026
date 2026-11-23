@@ -310,8 +310,11 @@ main > .tabHide { display: none !important; }
       <button id="labHeal" type="button">💚 회복</button>
     </div>
     <div id="labWeapons" class="row"></div>
+    <div class="row" id="labMagicEl" style="gap:4px"></div>
+    <div class="row" id="labMagic" style="gap:4px"></div>
+    <div class="row"><b id="labMagicName">마법을 골라요</b><span class="muted" id="labMagicInfo"></span><span class="sp"></span><label><input type="checkbox" id="labNoCd" checked> 쿨타임 무시</label><button id="labCast" type="button" class="primary">✨ 마법 쓰기 (R)</button></div>
     <canvas id="labCv" width="960" height="540" tabindex="0" style="width:100%;max-width:960px;image-rendering:pixelated;border:3px solid var(--line);background:#5b8a3c;outline:none;display:block"></canvas>
-    <p class="muted" id="labHelp">화면을 한 번 누른 다음 → <b>WASD/화살표</b> 이동 · <b>J/스페이스</b> 톡 = 공격, <b>꾹 눌렀다 떼기</b> = 차징 공격 (0.5초 1단 · 1.1초 2단) · <b>K</b> 방패(누르고 있기) · <b>L</b> 구르기(무적 0.3초) · <b>1~8</b> 무기·도구 바꾸기</p>
+    <p class="muted" id="labHelp">화면을 한 번 누른 다음 → <b>R</b> 고른 마법 쓰기 (스킬 트리 마법 전부 · 진짜로 맞아요) · <b>WASD/화살표</b> 이동 · <b>J/스페이스</b> 톡 = 공격, <b>꾹 눌렀다 떼기</b> = 차징 공격 (0.5초 1단 · 1.1초 2단) · <b>K</b> 방패(누르고 있기) · <b>L</b> 구르기(무적 0.3초) · <b>1~8</b> 무기·도구 바꾸기</p>
     <div style="overflow:auto"><table id="labTable"></table></div>
   </section>
 
@@ -785,6 +788,8 @@ main > .tabHide { display: none !important; }
 })();
 </script>
 <script>document.getElementById('ckWeather').addEventListener('change', async (e) => { let key = ''; try { key = sessionStorage.getItem('mpAdminKey') || ''; } catch (er) {} await fetch('/admin/api', { method: 'POST', body: JSON.stringify({ key, op: 'weather', w: e.target.value }) }); });</script>
+<script src="/rules.js"></script>
+<script src="/magicfx.js"></script>
 <script type="module">
 // 🧪 전투 실험실: HP 전투가 어떤 느낌인지 보는 예시 (서버와 상관없이 이 화면에서만 돌아감)
 const P = '/assets/pixelfx/';
@@ -864,6 +869,7 @@ cv.addEventListener('keydown', (e) => {
   keys.add(k);
   if (/^[1-8]$/.test(e.key)) { me.w = +e.key - 1; me.chg = -1; drawW(); }
   if ((k === 'j' || k === ' ') && me.chg < 0) me.chg = 0;
+  if (k === 'r') castMagic();
   if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault();
 });
 cv.addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys.delete(k); if ((k === 'j' || k === ' ') && me.chg >= 0) release(me); });
@@ -900,6 +906,7 @@ function damage(src, t, w, hitInfo, lv = 0, raw) {
   const fromX = Math.sign(src.x - t.x), fromY = Math.sign(src.y - t.y), [fx2, fy2] = DIRV[t.dir];
   const blocked = t.block && (fx2 === fromX && fx2 !== 0 || fy2 === fromY && fy2 !== 0);
   if (blocked) { n = Math.max(1, Math.round(n * 0.2)); add('shield-block', t.x, t.y, { flip: fromX < 0 }); }
+  if (t.shield > 0) { const ab = Math.min(t.shield, n); t.shield -= ab; n -= ab; labels.push({ text: '보호막 -' + ab, x: t.x, y: t.y - 40, t: 0.6 }); MFX.cast('holy.a', { x: t.x, y: t.y, dir: [0, 1] }); if (n <= 0) return; }
   t.hp -= n; t.inv = raw != null ? 0 : (hitInfo.multi ? 0.04 : 0.35); t.flash = 0.1;
   const push = Math.abs(hitInfo.push ?? 2) * (blocked ? 25 : hitInfo.multi ? 8 : 60) * (lv ? 1.5 : 1), dx = t.x - src.x, dy = t.y - src.y, L = Math.hypot(dx, dy) || 1;
   if (raw == null) { t.kx = dx / L * push; t.ky = dy / L * push; stopT = Math.max(stopT, (hitInfo.stop ?? 0.06) * (lv ? 1.6 : 1)); if (hitInfo.shake || lv) { shakeT = Math.max(hitInfo.shake || 0, lv ? 0.25 : 0); shakeA = (hitInfo.amp || 2) + lv; } }
@@ -932,7 +939,7 @@ function step(dt) {
     moveE(me, mx, my, dt);
   }
   // 적: 따라와서 칼질
-  if (!foe.dead && $('labAI').checked && !me.dead && foe.stun <= 0) {
+  if (!foe.dead && $('labAI').checked && !me.dead && foe.stun <= 0 && !(foe.frozen > 0)) {
     const dx = me.x - foe.x, dy = me.y - foe.y, ad = Math.abs(dx) > Math.abs(dy);
     const close = Math.abs(dx) < 34 && Math.abs(dy) < 14 || Math.abs(dy) < 34 && Math.abs(dx) < 12;
     if (close) { foe.dir = ad ? (dx > 0 ? 3 : 2) : (dy > 0 ? 0 : 1); foe.think = (foe.think || 0) - dt; if (foe.think <= 0) { startAttack(foe); foe.think = 1.1; } moveE(foe, 0, 0, dt); }
@@ -940,7 +947,7 @@ function step(dt) {
   } else moveE(foe, 0, 0, dt);
   moveE(dummy, 0, 0, dt);
   for (const e of all) {
-    e.cd = Math.max(0, e.cd - dt); e.inv = Math.max(0, e.inv - dt); e.flash = Math.max(0, e.flash - dt);
+    e.cd = Math.max(0, e.cd - dt); e.inv = Math.max(0, e.inv - dt); e.flash = Math.max(0, e.flash - dt); for (const k of ['slow', 'frozen', 'rooted', 'haste']) if (e[k] > 0) e[k] -= dt; if (e.frozen > 0) e.atk = null;
     if (e.stun > 0) { e.stun -= dt; if (e.stFx) { e.stFx.options.x = e.x; e.stFx.options.y = e.y - 28; } if (e.stun <= 0 && e.stFx) { kill(e.stFx); e.stFx = null; } }
     for (const d of e.dots) { d.left -= dt; d.tick -= dt; d.f.options.x = e.x; d.f.options.y = d.kind === 'burning' ? e.y : e.y - 4; if (d.tick <= 0 && !e.dead) { d.tick = 0.5; damage(e, e, W[0], {}, 0, d.dmg); } }
     e.dots = e.dots.filter((d) => { if (d.left <= 0) kill(d.f); return d.left > 0; });
@@ -984,11 +991,12 @@ function step(dt) {
     if (!p.hit && (p.d >= p.w.range || p.x < 0 || p.x > VW || p.y < 0 || p.y > VH)) { add('poof', p.x, p.y + 6); p.hit = true; }
   }
   for (let i = projs.length - 1; i >= 0; i--) if (projs[i].hit) { kill(projs[i].f); projs.splice(i, 1); }
+  MFX.update(dt); for (const k in magicCd) magicCd[k] = Math.max(0, magicCd[k] - dt);
 }
 function moveE(e, mx, my, dt, speedK = 1) {
   if (e.dead) return;
   let sp = 72 * speedK;
-  if (e.stun > 0) { mx = my = 0; }
+  if (e.stun > 0 || e.frozen > 0 || e.rooted > 0) { mx = my = 0; } if (e.slow > 0) sp *= 0.45; if (e.haste > 0) sp *= 1.6;
   if (e.atk && e.atk.w.move) sp *= e.atk.w.move; if (e.block) sp *= 0.4; if (e.chg >= 0) sp *= 0.5;
   if (e.roll > 0) { e.roll -= dt; mx = e.rx; my = e.ry; sp = 190; }
   if ((mx || my) && !e.still) { const L = Math.hypot(mx, my); e.x += mx / L * sp * dt; e.y += my / L * sp * dt; e.walk += dt; if (!e.atk && e.roll <= 0 && !e.block) e.dir = Math.abs(mx) >= Math.abs(my) && mx ? (mx > 0 ? 3 : 2) : (my > 0 ? 0 : 1); } else e.walk = 0;
@@ -1026,7 +1034,7 @@ function drawE(e) {
   wg.fillStyle = 'rgba(0,0,0,.25)'; wg.beginPath(); wg.ellipse(e.x, e.y, 9, 3, 0, 0, 7); wg.fill();
   if (e.dir === 1) drawTool(e);
   if (e.inv > 0 && e.inv < 0.9 && Math.floor(e.inv * 20) % 2 && !e.flash) wg.globalAlpha = 0.5;
-  if (e.flash > 0) wg.filter = 'brightness(4)';
+  if (e.flash > 0) wg.filter = 'brightness(4)'; else if (e.frozen > 0) wg.filter = 'saturate(0.2) brightness(1.5) hue-rotate(160deg)'; else if (e.dots.some((d) => d.kind === 'poison')) wg.filter = 'hue-rotate(70deg) saturate(1.6)'; else if (e.slow > 0) wg.filter = 'saturate(0.6) brightness(0.9)';
   const sx = (k % CH.cols) * 64 + e.dir * 16, sy = Math.floor(k / CH.cols) * 112;
   if (e.roll > 0) { wg.save(); wg.translate(Math.round(e.x), Math.round(e.y - 12)); wg.rotate((0.3 - e.roll) / 0.3 * Math.PI * 2 * (e.rx < 0 ? -1 : 1)); wg.drawImage(sheet, sx, sy, 16, 16, -16, -16, 32, 32); wg.restore(); }
   else wg.drawImage(sheet, sx, sy + row * 16, 16, 16, Math.round(e.x - 16), Math.round(e.y - 30), 32, 32);
@@ -1041,6 +1049,50 @@ function bars(e, S, ox, oy) { // HP·차징 바는 큰 화면에 바로 (선명�
   g.fillStyle = r > 0.5 ? '#5ad16a' : r > 0.25 ? '#ffd34d' : '#ff5a4a'; g.fillRect(x, y, Math.round(bw * r), 4 * S);
   if (e.chg > 0.1) { const c = Math.min(1, e.chg / 1.1); g.fillStyle = '#1b1430'; g.fillRect(x - S, y + 6 * S, bw + 2 * S, 3 * S + 2 * S); g.fillStyle = e.chg >= 1.1 ? '#fff2a8' : e.chg >= 0.5 ? '#9fd3ff' : '#6b6280'; g.fillRect(x, y + 7 * S, Math.round(bw * c), 3 * S); g.fillStyle = '#fff'; g.fillRect(Math.round(x + bw * 0.5 / 1.1), y + 7 * S, S, 3 * S); }
 }
+// ── ✨ 마법: 스킬 트리 마법 전부 (rules.js MAGIC_COMBAT · magicfx.js) · 실제로 맞고 상태이상이 걸려요 ──
+const R = window.MPRules, LABM = { key: 'fire.a', el: 'fire' }, magicCd = {};
+const MFX = window.MPMagicFX.create({ scale: 1,
+  targets: () => all.filter((t) => t.team !== me.team && !t.dead).map((t) => ({ x: t.x, y: t.y, r: 9, ref: t })),
+  onHit: (t, info) => magicHit(t.ref, info),
+  onSelf: (info) => { if (info.heal) { const h = Math.min(me.max - me.hp, info.heal); me.hp += h; if (h > 0) labels.push({ text: '+' + h, x: me.x, y: me.y - 40, t: 0.7 }); } if (info.shield) me.shield = info.shield; if (info.haste) me.haste = info.haste; },
+  onBlink: (x, y) => { me.x = Math.max(10, Math.min(VW - 10, x)); me.y = Math.max(30, Math.min(VH - 4, y)); me.inv = 0.2; },
+  canGo: (x, y) => x > 10 && x < VW - 10 && y > 30 && y < VH - 4 });
+function magicHit(t, info) {
+  if (t.dead) return;
+  if (info.dmg) { const n = Math.max(1, Math.round(info.dmg * (0.9 + Math.random() * 0.2))); damage(me, t, W[0], {}, 0, n); stopT = Math.max(stopT, info.dmg >= 20 ? 0.09 : 0.04); }
+  const ux = info.dirx != null ? info.dirx : t.x - info.fx, uy = info.diry != null ? info.diry : t.y - info.fy, L = Math.hypot(ux, uy) || 1;
+  if (info.knock && !t.still) { t.kx = ux / L * info.knock; t.ky = uy / L * info.knock; }
+  if (info.pull && !t.still) { t.kx = -ux / L * info.pull; t.ky = -uy / L * info.pull; }
+  const st = info.st || {};
+  if (st.stun) { t.stun = Math.max(t.stun, st.stun); t.atk = null; if (!t.stFx) t.stFx = add('stunned', t.x, t.y - 28); }
+  if (st.freeze) t.frozen = Math.max(t.frozen || 0, st.freeze);
+  if (st.slow) t.slow = Math.max(t.slow || 0, st.slow);
+  if (st.root) t.rooted = Math.max(t.rooted || 0, st.root);
+  if (st.burn && !t.dots.some((d) => d.kind === 'burning')) t.dots.push({ kind: 'burning', left: st.burn, tick: 0.5, dmg: 2, f: add('burning', t.x, t.y) });
+  if (st.poison) { const d0 = t.dots.find((d) => d.kind === 'poison'); if (d0) d0.left = Math.max(d0.left, st.poison); else t.dots.push({ kind: 'poison', left: st.poison, tick: 0.6, dmg: 2, f: add('poof', t.x, t.y) }); }
+}
+function castMagic() {
+  const key = LABM.key; if (!key || me.dead || me.stun > 0) return; const noCd = $('labNoCd').checked;
+  if (!noCd && magicCd[key] > 0) { labels.push({ text: '쿨타임 ' + magicCd[key].toFixed(1) + '초', x: me.x, y: me.y - 44, t: 0.5 }); return; }
+  const c = R.magicCost(key); magicCd[key] = c.cd || 8;
+  me.atk = { w: W.find((w) => w.key === 'magic'), t: 0, done: 1, lv: 0, end: 0.3, hits: [{ t: 0 }] }; setTimeout(() => { if (me.atk && me.atk.done === 1) me.atk = null; }, 300);
+  MFX.cast(key, { x: me.x, y: me.y, dir: DIRV[me.dir] });
+}
+const ELN = (id) => (id === 'root' ? '마력' : (R.magicEl(id) || {}).name || id);
+function drawMagicUI() {
+  const els = ['root', ...R.MAGIC_EL.map((e) => e.id)];
+  $('labMagicEl').innerHTML = els.map((id) => `<button type="button" class="small${id === LABM.el ? ' primary' : ''}" data-mel="${id}" style="border-left:6px solid ${(R.MAGIC_PAL[id] || R.MAGIC_PAL.root)[2]}">${ELN(id)}</button>`).join('');
+  const list = Object.values(R.MAGIC).filter((M) => M.el === LABM.el), TN = { root: '', t1: 'Ⅰ', a: 'Ⅱ-가', b: 'Ⅱ-나', ult: 'Ⅲ' };
+  $('labMagic').innerHTML = list.map((M) => `<button type="button" class="small${M.key === LABM.key ? ' primary' : ''}" data-mk="${M.key}">${TN[M.tier]} ${M.name}</button>`).join('');
+  const M = R.MAGIC[LABM.key], C = R.MAGIC_COMBAT[LABM.key] || {}, SH = { orb: '날아가는 구슬', chain: '연쇄', beam: '앞으로 뿜기', nova: '내 둘레 퍼짐', zone: '앞쪽 땅', line: '앞으로 솟는 줄', wave: '물결', self: '나에게', blink: '순간이동' };
+  const STN = { burn: '화상', slow: '느려짐', freeze: '얼음', stun: '기절', poison: '독', root: '묶임', drain: '흡수' };
+  $('labMagicName').textContent = M ? M.name : '';
+  $('labMagicInfo').textContent = M ? ` · ${SH[C.shape] || C.shape}${C.dmg ? ' · 피해 ' + C.dmg : ''}${C.st ? ' · ' + Object.entries(C.st).map(([k, v]) => STN[k] + ' ' + v + '초').join(', ') : ''}${C.knock ? ' · 밀침' : ''}${C.pull ? ' · 끌어당김' : ''}${C.heal ? ' · 회복 ' + C.heal : ''}${C.shield ? ' · 보호막 ' + C.shield : ''}${C.haste ? ' · 빨라짐 ' + C.haste + '초' : ''} · 쿨타임 ${R.magicCost(LABM.key).cd || '하루1번'}초 · 마나 ${R.magicCost(LABM.key).mp}` : '';
+}
+$('labMagicEl').onclick = (e) => { const b = e.target.closest('[data-mel]'); if (!b) return; LABM.el = b.dataset.mel; const first = Object.values(R.MAGIC).find((M) => M.el === LABM.el); LABM.key = first ? first.key : null; drawMagicUI(); cv.focus(); };
+$('labMagic').onclick = (e) => { const b = e.target.closest('[data-mk]'); if (!b) return; LABM.key = b.dataset.mk; drawMagicUI(); cv.focus(); };
+$('labCast').onclick = () => { cv.focus(); castMagic(); };
+drawMagicUI();
 let last = performance.now();
 function loop(now) {
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -1053,8 +1105,11 @@ function loop(now) {
   // 땅
   wg.fillStyle = '#5b8a3c'; wg.fillRect(0, 0, VW, VH);
   wg.fillStyle = '#527f35'; for (let y = 0; y < VH; y += 16) for (let x = (y / 16 % 2) * 16; x < VW; x += 32) wg.fillRect(x, y, 16, 16);
+  MFX.drawGround(wg);
   const order = [...all].sort((a, b) => a.y - b.y);
   for (const e of order) drawE(e);
+  for (const e of all) if (!e.dead && e.frozen > 0) { wg.globalAlpha = 0.55; wg.fillStyle = '#d9f1ff'; wg.fillRect(Math.round(e.x - 10), Math.round(e.y - 28), 20, 28); wg.globalAlpha = 1; wg.strokeStyle = '#9fd3f2'; wg.strokeRect(Math.round(e.x - 10) + 0.5, Math.round(e.y - 28) + 0.5, 20, 28); }
+  for (const e of all) if (!e.dead && e.rooted > 0) { wg.fillStyle = '#2f7a34'; for (let k = 0; k < 5; k++) wg.fillRect(Math.round(e.x - 10 + k * 5), Math.round(e.y - 6 - (k % 2) * 4), 2, 6 + (k % 2) * 4); }
   if ($('labBox').checked) {
     wg.strokeStyle = 'rgba(255,255,255,.6)'; for (const e of all) if (!e.dead) { const b = body(e); wg.strokeRect(b.x + 0.5, b.y + 0.5, b.w, b.h); }
     wg.strokeStyle = '#ff3b3b'; for (const b of boxes) wg.strokeRect(b.z.x + 0.5, b.z.y + 0.5, b.z.w, b.z.h);
@@ -1066,8 +1121,10 @@ function loop(now) {
   for (const f of fx) { f.update(dt); f.draw(frame); }
   fx = fx.filter((f) => f.meta.loop || !f.done || !f.done());
   core.composite(frame, img.data, null); off.getContext('2d').putImageData(img, 0, 0); wg.drawImage(off, 0, 0);
+  MFX.drawTop(wg);
   // 화면 흔들림 + 크게 그리기
   let ox = 0, oy = 0; if (shakeT > 0) { shakeT -= dt; ox = Math.round((Math.random() * 2 - 1) * shakeA * S); oy = Math.round((Math.random() * 2 - 1) * shakeA * S); }
+  { const sk = MFX.shake(); ox += Math.round(sk.x * S); oy += Math.round(sk.y * S); }
   g.imageSmoothingEnabled = false; g.fillStyle = '#5b8a3c'; g.fillRect(0, 0, cw, ch);
   g.drawImage(world, ox, oy, cw, ch);
   for (const e of all) bars(e, S, ox, oy);
@@ -1077,12 +1134,12 @@ function loop(now) {
   g.textAlign = 'center'; txt('허수아비 (HP 300)', dummy.sx * S, (dummy.sy + 6) * S, '#e9ddff');
   for (const l of labels) { txt(l.text, l.x * S, (l.y - (0.6 - l.t) * 20) * S, '#fff2a8'); l.t -= dt; }
   labels = labels.filter((l) => l.t > 0);
-  g.textAlign = 'left'; const w = W[me.w]; txt(`${w.name}   HP ${me.hp}/${me.max}${me.dead ? '   (부활 중…)' : ''}`, 6 * S, 5 * S);
+  g.textAlign = 'left'; const w = W[me.w]; txt(`${w.name}   HP ${me.hp}/${me.max}${me.shield > 0 ? '  🛡' + me.shield : ''}${me.haste > 0 ? '  💨' : ''}${me.dead ? '   (부활 중…)' : ''}   ✨ ${LABM.key ? R.MAGIC[LABM.key].name + (magicCd[LABM.key] > 0 ? ' (' + magicCd[LABM.key].toFixed(1) + '초)' : '') : '-'}`, 6 * S, 5 * S);
   if (document.activeElement !== cv) { g.fillStyle = 'rgba(27,20,48,.6)'; g.fillRect(0, ch - 18 * S, cw, 18 * S); txt('화면을 눌러서 조작 시작', 6 * S, ch - 14 * S); }
   requestAnimationFrame(loop);
 }
 sheet.decode().then(() => requestAnimationFrame(loop));
-window.LAB = { me, foe, dummy, W, startAttack, release, fx: () => fx.length };
+window.LAB = { me, foe, dummy, W, startAttack, release, fx: () => fx.length, castMagic, LABM, MFX };
 </script>
 </body>
 </html>

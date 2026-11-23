@@ -906,6 +906,38 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
+  // 마법 모양 (위에서 내려다보는 화면 기준) · 실험실에서 실제로 맞는 값 (거리 = 월드 px, 캐릭터 키 ≈ 32)
+  // shape: orb 날아가는 구슬 · chain 연쇄 · beam 앞으로 뿜기 · nova 내 둘레 퍼짐 · zone 앞쪽 땅 · line 앞으로 솟는 줄 · wave 밀려가는 물결 · self 나에게 · blink 순간이동
+  // st: burn 화상 · slow 느려짐 · freeze 얼음(못 움직임) · stun 기절 · poison 독 · root 묶임 · knock 밀침 · pull 끌어당김 · heal 회복 · shield 보호막 · haste 빨라짐 · drain 흡수
+  const MAGIC_COMBAT = {
+    root: { shape: 'self', aura: 'burst', r: 46 },
+    'nature.t1': { shape: 'self', aura: 'bloom', r: 40, heal: 8 }, 'nature.a': { shape: 'zone', at: 70, r: 26, delay: 0.15, dmg: 6, st: { root: 2 }, look: 'roots' },
+    'nature.b': { shape: 'orb', roll: 1, speed: 150, range: 160, r: 9, dmg: 18, knock: 140, pierce: 1, look: 'boulder' }, 'nature.ult': { shape: 'nova', r: 120, dur: 0.9, dmg: 22, st: { stun: 1 }, look: 'quake', shake: 6 },
+    'fire.t1': { shape: 'self', aura: 'flame', r: 34, dmg: 4, st: { burn: 2 } }, 'fire.a': { shape: 'orb', speed: 260, range: 220, r: 6, boom: 34, dmg: 16, st: { burn: 3 }, shake: 3 },
+    'fire.b': { shape: 'nova', r: 62, dur: 0.45, dmg: 12, st: { burn: 2 }, knock: 60 }, 'fire.ult': { shape: 'zone', at: 100, r: 52, delay: 0.9, dmg: 40, st: { burn: 3 }, look: 'meteor', shake: 8, knock: 120 },
+    'bolt.t1': { shape: 'zone', at: 60, r: 20, delay: 0.05, dmg: 10, st: { stun: 0.4 }, look: 'strike', shake: 2 }, 'bolt.a': { shape: 'chain', range: 170, jumps: 3, dmg: 12, st: { stun: 0.3 } },
+    'bolt.b': { shape: 'orb', speed: 85, range: 200, r: 8, pierce: 1, tick: 0.25, tickR: 42, dmg: 4, look: 'ballz' }, 'bolt.ult': { shape: 'zone', at: 90, r: 72, delay: 0.3, linger: 2.4, strikes: 9, dmg: 14, st: { stun: 0.3 }, look: 'storm', shake: 3 },
+    'wind.t1': { shape: 'self', aura: 'haste', r: 30, haste: 5 }, 'wind.a': { shape: 'beam', len: 120, w: 64, dur: 0.35, dmg: 4, knock: 260, look: 'gust' },
+    'wind.b': { shape: 'nova', r: 72, dur: 1.2, tick: 0.3, dmg: 3, look: 'leaves' }, 'wind.ult': { shape: 'orb', roll: 1, speed: 70, range: 210, r: 22, pierce: 1, tick: 0.3, tickR: 34, dmg: 5, pull: 90, look: 'tornado' },
+    'holy.t1': { shape: 'self', aura: 'heal', r: 34, heal: 25 }, 'holy.a': { shape: 'self', aura: 'shield', r: 26, shield: 40, sec: 6 },
+    'holy.b': { shape: 'nova', r: 84, dur: 0.7, heal: 15, look: 'holyring' }, 'holy.ult': { shape: 'self', aura: 'pillar', r: 40, heal: 100 },
+    'ice.t1': { shape: 'zone', at: 52, r: 28, delay: 0.05, dmg: 6, st: { slow: 2 }, look: 'frost' }, 'ice.a': { shape: 'orb', speed: 340, range: 240, r: 4, pierce: 1, dmg: 14, st: { slow: 2 }, look: 'lance' },
+    'ice.b': { shape: 'line', len: 140, step: 18, dmg: 15, st: { freeze: 1 }, look: 'spikes' }, 'ice.ult': { shape: 'zone', at: 80, r: 72, delay: 0.2, linger: 3, tick: 0.4, dmg: 4, st: { slow: 1 }, look: 'blizzard' },
+    'water.t1': { shape: 'zone', at: 50, r: 24, delay: 0.1, dmg: 6, look: 'splash' }, 'water.a': { shape: 'beam', len: 140, w: 22, dur: 0.8, tick: 0.1, dmg: 3, knock: 50, look: 'jet' },
+    'water.b': { shape: 'nova', r: 70, dur: 0.5, dmg: 10, knock: 120 }, 'water.ult': { shape: 'wave', w: 150, speed: 170, range: 220, dmg: 25, knock: 220 },
+    'poison.t1': { shape: 'nova', r: 42, dur: 0.6, dmg: 2, st: { poison: 3 }, look: 'spores' }, 'poison.a': { shape: 'zone', at: 70, r: 40, delay: 0.1, linger: 3, tick: 0.5, dmg: 2, st: { poison: 2 }, look: 'cloud' },
+    'poison.b': { shape: 'orb', lob: 1, speed: 160, range: 120, r: 6, boom: 28, dmg: 10, st: { poison: 3 } }, 'poison.ult': { shape: 'zone', at: 60, r: 62, delay: 0.2, linger: 4, tick: 0.5, dmg: 2, st: { poison: 1, slow: 1 }, look: 'swamp' },
+    'dark.t1': { shape: 'orb', speed: 210, range: 200, r: 6, dmg: 10, look: 'shade' }, 'dark.a': { shape: 'chain', range: 150, jumps: 1, dmg: 14, st: { drain: 1 }, look: 'drain' },
+    'dark.b': { shape: 'beam', len: 170, w: 12, dur: 0.5, dmg: 26, look: 'ray', shake: 4 }, 'dark.ult': { shape: 'zone', at: 90, r: 72, delay: 0.1, linger: 2.2, tick: 0.3, dmg: 4, pull: 160, end: 20, look: 'hole', shake: 7 },
+    'chrono.t1': { shape: 'nova', r: 64, dur: 0.8, st: { slow: 2.5 }, look: 'circle' }, 'chrono.a': { shape: 'blink', dist: 128 },
+    'chrono.b': { shape: 'zone', at: 90, r: 62, delay: 0.25, linger: 1.4, strikes: 6, dmg: 12, look: 'stars', shake: 2 }, 'chrono.ult': { shape: 'nova', r: 170, dur: 0.6, st: { freeze: 2.5 }, look: 'timestop', shake: 3 },
+  };
+  const MAGIC_PAL = { // 속성 색 (밝은 → 어두운)
+    fire: ['#fff4c4', '#ffd23f', '#ff8a24', '#d8402a', '#7a2440'], ice: ['#ffffff', '#d9f1ff', '#9fd3f2', '#5aa0e0', '#2a4f8a'], bolt: ['#ffffff', '#fff8a0', '#ffd23d', '#c9a020', '#5a4a10'],
+    wind: ['#ffffff', '#e8fff4', '#b8f0d8', '#7ad0b0', '#3a8070'], nature: ['#f0ffd0', '#9cf06a', '#4cbf4a', '#2f7a34', '#1a3d20'], holy: ['#ffffff', '#fffbe0', '#ffe9a0', '#f0c050', '#a07020'],
+    water: ['#ffffff', '#d0f0ff', '#6cc4ff', '#2a80d0', '#14406a'], poison: ['#f0ffd0', '#c8f060', '#8ad030', '#5a8a20', '#2a3a10'], dark: ['#e0c8ff', '#9a6ad8', '#5a2a9a', '#2a1450', '#0a0418'],
+    chrono: ['#ffffff', '#e0f0ff', '#a0c0ff', '#6a70e0', '#2a2a70'], root: ['#ffffff', '#eadcff', '#b57bff', '#7a4ad0', '#3a1a6a'],
+  };
   // 관리자 조정값: 물고기 무게(잡힐 확률), 마법별 쿨타임·마나
   const FISH_W0 = {}; for (const [k, f] of Object.entries(FISH)) FISH_W0[k] = f.w;
   function applyTune(t) { t = t || {}; const fi = t.fish || {}, mg = t.magic || {};
@@ -921,5 +953,5 @@
     torchBag: { r: 150, a: 0.9, c: '#ffb050', flick: 0.1 }, self: { r: 75, a: 0.45, c: null }, lightBuff: { r: 240, a: 1, c: '#fff0b0', flick: 0.03 },
     spell: { r: 130, a: 0.9 }, flash: { r: 150, a: 0.8 }, rootFlash: { r: 520, a: 1 },
   };
-  return { GARDEN, LIGHT_OF, FISH_W0, applyTune, magicCost, fishOdds, applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { MAGIC_COMBAT, MAGIC_PAL, GARDEN, LIGHT_OF, FISH_W0, applyTune, magicCost, fishOdds, applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

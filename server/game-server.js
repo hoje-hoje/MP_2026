@@ -37,6 +37,7 @@ const STATIC = {
   '/game.js': path.join(ROOT, 'client', 'game.js'),
   '/rules.js': path.join(ROOT, 'client', 'rules.js'),
   '/texts.js': path.join(ROOT, 'client', 'texts.js'),
+  '/magicfx.js': path.join(ROOT, 'client', 'magicfx.js'),
   '/admin': path.join(ROOT, 'client', 'admin.html'),
   '/preview': path.join(ROOT, 'client', 'preview.html'),
   '/palette': path.join(ROOT, 'client', 'palette.html'),
