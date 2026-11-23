@@ -1465,7 +1465,7 @@ function fragList() {
 const myFrags = (acc) => Object.keys(acc.frags || {}).map(Number);
 const boardPub = () => (state.board || []).map(({ tok, nat, ...r }) => r);
 function broadcastBoard() { const msg = JSON.stringify({ t: 'board', posts: boardPub() }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); }
-function clockMsg() { const c = gameClock(); return { t: 'clock', frags: fragList(), day: c.day, slot: c.slot, weather: curWeather(), doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
+function clockMsg() { const c = gameClock(); return { t: 'clock', manual: !!c.manual, frags: fragList(), day: c.day, slot: c.slot, weather: curWeather(), doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
 function onEnter(c) {
   if (c.slot === 'lunch' || c.slot === 'night') resolveNight(`${c.day}일차 ${SLOT_LABEL[c.slot]}`, slotIdx(c.day, c.slot));
   // 멸망 선포: 선포일 점심. 다음 날 아침부터 균열이 매일 영역마다 10%씩 침식

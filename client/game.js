@@ -23,7 +23,7 @@
   // 날짜: 온라인이면 서버의 게임 시계(setClock), 미리보기면 주소 끝 #day1~#day15
   let DAY = (() => { const m = /^#day(\d{1,2})$/.exec(location.hash); return Math.max(1, Math.min(15, m ? +m[1] : 1)); })();
   const WAVE_DAY = { 1: 6, 2: 8, 3: 10, 4: 12, 5: 14 };   // 균열 웨이브가 무너지는 날 (미리보기용)
-  let SLOT = 'lunch', DOOM_DAY = 5, LAST_DAY = 15, RIFT_NEXT = null;
+  let CLOCK_MANUAL = false, ROOM_NIGHT = false; let SLOT = 'lunch', DOOM_DAY = 5, LAST_DAY = 15, RIFT_NEXT = null;
   let DOOM = DAY >= 5;                                     // 멸망 선포 뒤
   const phaseOf = (d) => d <= 2 ? '건국기' : d <= 4 ? '확장기' : d <= 14 ? '멸망기' : '최종 결전';
   let PHASE = phaseOf(DAY);
@@ -2346,12 +2346,15 @@
     const step = 26;
     for (let x = 0; x <= w; x += step) { rim.push([x, 0]); rim.push([x, h]); }
     for (let y = 0; y <= h; y += step) { rim.push([0, y]); rim.push([w, y]); }
-    g.fillStyle = 'rgba(110,130,200,0.22)';
+    const NC = ROOM_NIGHT; // 밤: 구름 둘레를 어둡고 보랏빛으로, 가장자리는 은은하게 빛나게 (몽환적)
+    if (NC) { g.fillStyle = 'rgba(190,160,255,0.16)'; for (const [x, y] of rim) circ(g, x, y, 34 + hash(x, y, 3) * 16); }
+    g.fillStyle = NC ? 'rgba(14,8,40,0.45)' : 'rgba(110,130,200,0.22)';
     for (const [x, y] of rim) circ(g, x, y + 30, 30 + hash(x, y) * 14);
-    g.fillStyle = '#e4ebfb';
+    g.fillStyle = NC ? '#2c2860' : '#e4ebfb';
     for (const [x, y] of rim) circ(g, x, y + 8, 28 + hash(x, y, 2) * 14);
-    g.fillStyle = '#ffffff';
+    g.fillStyle = NC ? '#463f86' : '#ffffff';
     for (const [x, y] of rim) circ(g, x, y, 26 + hash(x, y, 3) * 14);
+    if (NC) { g.fillStyle = 'rgba(214,196,255,0.35)'; for (const [x, y] of rim) circ(g, x - 6, y - 8, 10 + hash(x, y, 4) * 8); }
     const pat = (key) => {
       const tc = document.createElement('canvas'); const tg = tc.getContext('2d');
       if ((key === 'marble_w' || key === 'cloud') && ART.x_sky_floor) key = 'sky_floor'; // 하늘 바닥: 받은 돌 타일을 하얗게
@@ -2484,36 +2487,45 @@
     g.fillStyle = '#f2f8ff'; for (const [x, y, r] of blobs) g.fillRect(x - 2, y + r - 5, 4, 2);
   }));
   function cloudAt(g, i, x, bottom, w, alpha = 1) { const c = CLOUDS[i % 3], k = w / 64; g.globalAlpha = alpha; const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(c, Math.round(x - w / 2), Math.round(bottom - 32 * k), Math.round(w), Math.round(32 * k)); g.imageSmoothingEnabled = p; g.globalAlpha = 1; }
+  // 하늘 배경: 사용자 하늘 색 시안 6가지를 시간(한국 시간)에 따라 부드럽게 섞음. 밤(21시~)엔 별하늘 사진 + 어둡고 몽환적인 구름
+  const SKY_KEYS = [ // [시각, 위→아래 5색]
+    [0, ['#0b0626', '#1a0f45', '#341a5a', '#5a2a70', '#83437f']], [5, ['#120a2e', '#22144f', '#3d1d62', '#6b3a78', '#9a5a8a']],
+    [6.5, ['#0f2563', '#1d3c84', '#6c78b4', '#e8ddbf', '#fffbe6']], [9.5, ['#1b7fdb', '#3aa0ec', '#6ad0ff', '#b3ecff', '#e3fbff']],
+    [15.5, ['#0b3a96', '#0b62b8', '#0a86c8', '#14a8c4', '#7fe0e6']], [18.5, ['#0b0a26', '#2a1650', '#5a2a6a', '#d9566a', '#f7c86a']],
+    [20.5, ['#0a0a1e', '#16163f', '#1f2a66', '#2e559e', '#4a80c4']], [24, ['#0b0626', '#1a0f45', '#341a5a', '#5a2a70', '#83437f']]];
+  const NIGHT_IMG = new Image(); NIGHT_IMG.src = 'assets/extra/nightsky.jpg';
+  function skyHour() { if (!ONLINE || CLOCK_MANUAL) return SLOT === 'night' ? 22.5 : SLOT === 'morning' ? 8 : 14; const k = new Date(Date.now() + 9 * 3600e3); return k.getUTCHours() + k.getUTCMinutes() / 60; }
+  const mixHex = (a, b, u) => { const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * u)).join(',')})`; };
+  function skyColors(h) { let i = 0; while (i < SKY_KEYS.length - 2 && h >= SKY_KEYS[i + 1][0]) i++; const [h0, c0] = SKY_KEYS[i], [h1, c1] = SKY_KEYS[i + 1], u = Math.min(1, Math.max(0, (h - h0) / (h1 - h0))), e = u * u * (3 - 2 * u); return c0.map((c, k) => mixHex(c, c1[k], e)); }
   function drawSkyBackground(t) {
-    if (ONLINE && SLOT === 'night') { drawStarSky(t); return; }
-    const grd = ctx.createLinearGradient(0, 0, 0, vh);
-    grd.addColorStop(0, DOOM ? '#cbb6ee' : '#a9dcff'); grd.addColorStop(1, DOOM ? '#ffd2dc' : '#fdf3ff');
-    ctx.fillStyle = grd; ctx.fillRect(0, 0, vw, vh);
-    for (let i = 0; i < 9; i++) {
-      const x = ((i * 337 + t * (8 + i * 2)) % (vw + 400)) - 200, y = (i * 173) % Math.max(1, vh);
-      cloudAt(ctx, i, x, y + 60, 128 + (i % 3) * 48, 0.9);
-    }
+    const h = skyHour(), cols = skyColors(h), night = h >= 21 || h < 5.5, dusk = !night && (h >= 18 || h < 7);
+    if (night !== ROOM_NIGHT) { ROOM_NIGHT = night; buildRooms(); } // 밤이 되면 방 구름 둘레 다시 그림
+    const grd = ctx.createLinearGradient(0, 0, 0, vh); cols.forEach((c, k) => grd.addColorStop(k / 4, c)); ctx.fillStyle = grd; ctx.fillRect(0, 0, vw, vh);
+    if (night && NIGHT_IMG.complete && NIGHT_IMG.naturalWidth) { // 별하늘 사진: 화면을 덮고 아주 천천히 흐름
+      const sc = Math.max(vw / NIGHT_IMG.naturalWidth, vh / NIGHT_IMG.naturalHeight) * 1.15, w = NIGHT_IMG.naturalWidth * sc, hh = NIGHT_IMG.naturalHeight * sc, ox = -((t * 4) % Math.max(1, w - vw)) * 0 - (w - vw) / 2 + Math.sin(t / 40) * (w - vw) / 2, oy = -(hh - vh) / 2;
+      ctx.globalAlpha = 0.85; ctx.drawImage(NIGHT_IMG, ox, oy, w, hh); ctx.globalAlpha = 0.35; ctx.fillStyle = grd; ctx.fillRect(0, 0, vw, vh); ctx.globalAlpha = 1; }
+    if (night || dusk) drawStarSky(t, night ? 1 : 0.4); // 반짝이는 별·별똥별·달 (해 질 녘엔 옅게)
+    const n = night ? 6 : 9; // 구름: 밤엔 어둡고 보랏빛으로 빛나게 (몽환적)
+    if (night) { ctx.save(); ctx.filter = 'brightness(0.32) saturate(1.4) hue-rotate(205deg) drop-shadow(0 0 10px rgba(190,160,255,0.55))'; }
+    else if (dusk) { ctx.save(); ctx.filter = 'sepia(0.35) saturate(1.3) hue-rotate(-12deg) brightness(0.95)'; }
+    for (let i = 0; i < n; i++) { const x = ((i * 337 + t * (8 + i * 2)) % (vw + 400)) - 200, y = (i * 173) % Math.max(1, vh); cloudAt(ctx, i, x, y + 60, 128 + (i % 3) * 48, night ? 0.75 : 0.9); }
+    if (night || dusk) ctx.restore();
   }
 
-  // 밤 하늘: 별이 반짝이며 천천히 흐르고, 가끔 별똥별
-  function drawStarSky(t) {
-    const grd = ctx.createLinearGradient(0, 0, 0, vh);
-    grd.addColorStop(0, DOOM ? '#140a2e' : '#0a1030'); grd.addColorStop(1, DOOM ? '#3a1d5c' : '#24306a');
-    ctx.fillStyle = grd; ctx.fillRect(0, 0, vw, vh);
-    for (let i = 0; i < 280; i++) {
-      const sp = 3 + (i % 5) * 2, x = ((hash(i, 1, 31) * (vw + 200) + t * sp) % (vw + 200)) - 100, y = hash(i, 2, 31) * vh;
+  // 별·별똥별·달 (배경 위에 덧그림)
+  function drawStarSky(t, amt = 1) {
+    for (let i = 0; i < 160; i++) {
+      const sp = 3 + (i % 5) * 2, x = ((hash(i, 1, 31) * (vw + 200) + t * sp) % (vw + 200)) - 100, y = hash(i, 2, 31) * vh * 0.8;
       const tw = 0.45 + 0.55 * Math.abs(Math.sin(t * (0.8 + hash(i, 3, 31) * 2.2) + i)), big = hash(i, 4, 31) > 0.82;
-      ctx.globalAlpha = tw; ctx.fillStyle = hash(i, 5, 31) > 0.8 ? '#ffe9a8' : hash(i, 6, 31) > 0.7 ? '#b8d8ff' : '#ffffff';
+      ctx.globalAlpha = tw * amt; ctx.fillStyle = hash(i, 5, 31) > 0.8 ? '#ffe9a8' : hash(i, 6, 31) > 0.7 ? '#d4c4ff' : '#ffffff';
       const sz = big ? 4 : 2; ctx.fillRect(Math.round(x), Math.round(y), sz, sz);
-      if (big && tw > 0.85) { ctx.fillRect(Math.round(x) - 2, Math.round(y) + 1, 7, 1); ctx.fillRect(Math.round(x) + 1, Math.round(y) - 2, 1, 7); } // 반짝
+      if (big && tw > 0.85) { ctx.fillRect(Math.round(x) - 2, Math.round(y) + 1, 7, 1); ctx.fillRect(Math.round(x) + 1, Math.round(y) - 2, 1, 7); }
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = 1; if (amt < 1) return;
     const cyc = t % 7; // 별똥별 (7초에 한 번)
-    if (cyc < 0.9) { const k = cyc / 0.9, sx = vw * (0.2 + hash(Math.floor(t / 7), 1, 9) * 0.6), sy = vh * 0.1; const x = sx + k * 260, y = sy + k * 130; for (let j = 0; j < 14; j++) { ctx.globalAlpha = (1 - j / 14) * (1 - k); ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(x - j * 6), Math.round(y - j * 3), 3, 2); } ctx.globalAlpha = 1; }
-    // 큰 픽셀 달
-    const mx = vw - 210, my = Math.min(vh * 0.36, 300), R2 = 6;
+    if (cyc < 0.9) { const k = cyc / 0.9, sx = vw * (0.2 + hash(Math.floor(t / 7), 1, 9) * 0.6), sy = vh * 0.1; const x = sx + k * 260, y = sy + k * 130; for (let j = 0; j < 14; j++) { ctx.globalAlpha = (1 - j / 14) * (1 - k); ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(x - j * 6), Math.round(y - j * 3), 3, 3); } ctx.globalAlpha = 1; }
+    const mx = vw - 210, my = Math.min(vh * 0.3, 260), R2 = 6; // 큰 픽셀 달
     for (let yy = -8; yy <= 8; yy++) for (let xx = -8; xx <= 8; xx++) { const a = Math.hypot(xx, yy), b = Math.hypot(xx - 3, yy + 2); if (a <= 7.5 && b > 6) { ctx.fillStyle = a > 6.5 ? '#c9b860' : '#fff1a8'; ctx.fillRect(mx + xx * R2, my + yy * R2, R2, R2); } }
-    for (let i = 0; i < 6; i++) { const x = ((i * 337 + t * (5 + i)) % (vw + 400)) - 200, y = (i * 173) % Math.max(1, vh); cloudAt(ctx, i, x, y + 60, 128 + (i % 3) * 48, 0.25); }
   }
 
   // ------------------------------------------------------------ 플레이어와 가짜 참가자
@@ -4479,7 +4491,7 @@
   // ------------------------------------------------------------ 게임 시계 (서버) · 낮밤 · 멸망 D-day
   const SLOT_NAME = { morning: '아침 9시', lunch: '점심 1시', night: '밤 10시' };
   function setClock(c) {
-    if (!c) return;
+    if (!c) return; CLOCK_MANUAL = !!c.manual;
     const dayChanged = c.day !== DAY;
     if (c.weather && c.weather !== WEATHER) { WEATHER = c.weather; whereDirty = true; if (WEATHER === 'rain' && !TITLE.on) toast('🌧 비가 내리기 시작했어요 (30분쯤) · 물고기 입질이 빨라지고 귀한 물고기가 잘 잡혀요'); }
     DAY = c.day; SLOT = EDIT.on && EDIT.slot ? EDIT.slot : c.slot; DOOM_DAY = c.doomDay || 5; LAST_DAY = c.lastDay || 15; PHASE = phaseOf(DAY);

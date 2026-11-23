@@ -14,3 +14,5 @@
 - coin.png / coin_spin.png: 사용자가 준 코인 시트 (8×8, 8프레임). 출처 확인 필요
 - cloudsh_0~3.png: 사용자 zip의 픽셀 구름 모양 참고 그림(Shape Design)에서 구름 윤곽만 떼어 그림자로 사용 — 출처 확인 필요
 - workbench.png: 나무 가구 모음(SangrealPixel) 13번 — 출처 확인 필요
+- nightsky.jpg: 사용자 zip의 별하늘 사진 — 하늘 방 밤 배경 (출처 확인 필요)
+- 하늘 색 6가지: 사용자 하늘 색 시안(@aitommylove) 색만 참고
