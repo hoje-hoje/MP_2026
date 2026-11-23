@@ -1953,7 +1953,7 @@
     const M = MPRules.MAGIC[m.key]; if (!M) return;
     { const c = elHex(M.el), D = FACE_D[m.face | 0] || [0, 1]; // 빛: 날아가는 마법은 빛 동그라미가 같이 날아가고, 나머지는 잠깐 번쩍 (깨달음은 크고 길게)
       if (M.dir) MLIGHT.push({ x: m.x + D[0] * 20, y: m.y - 20 + D[1] * 10, vx: D[0] * 260, vy: D[1] * 260, t0: performance.now(), life: 0.95, stop: 0.7, move: 1, kind: 'spell', c });
-      lightFlash(m.x, m.y - 20, M.el === 'root' ? 'rootFlash' : 'flash', c, M.el === 'root' ? 2.6 : 0.7); }
+      lightFlash(m.x, m.y - 20, M.el === 'root' ? 'rootFlash' : 'flash', M.el === 'root' ? '#e6d2ff' : c, M.el === 'root' ? 4 : 0.7); }
     await loadPfxW(); if (!PFXW) return; const mod = await fxMod(M.fx); if (!mod) return; PFXW.fx[M.fx] = mod;
     const D = FACE_D[m.face | 0] || [0, 1], o = M.pal ? { palette: M.pal } : {}, who = m.id === myId ? player : others('ground', null).find((b) => b.id === m.id);
     { const far = M.dir ? 170 : (M.eff === 'boulder' || M.eff === 'quake' || M.eff === 'freeze' || M.eff === 'bridge' || M.eff === 'grow') ? 36 : 0; setTimeout(() => addMark(M, m.x + D[0] * far, m.y + 6 + D[1] * far * 0.6), M.dir ? 650 : 150); } // 바닥 자국
@@ -4439,7 +4439,7 @@
   function addLight(g, x, y, kind, o) { // 월드 좌표 빛 → 지금 변환으로 화면 좌표에 저장
     if (g !== ctx) return; const L = Object.assign({}, MPRules.LIGHT_OF[kind] || {}, o || {}); if (!L.r) return;
     const m = ctx.getTransform(), sc = Math.hypot(m.a, m.b) / dpr, fl = L.flick ? 1 + (Math.sin(performance.now() / 90 + x * 0.7) * 0.6 + Math.sin(performance.now() / 47 + y) * 0.4) * L.flick : 1;
-    LIGHTS.push({ x: (m.a * x + m.c * y + m.e) / dpr, y: (m.b * x + m.d * y + m.f) / dpr, r: L.r * sc * fl, a: L.a == null ? 1 : L.a, c: L.c });
+    LIGHTS.push({ x: (m.a * x + m.c * y + m.e) / dpr, y: (m.b * x + m.d * y + m.f) / dpr, r: L.r * sc * fl, a: L.a == null ? 1 : L.a, c: L.c, bloom: !!L.bloom });
   }
   const elHex = (el) => { const E = MPRules.MAGIC_EL.find((e) => e.id === el); return E ? E.hex : '#c8a2ff'; };
   function lightFlash(x, y, kind, c, life) { MLIGHT.push({ x, y, vx: 0, vy: 0, t0: performance.now(), life, kind, c }); }
@@ -4450,7 +4450,7 @@
     const now = performance.now();
     for (let i = MLIGHT.length - 1; i >= 0; i--) { const L = MLIGHT[i], age = (now - L.t0) / 1000; if (age > L.life) { MLIGHT.splice(i, 1); continue; }
       const f = L.move ? (age < L.life - 0.25 ? 1 : (L.life - age) / 0.25) : Math.min(1, age * 8) * (1 - age / L.life) ** 0.7;
-      addLight(ctx, L.x + L.vx * Math.min(age, L.stop || 9), L.y + L.vy * Math.min(age, L.stop || 9), L.kind, { c: L.c, a: (MPRules.LIGHT_OF[L.kind].a || 1) * f }); }
+      addLight(ctx, L.x + L.vx * Math.min(age, L.stop || 9), L.y + L.vy * Math.min(age, L.stop || 9), L.kind, { c: L.c, a: (MPRules.LIGHT_OF[L.kind].a || 1) * f, bloom: L.kind === 'rootFlash' }); }
     if (player && !TITLE.on) { const px = player.x, py = player.y - 24;
       addLight(ctx, px, py, 'self');
       if (BUFF.light > now) addLight(ctx, px, py, 'lightBuff');
@@ -4459,9 +4459,9 @@
     ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (h >= 6 && h < 9.5) { ctx.fillStyle = `rgba(255,190,110,${0.08 * Math.sin((h - 6) / 3.5 * Math.PI)})`; ctx.fillRect(0, 0, vw, vh); } // 아침: 살짝 따뜻하게
     if (d > 0.01) {
-      ctx.globalAlpha = Math.min(1, d); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = '#7d86c4'; ctx.fillRect(0, 0, vw, vh); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; // 푸른 밤빛
+      ctx.globalAlpha = Math.min(1, d); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = '#9aa2d8'; ctx.fillRect(0, 0, vw, vh); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; // 푸른 밤빛
       const S = 0.5, W = Math.ceil(vw * S), H = Math.ceil(vh * S); if (LCV.width !== W || LCV.height !== H) { LCV.width = W; LCV.height = H; }
-      LG.globalCompositeOperation = 'source-over'; LG.clearRect(0, 0, W, H); LG.fillStyle = `rgba(5,6,22,${0.86 * d})`; LG.fillRect(0, 0, W, H);
+      LG.globalCompositeOperation = 'source-over'; LG.clearRect(0, 0, W, H); LG.fillStyle = `rgba(8,10,34,${0.6 * d})`; LG.fillRect(0, 0, W, H);
       LG.globalCompositeOperation = 'destination-out';
       for (const L of LIGHTS) { const x = L.x * S, y = L.y * S, r = L.r * S; if (x < -r || y < -r || x > W + r || y > H + r) continue;
         const gr = LG.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(0,0,0,${L.a})`); gr.addColorStop(0.5, `rgba(0,0,0,${L.a * 0.88})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); LG.fillStyle = gr; LG.fillRect(x - r, y - r, r * 2, r * 2); }
@@ -4472,6 +4472,10 @@
         gr.addColorStop(0, `rgba(${rr},${gg},${bb},${0.3 * d * L.a})`); gr.addColorStop(1, `rgba(${rr},${gg},${bb},0)`); ctx.fillStyle = gr; ctx.fillRect(L.x - r, L.y - r, r * 2, r * 2); }
       ctx.globalCompositeOperation = 'source-over';
     }
+    ctx.globalCompositeOperation = 'lighter'; // 깨달음 마법: 낮에도 환하게 번쩍
+    for (const L of LIGHTS) { if (!L.bloom) continue; const gr = ctx.createRadialGradient(L.x, L.y, 0, L.x, L.y, L.r);
+      gr.addColorStop(0, `rgba(235,215,255,${0.55 * L.a})`); gr.addColorStop(0.4, `rgba(200,170,255,${0.3 * L.a})`); gr.addColorStop(1, 'rgba(180,140,255,0)'); ctx.fillStyle = gr; ctx.fillRect(L.x - L.r, L.y - L.r, L.r * 2, L.r * 2); }
+    ctx.globalCompositeOperation = 'source-over';
     ctx.restore(); if (testMode) window._lights = LIGHTS.map((L) => [Math.round(L.x), Math.round(L.y), Math.round(L.r), L.a]); LIGHTS.length = 0;
   }
   // ---------------------------------------------------------- 코드로 그리는 도트 불꽃 (pixelfx 느낌)
@@ -4500,12 +4504,16 @@
       pxFire(g, x, y - 6, 4.2, 13, p, t, seed); addLight(g, x, y - 18, 'd_campfire'); }
     else { g.fillStyle = '#ff5a2a'; if (Math.sin(t * 2 + seed) > 0.6) g.fillRect(x - 1, y - 6, 2, 2); pxSmoke(g, x, y - 8, p, t, seed); }
   }
-  function drawTorch(g, x, y, seed) {
+  function drawTorch(g, x, y, seed) { // 나무 막대가 위로 이어져 끝이 타는 횃불 (끝은 굵어지고 그을림)
     const t = performance.now() / 1000;
-    g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, x, y, 8, 3); g.fillStyle = '#2b2340'; g.fillRect(x - 3, y - 34, 6, 34); g.fillStyle = '#8a5a2b'; g.fillRect(x - 2, y - 32, 4, 32); g.fillStyle = '#b07a44'; g.fillRect(x - 2, y - 32, 1, 32);
-    g.fillStyle = '#2b2340'; g.fillRect(x - 6, y - 40, 12, 8); g.fillStyle = '#6e6c78'; g.fillRect(x - 5, y - 39, 10, 6); g.fillStyle = '#9b98a6'; g.fillRect(x - 5, y - 39, 10, 2);
-    pxFire(g, x, y - 39, 2, 7, 3, t, seed); addLight(g, x, y - 46, 'd_torch');
+    g.fillStyle = 'rgba(0,0,0,0.2)'; ell(g, x, y, 8, 3);
+    g.fillStyle = '#2b2340'; g.fillRect(x - 3, y - 36, 6, 36); g.fillRect(x - 4, y - 42, 8, 10);
+    g.fillStyle = '#8a5a2b'; g.fillRect(x - 2, y - 34, 4, 34); g.fillStyle = '#b07a44'; g.fillRect(x - 2, y - 34, 1, 34);
+    g.fillStyle = '#6b4220'; g.fillRect(x - 3, y - 41, 6, 8); g.fillStyle = '#8a5a2b'; g.fillRect(x - 3, y - 41, 2, 8); // 굵어진 머리
+    g.fillStyle = '#3a2418'; g.fillRect(x - 3, y - 41, 6, 2); g.fillStyle = '#ff7a2a'; g.fillRect(x - 2, y - 41, 4, 1); // 그을린 끝 + 불씨
+    pxFire(g, x, y - 40, 2.2, 8, 3, t, seed); addLight(g, x, y - 48, 'd_torch');
   }
+
 
   function drawGround(t) {
 

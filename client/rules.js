@@ -911,7 +911,7 @@
     d_lantern: { r: 150, a: 0.9, c: '#ffe7a0', flick: 0.02 }, d_crystal: { r: 95, a: 0.6, c: '#9fd8ff', flick: 0.03 },
     bonfire: { r: 280, a: 1, c: '#ff9a3a', flick: 0.08 }, candles: { r: 120, a: 0.8, c: '#ffd27a', flick: 0.06 },
     torchBag: { r: 150, a: 0.9, c: '#ffb050', flick: 0.1 }, self: { r: 75, a: 0.45, c: null }, lightBuff: { r: 240, a: 1, c: '#fff0b0', flick: 0.03 },
-    spell: { r: 130, a: 0.9 }, flash: { r: 150, a: 0.8 }, rootFlash: { r: 300, a: 1 },
+    spell: { r: 130, a: 0.9 }, flash: { r: 150, a: 0.8 }, rootFlash: { r: 520, a: 1 },
   };
   return { LIGHT_OF, FISH_W0, applyTune, magicCost, fishOdds, applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
