@@ -23,7 +23,7 @@
   // 날짜: 온라인이면 서버의 게임 시계(setClock), 미리보기면 주소 끝 #day1~#day15
   let DAY = (() => { const m = /^#day(\d{1,2})$/.exec(location.hash); return Math.max(1, Math.min(15, m ? +m[1] : 1)); })();
   const WAVE_DAY = { 1: 6, 2: 8, 3: 10, 4: 12, 5: 14 };   // 균열 웨이브가 무너지는 날 (미리보기용)
-  let CLOCK_MANUAL = false, ROOM_NIGHT = false; let SLOT = 'lunch', DOOM_DAY = 5, LAST_DAY = 15, RIFT_NEXT = null;
+  let CLOCK_MANUAL = false, ROOM_NIGHT = false, MY_ADMIN = false; let SLOT = 'lunch', DOOM_DAY = 5, LAST_DAY = 15, RIFT_NEXT = null;
   let DOOM = DAY >= 5;                                     // 멸망 선포 뒤
   const phaseOf = (d) => d <= 2 ? '건국기' : d <= 4 ? '확장기' : d <= 14 ? '멸망기' : '최종 결전';
   let PHASE = phaseOf(DAY);
@@ -425,17 +425,41 @@
     const set = k === 'treeA' || k === 'treeB' ? WT.big : WT.mid, T2 = set[Math.floor(hash(tx, ty, 13) * set.length)], im = T2.im, w = im.width * 2, h = im.height * 2;
     const [sk, len, al] = sunShadow();
     g.save(); g.globalAlpha = al; g.translate(Math.round(X), Math.round(Y)); g.transform(1, 0, sk, len, 0, 0); g.scale(1, -1); g.drawImage(T2.sil, -w / 2, -h, w, h); g.restore();
+    const ti = ty * W + tx, gt = GROW.get(ti); let gsc = 1; if (gt != null) { const gu = (performance.now() - gt) / 900; if (gu >= 1) GROW.delete(ti); else { gsc = 0.15 + 0.85 * (1 - Math.pow(1 - gu, 3)); g.save(); g.translate(Math.round(X), Math.round(Y)); g.scale(gsc, gsc); g.translate(-Math.round(X), -Math.round(Y));
+      for (let n = 0; n < 10; n++) { g.fillStyle = n % 2 ? '#9cf06a' : '#fff8a0'; g.globalAlpha = 1 - gu; g.fillRect(Math.round(X + (hash(n, ti, 6) - 0.5) * w), Math.round(Y - hash(n, ti, 7) * h), 3, 3); } g.globalAlpha = 1; } } // 다시 자라는 나무: 작게 시작해 쑥 커짐
     const sw = Math.sin(t * 1.4 + tx * 0.7 + ty * 1.3) * 3, base = Math.round(im.height * 0.6), pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
     for (let sy = 0; sy < im.height; sy += 2) { const k = sy >= base ? 0 : (base - sy) / base, o = Math.round(sw * k * k) * 2; /* 2칸씩 잘게: 위로 갈수록 조금씩 더 휘어서 이음매 없음, 줄기는 고정 */
       g.drawImage(im, 0, sy, im.width, Math.min(2, im.height - sy), Math.round(X - w / 2) + o, Math.round(Y - h) + sy * 2, w, Math.min(2, im.height - sy) * 2); }
-    g.imageSmoothingEnabled = pv;
+    { const fu = FROST.get(ti); if (fu != null) { if (performance.now() > fu) FROST.delete(ti); else { if (!T2.frost) { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const fg = c.getContext('2d'); fg.drawImage(im, 0, 0); fg.globalCompositeOperation = 'source-atop'; fg.fillStyle = 'rgba(225,245,255,0.62)'; fg.fillRect(0, 0, c.width, c.height); T2.frost = c; } // 서리: 하얗게 덮이고 끝날 무렵 서서히 녹음
+      g.globalAlpha = Math.min(1, (fu - performance.now()) / 2500); g.drawImage(T2.frost, Math.round(X - w / 2), Math.round(Y - h), w, h); g.globalAlpha = 1; } } }
+    g.imageSmoothingEnabled = pv; if (gsc !== 1) g.restore();
   }
   // 나무 쓰러짐: 베인 나무가 플레이어 반대쪽으로 점점 빠르게 넘어가 → 쿵(살짝 튐 + 나뭇잎·나무 조각·먼지) → 스르르 사라짐
   const FALLING = [];
-  function treeFall(i) { const tx = i % W, ty = Math.floor(i / W), k = treeAt(tx, ty); if (!k) return;
-    const x = tx * TILE + 16, y = ty * TILE + 30, dir = x >= player.x ? 1 : -1; FALLING.push({ i, k, tx, ty, x, y, dir, t0: performance.now(), fx: null }); if (FALLING.length > 12) FALLING.shift(); }
+  const FROST = new Map(), GROW = new Map(); // 서리 앉은 나무 (끝 시각) · 다시 자라는 나무 (시작 시각)
+  function treeFall(i, how) { const tx = i % W, ty = Math.floor(i / W), k = treeAt(tx, ty); if (!k) return;
+    const x = tx * TILE + 16, y = ty * TILE + 30, dir = x >= player.x ? 1 : -1; FALLING.push({ i, k, tx, ty, x, y, dir, how: how || 'chop', t0: performance.now(), fx: null }); FROST.delete(i); if (FALLING.length > 12) FALLING.shift(); }
+  function drawGoneTree(g, f, X, Y, t) { // 불·바람·어둠으로 사라지는 나무
+    const set = f.k === 'treeA' || f.k === 'treeB' ? WT.big : WT.mid, T2 = worldTrees() ? set[Math.floor(hash(f.tx, f.ty, 13) * set.length)] : null, im = T2 && T2.im, w = im ? im.width * 2 : 64, h = im ? im.height * 2 : 90, pv = g.imageSmoothingEnabled;
+    const body = (alpha, sx, sy, rot, dark) => { if (!im) return; g.save(); g.globalAlpha = alpha; g.translate(Math.round(X), Math.round(Y)); g.rotate(rot); g.scale(sx, sy); g.imageSmoothingEnabled = false; g.drawImage(im, -w / 2, -h, w, h);
+      if (dark > 0) { g.globalAlpha = alpha * dark; g.globalCompositeOperation = 'source-atop'; g.drawImage(T2.sil, -w / 2, -h, w, h); } g.restore(); g.imageSmoothingEnabled = pv; };
+    const u = Math.min(1, t / 1600);
+    if (f.how === 'burn') { body(1 - Math.max(0, u - 0.55) / 0.45, 1 - u * 0.35, 1 - u * 0.6, 0, Math.min(1, u * 1.6)); // 검게 타며 줄어듦
+      for (let n = 0; n < 26; n++) { const ph = (n * 0.137 + t / 650) % 1, px = X + (hash(n, f.i, 3) - 0.5) * w * 0.8 * (1 - u * 0.4), py = Y - ph * h * (1 - u * 0.5), r = (1 - ph) * 5 + 2;
+        g.globalAlpha = (1 - ph) * (1 - Math.max(0, u - 0.7) / 0.3); g.fillStyle = ph < 0.3 ? '#fff2a0' : ph < 0.6 ? '#ff9a2a' : '#c8401a'; g.fillRect(Math.round(px - r / 2), Math.round(py - r / 2), Math.ceil(r), Math.ceil(r)); }
+      if (u > 0.5) { g.globalAlpha = Math.min(1, (u - 0.5) * 3) * (1 - Math.max(0, u - 0.85) / 0.15); g.fillStyle = '#3a3330'; ell(g, X, Y - 3, 16, 5); g.fillStyle = '#ff7a2a'; g.fillRect(X - 4, Y - 5, 2, 2); g.fillRect(X + 5, Y - 4, 2, 2); } // 재
+      g.globalAlpha = 1; return; }
+    if (f.how === 'wind') { const e = u * u; body(1 - u, 1 - u * 0.5, 1 - u * 0.5, f.dir * e * 6, 0); g.save(); g.translate(f.dir * e * 120, -e * 160); g.restore(); // 빙글 돌며 날아감
+      for (let n = 0; n < 14; n++) { const a = n / 14 * 6.28 + t / 180, r = 18 + u * 50; g.globalAlpha = (1 - u) * 0.8; g.fillStyle = n % 2 ? '#8ccf52' : '#e8f2e0'; g.fillRect(Math.round(X + Math.cos(a) * r), Math.round(Y - h * 0.4 + Math.sin(a) * r * 0.5 - u * 60), 3, 2); } g.globalAlpha = 1; return; }
+    if (f.how === 'break') { if (!im) return; const step = 4; g.save(); g.imageSmoothingEnabled = false; // 보랏빛 조각으로 흩어짐
+      for (let sy2 = 0; sy2 < im.height; sy2 += step) for (let sx2 = 0; sx2 < im.width; sx2 += step) { const r = hash(sx2, sy2, f.i), lu = Math.max(0, (u - r * 0.5) / 0.5); if (lu >= 1) continue;
+        g.globalAlpha = 1 - lu; g.drawImage(im, sx2, sy2, step, step, Math.round(X - w / 2 + sx2 * 2 + (r - 0.5) * 40 * lu), Math.round(Y - h + sy2 * 2 - lu * 50 * (0.5 + r)), step * 2, step * 2); }
+      g.globalAlpha = 0.6 * (1 - u); g.fillStyle = '#b57bff'; for (let n = 0; n < 12; n++) g.fillRect(Math.round(X + (hash(n, 9, f.i) - 0.5) * w), Math.round(Y - hash(n, 8, f.i) * h - u * 40), 3, 3); g.restore(); g.globalAlpha = 1; return; }
+  }
   function drawFallingTree(g, f, X, Y, now) {
     const t = now - f.t0; if (t > 1700) return false;
+    if (f.how === 'burn' || f.how === 'wind' || f.how === 'break') { drawGoneTree(g, f, X, Y, t); return true; }
+    if (f.how === 'bolt' && t < 260) { g.save(); g.globalAlpha = 1 - t / 260; g.strokeStyle = '#fff6b0'; g.lineWidth = 4; g.beginPath(); let bx = X, by = Y - 400; g.moveTo(bx, by); for (let n = 0; n < 8; n++) { bx = X + (hash(n, f.i, 5) - 0.5) * 40; by += 50; g.lineTo(bx, by); } g.stroke(); g.lineWidth = 1.5; g.strokeStyle = '#ffffff'; g.stroke(); g.restore(); } // 번개가 내리꽂힘
     let ang = 0, a = 1;
     if (t < 140) ang = Math.sin(t / 140 * Math.PI * 3) * 0.035 * f.dir; // 금 가는 떨림
     else if (t < 860) { const u = (t - 140) / 720; ang = f.dir * Math.PI / 2 * Math.pow(u, 2.3); }
@@ -1889,7 +1913,7 @@
   function openSkills() { const f = $('skillFrame'); if (!f.src) f.src = '/skilltree?game=1'; else try { f.contentWindow.MP_REFRESH && f.contentWindow.MP_REFRESH(); } catch (e) { /* 아직 로딩 */ } $('skillBox').hidden = false; }
   function closeSkills() { $('skillBox').hidden = true; try { $('skillFrame').blur(); document.activeElement && document.activeElement.blur && document.activeElement.blur(); window.focus(); } catch (e) { /* 무시 */ } } // 창을 닫으면 키보드가 다시 게임으로
   window.MP_SKILL_CLOSE = () => closeSkills();
-  function castSkill(slot) { if (document.body.classList.contains('padEdit')) return; if (!netOn || player.scene !== 'ground' || amDead() || TITLE.on) return; const key = MY_SLOTS[slot]; if (!key) { toast('마법 칸이 비었어요 · 마법(K)에서 배운 마법을 넣어요'); return; } if (performance.now() < SKCD[slot]) return; { const need = MPRules.MAGIC_TIER[MPRules.MAGIC[key].tier].mp; if (manaNow() < need) { toast(`마나가 모자라요 (${need} 필요)`); return; } } ws.send(JSON.stringify({ t: 'cast', slot, face: player.face | 0 })); }
+  function castSkill(slot) { if (document.body.classList.contains('padEdit')) return; if (!netOn || player.scene !== 'ground' || amDead() || TITLE.on) return; const key = MY_SLOTS[slot]; if (!key) { toast('마법 칸이 비었어요 · 마법(K)에서 배운 마법을 넣어요'); return; } if (performance.now() < SKCD[slot]) return; { const need = MPRules.MAGIC_TIER[MPRules.MAGIC[key].tier].mp; if (!MY_ADMIN && manaNow() < need) { toast(`마나가 모자라요 (${need} 필요)`); return; } } ws.send(JSON.stringify({ t: 'cast', slot, face: player.face | 0 })); }
   const skIcoCache = {};
   async function skillIcon(cv, key) { const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); if (!key) return; const M = MPRules.MAGIC[key]; await loadPfxW(); if (!PFXW) return; const mod = await fxMod(M.fx); if (!mod) return;
     if (!skIcoCache[key]) { const m = mod.meta || {}, sz = m.size || [64, 64], o = m.origin || [sz[0] / 2, sz[1] / 2], fr = PFXW.core.createFrame(sz[0], sz[1]), f = PFXW.core.createFx(mod, Object.assign({ x: o[0], y: o[1] }, M.pal ? { palette: M.pal } : {})); f.update(Math.min(0.7, (m.duration || 1) * 0.5)); f.draw(fr); const im = new ImageData(sz[0], sz[1]); PFXW.core.composite(fr, im.data, null); const t = document.createElement('canvas'); t.width = sz[0]; t.height = sz[1]; t.getContext('2d').putImageData(im, 0, 0); skIcoCache[key] = t; }
@@ -3259,7 +3283,7 @@
   function onNet(m) {
     switch (m.t) {
       case 'welcome': {
-        myId = m.id; netOn = true; store('mp2026.token', m.token);
+        myId = m.id; netOn = true; store('mp2026.token', m.token); MY_ADMIN = !!m.admin; if (MY_ADMIN) setTimeout(() => toast('🛠 관리자 계정이에요 · 마법·도구 전부, 마나·쿨타임·재료 제한 없음'), 1500);
         MY_SKILLS = m.skills || {}; MY_SLOTS = m.slots || [null, null]; setTimeout(renderSkillPad, 500); if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); }
         if (m.picked) { PICKED.clear(); const t0 = Date.now(); for (const i of m.picked) PICKED.set(i, t0); } // 뜯긴 풀·꽃
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
@@ -3329,7 +3353,9 @@
       case 'redeem': $('couponMsg').textContent = m.text; if (m.ok) $('couponIn').value = ''; break;
       case 'tile': { const prev = TILES[m.i]; if (m.e && prev && m.e.hp != null && m.e.hp !== (prev.hp ?? (prev.max || MPRules.NUM.buildHp))) { HPSEEN.set(m.i, performance.now()); SND.play(m.e.hp < (prev.hp ?? 1e9) ? 'hit' : 'place'); } else if (m.e && m.e.n === MY_NID && !prev) SND.play('place'); const wasW = prev && (prev.k === 'water' || prev.k === 'bridge'), isW = m.e && (m.e.k === 'water' || m.e.k === 'bridge'); if (m.e) TILES[m.i] = m.e; else delete TILES[m.i]; dirtyTile(m.i); if (wasW || isW) { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx || dy) dirtyTile(m.i + dy * W + dx); if ((m.e || prev).k === 'bridge') for (let k = 3; k <= 16; k++) { dirtyTile(m.i + k); dirtyTile(m.i - k); dirtyTile(m.i + k * W); dirtyTile(m.i - k * W); } } break; } // 수로가 바뀌면 이웃 밭·수로 다시 그림
       case 'trap': if (m.on) MY_TRAPS.add(m.i); else MY_TRAPS.delete(m.i); break;
-      case 'chopped': treeFall(m.i); noTree[m.i] = 1; dirtyTile(m.i); SND.play('chop'); break; // 쓰러지는 그림은 나무가 사라지기 전에 기억
+      case 'chopped': treeFall(m.i, m.how); noTree[m.i] = 1; dirtyTile(m.i); SND.play(m.how === 'burn' ? 'boom' : m.how === 'bolt' ? 'hit' : 'chop'); break;
+      case 'frost': for (const i of m.list || []) FROST.set(i, performance.now() + Math.max(0, (m.until || 0) - Date.now())); break; // 얼음 마법: 나무에 서리
+      case 'treeBack': for (const i of m.list || []) { noTree[i] = 0; dirtyTile(i); GROW.set(i, performance.now()); } break; // 자연 마법: 다시 자람 // 쓰러지는 그림은 나무가 사라지기 전에 기억
       case 'picked': PICKED.set(m.i, Date.now()); dirtyTile(m.i); SND.play('place'); break;
       case 'dug': GCLEAR.add(m.i); invalidateChunks(); mapSig = ''; SND.play('chop'); break;
       case 'weapons': MY_WEAPONS = m.weapons || {}; MY_WEAPON = m.weapon || null; swapIcon.w = null; if (m.pcoin != null) { MY_PCOIN = m.pcoin; renderInv(); } if (m.text) toast(m.text); SND.play('coin'); if (!$('shopBox').hidden) renderShop(); break;
@@ -3353,6 +3379,7 @@
       case 'skills': MY_SKILLS = m.skills || {}; MY_SLOTS = m.slots || [null, null]; renderSkillPad(); if (m.text) { toast(m.text); SND.play('chargeFull'); } try { const f = $('skillFrame').contentWindow; if (f && f.MP_REFRESH) f.MP_REFRESH(); } catch (e) { /* 창이 아직 없음 */ } break;
       case 'cast': playCast(m); break;
       case 'stats': PF.stats = m.stats || {}; if (!$('profile').hidden) renderProfile(); break;
+      case 'admin': MY_ADMIN = !!m.on; break;
       case 'castOk': { if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); } if (m.cd) { SKCD[m.slot] = performance.now() + m.cd * 1000; SKCDLEN[m.slot] = m.cd * 1000; } if (m.text) toast(m.text); break; }
       case 'bag': MY_BAG = m.bag || {}; if (!$('profile').hidden) renderProfile(); if (!$('bagBox').hidden) openBag(); if (!$('shopBox').hidden) renderShop(); if (CRAFT.after) { cfFill(CRAFT.after); CRAFT.after = null; } if (!$('craftBox').hidden) openCraft(); break;
       case 'tradeReq': $('trqText').textContent = `${m.name}님이 거래를 신청했어요`; $('tradeReq').hidden = false; $('tradeReq').dataset.from = m.from; SND.play('ok'); clearTimeout(window.__trq); window.__trq = setTimeout(() => { $('tradeReq').hidden = true; }, 25000); break;

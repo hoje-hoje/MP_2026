@@ -30,7 +30,7 @@ const ADMIN_KEY = process.env.ADMIN_KEY || '';
 const BOOT_AT = Date.now();
 
 // ------------------------------------------------------------ 정적 파일
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 const STATIC = {
   '/': path.join(ROOT, 'client', 'index.html'),
   '/index.html': path.join(ROOT, 'client', 'index.html'),
@@ -145,7 +145,7 @@ const server = http.createServer((req, res) => {
   let file = STATIC[url.pathname];
   if (!file && url.pathname.startsWith('/assets/')) {
     const f = path.normalize(path.join(ASSET_DIR, decodeURIComponent(url.pathname.slice(8))));
-    if (f.startsWith(ASSET_DIR + path.sep) && (/\.(png|json|woff2)$/.test(f) || (/\.js$/.test(f) && f.includes(path.sep + "pixelfx" + path.sep))) && fs.existsSync(f)) file = f;
+    if (f.startsWith(ASSET_DIR + path.sep) && (/\.(png|jpg|json|woff2)$/.test(f) || (/\.js$/.test(f) && f.includes(path.sep + "pixelfx" + path.sep))) && fs.existsSync(f)) file = f;
   }
   if (!file) { res.writeHead(404); return res.end('not found'); }
   try {
@@ -219,6 +219,26 @@ setInterval(() => { // 부활 · 체력 회복 · 떨어진 물건 사라짐
 const LOOT_K = ['wood', 'stone', 'ore']; // 훔치기·체포: 나라 저장소 재료 (나라 코인 없음)
 function lootText(c, sign = '') { return LOOT_K.filter((k) => c[k]).map((k) => `${MPRules.MAT_NAME[k]} ${sign}${c[k]}`).join(', ') || '없음'; }
 function giveLoot(to, c) { for (const k of LOOT_K) to[k] = (to[k] || 0) + (c[k] | 0); }
+// 마법 ↔ 나무: 속성마다 나무에 다른 일 (불=태움 · 번개=쪼갬 · 바람=넘어뜨림 · 어둠=분해 · 얼음=서리 · 자연=다시 자라게)
+function magicTrees(s, M, tx, ty, D) {
+  const el = M.el, tier = M.tier, alive = (x, y) => treeHere(x, y) && !world.s.chopped[tileIdx(x, y)], hit = [], seen = new Set();
+  const push = (x, y) => { const i = tileIdx(x, y); if (!seen.has(i)) { seen.add(i); hit.push([x, y]); } };
+  const area = (cx, cy, r) => { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r + 0.5 && alive(cx + dx, cy + dy)) push(cx + dx, cy + dy); };
+  const line = (len, w = 0) => { for (let k = 1; k <= len; k++) { const x = tx + D[0] * k, y = ty + D[1] * k; for (let o = -w; o <= w; o++) { const xx = x + (D[0] ? 0 : o), yy = y + (D[0] ? o : 0); if (alive(xx, yy)) { push(xx, yy); return; } } } };
+  const near = (r, n) => { const c = []; for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (alive(tx + dx, ty + dy)) c.push([tx + dx, ty + dy, dx * dx + dy * dy]); c.sort((a, b) => a[2] - b[2]); c.slice(0, n).forEach(([x, y]) => push(x, y)); };
+  let how = null, give = 1;
+  if (el === 'fire') { how = 'burn'; if (tier === 't1') line(2); else if (tier === 'a') line(7, 1); else if (tier === 'b') area(tx, ty, 2); else area(tx + D[0] * 3, ty + D[1] * 3, 3); }
+  else if (el === 'bolt' && tier !== 'b') { how = 'bolt'; give = 2; near(4, tier === 't1' ? 1 : tier === 'a' ? 3 : 6); }
+  else if (el === 'wind' && (tier === 'a' || tier === 'ult')) { how = 'wind'; if (tier === 'a') line(4, 1); else area(tx, ty, 3); }
+  else if (el === 'dark' && tier === 'b') { how = 'break'; give = 2; line(3, 1); }
+  else if (el === 'ice') { const fr = []; area(tx + D[0] * 2, ty + D[1] * 2, tier === 'ult' ? 4 : 2); for (const [x, y] of hit) fr.push(tileIdx(x, y)); if (fr.length) { const msg = JSON.stringify({ t: 'frost', list: fr, until: now() + 30e3 }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); } return fr.length ? `❄ 나무 ${fr.length}그루에 서리가 앉았어요` : ''; }
+  else if (el === 'nature' && (tier === 't1' || tier === 'ult')) { const r = tier === 'ult' ? 4 : 2, back = []; for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { const x = tx + D[0] * 2 + dx, y = ty + D[1] * 2 + dy, i = tileIdx(x, y); if (world.s.chopped[i] && treeHere(x, y)) { const blocked = [...online.values()].some((o) => o.scene === 'ground' && Math.floor(o.x / 32) === x && Math.floor(o.y / 32) === y); if (!blocked) { delete world.s.chopped[i]; back.push(i); } } }
+    if (back.length) { dirty = true; const msg = JSON.stringify({ t: 'treeBack', list: back }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return `🌱 베인 나무 ${back.length}그루가 다시 자랐어요`; } return ''; }
+  if (!how || !hit.length) return '';
+  for (const [x, y] of hit) { const i = tileIdx(x, y); world.s.chopped[i] = 1; const msg = JSON.stringify({ t: 'chopped', i, how, by: s.id }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); }
+  dirty = true; addMat(s, 'm_wood', hit.length * give);
+  return `${{ burn: '🔥 나무', bolt: '⚡ 나무', wind: '🌪 나무', break: '🌑 나무' }[how]} ${hit.length}그루 → 목재 +${hit.length * give}`;
+}
 function addMat(s, k, v) { s.acc.bag = s.acc.bag || {}; s.acc.bag[k] = (s.acc.bag[k] || 0) + v; send(s.ws, { t: 'bag', bag: s.acc.bag }); } // 채집 재료 → 내 가방
 function tradables(acc) { const out = []; for (const [k, v] of Object.entries(acc.bag || {})) if (v > 0) out.push({ k, n: v }); for (const k of Object.keys(acc.hats || {})) out.push({ k: 'hat:' + k, n: 1 }); for (const k of Object.keys(acc.tools || {})) out.push({ k: 'tool:' + k, n: 1 }); return out; }
 function okOffer(acc, items) { const need = {}; for (const q of items) need[q.k] = (need[q.k] || 0) + q.n; return Object.entries(need).every(([k, n]) => k.startsWith('hat:') ? n === 1 && (acc.hats || {})[k.slice(4)] : k.startsWith('tool:') ? n === 1 && (acc.tools || {})[k.slice(5)] : (BUILD_BY[k] && BUILD_BY[k].fish && (acc.bag || {})[k] >= n)); }
@@ -435,7 +455,7 @@ wss.on('connection', (ws) => {
       if (nat) { world.refreshActions(nat, actionDayKey()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       if (!acc.rootGiven) { acc.rootGiven = 1; acc.skills = acc.skills || {}; acc.bag = acc.bag || {}; if (Object.keys(acc.skills).length) acc.skills.root = 1; else acc.bag.ms_root_0 = (acc.bag.ms_root_0 | 0) + 1; dirty = true; } // 처음 마법석 1개 (이미 마법을 배운 사람은 마력 깨우기를 배운 걸로)
       send(ws, {
-        t: 'welcome', bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
+        t: 'welcome', admin: !!acc.admin, bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander.map(({ token, ...r }) => r), board: boardPub(),
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
         frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], picked: Object.entries(world.s.picked || {}).filter(([, t]) => now() - t < NUM.regrowMin * 60e3).map(([i]) => +i), job: acc.job || null, tools: acc.tools || {}, skills: acc.skills || {}, slots: acc.slots || [null, null], mana: Math.min(MPRules.MANA.max, (acc.mana ?? MPRules.MANA.max) + (Date.now() - (acc.manaAt || 0)) / 1000 * MPRules.MANA.rate), pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), dug: Object.keys(world.s.dug || {}).map(Number), weapons: acc.weapons || {}, weapon: acc.weapon || null, startDay: gameClock().day, traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
@@ -945,8 +965,8 @@ wss.on('connection', (ws) => {
         const key = String(m.key || ''), M = MPRules.MAGIC[key]; if (!M) return; s.acc.skills = s.acc.skills || {};
         const why = MPRules.canLearn(s.acc.skills, key); if (why) return send(ws, { t: 'err', text: why });
         const sk = MPRules.stoneKey(M.el, MPRules.MAGIC_TIER[M.tier].n); s.acc.bag = s.acc.bag || {};
-        if (!(s.acc.bag[sk] > 0)) return send(ws, { t: 'err', text: `${MPRules.stoneName(M.el, MPRules.MAGIC_TIER[M.tier].n)}이(가) 필요해요` });
-        s.acc.bag[sk] -= 1; if (!s.acc.bag[sk]) delete s.acc.bag[sk]; s.acc.skills[key] = (s.acc.skills[key] | 0) + 1; dirty = true;
+        if (!s.acc.admin && !(s.acc.bag[sk] > 0)) return send(ws, { t: 'err', text: `${MPRules.stoneName(M.el, MPRules.MAGIC_TIER[M.tier].n)}이(가) 필요해요` });
+        if (!s.acc.admin) { s.acc.bag[sk] -= 1; if (!s.acc.bag[sk]) delete s.acc.bag[sk]; } s.acc.skills[key] = (s.acc.skills[key] | 0) + 1; dirty = true;
         s.acc.slots = s.acc.slots || [null, null]; if (!s.acc.slots.includes(key)) { const i = s.acc.slots.indexOf(null); if (i >= 0) s.acc.slots[i] = key; } // 빈 칸이 있으면 바로 걸어 둠
         send(ws, { t: 'bag', bag: s.acc.bag }); send(ws, { t: 'skills', skills: s.acc.skills, slots: s.acc.slots, text: key === 'root' ? '✨ 마력이 깨어났어요! R 키(패드는 오른쪽 아래 동그라미)를 눌러 첫 마법을 써 보세요' : `✨ ${M.name}${s.acc.skills[key] > 1 ? ` ${s.acc.skills[key]}단계로 강화` : '을(를) 배웠어요'}!` }); break;
       }
@@ -960,8 +980,9 @@ wss.on('connection', (ws) => {
         const slots = s.acc.slots || [], key = slots[m.slot === 1 ? 1 : 0], M = key && MPRules.MAGIC[key]; if (!M) return;
         const lv = (s.acc.skills || {})[key] | 0; if (!lv) return; const T = MPRules.MAGIC_TIER[M.tier]; s.acc.cdAt = s.acc.cdAt || {};
         const manaNow = () => Math.min(MPRules.MANA.max, (s.acc.mana ?? MPRules.MANA.max) + (now() - (s.acc.manaAt || 0)) / 1000 * MPRules.MANA.rate);
-        if (manaNow() < T.mp) return send(ws, { t: 'err', text: `마나가 모자라요 (${T.mp} 필요)` });
-        if (T.cd) { if (now() - (s.acc.cdAt[key] || 0) < T.cd * 1000 - 300) return; s.acc.cdAt[key] = now(); }
+        const ADM = !!s.acc.admin; // 관리자 계정: 마나·쿨타임·하루 1번 제한 없음
+        if (!ADM && manaNow() < T.mp) return send(ws, { t: 'err', text: `마나가 모자라요 (${T.mp} 필요)` });
+        if (ADM) { /* 제한 없음 */ } else if (T.cd) { if (now() - (s.acc.cdAt[key] || 0) < T.cd * 1000 - 300) return; s.acc.cdAt[key] = now(); }
         else { const day = gameDayKey(); s.acc.ultDay = s.acc.ultDay || {}; if (s.acc.ultDay[key] === day) return send(ws, { t: 'err', text: '궁극기는 하루에 1번만 써요' }); s.acc.ultDay[key] = day; }
         const face = m.face | 0, D = [[0, 1], [0, -1], [-1, 0], [1, 0]][face] || [0, 1], tx = Math.floor(s.x / 32), ty = Math.floor(s.y / 32);
         let text = '', extra = {};
@@ -974,17 +995,20 @@ wss.on('connection', (ws) => {
         else if (M.eff === 'speed') extra = { speed: 5 + lv - 1 };
         else if (M.eff === 'light') extra = { light: 30 };
         else if (M.eff === 'heal') extra = { heal: 1 };
-        s.acc.mana = manaNow() - T.mp; s.acc.manaAt = now(); stat(s.acc, 'magic'); dirty = true;
+        { const tt = magicTrees(s, M, tx, ty, D); if (tt) text = text ? `${text} · ${tt}` : tt; } // 마법이 나무에 닿으면
+        s.acc.mana = ADM ? MPRules.MANA.max : manaNow() - T.mp; s.acc.manaAt = now(); stat(s.acc, 'magic'); dirty = true;
         areaSend(s, Object.assign({ t: 'cast', id: s.id, key, x: s.x, y: s.y, face }, extra));
-        send(ws, { t: 'castOk', key, slot: m.slot === 1 ? 1 : 0, cd: T.cd, text, mana: s.acc.mana });
+        send(ws, { t: 'castOk', key, slot: m.slot === 1 ? 1 : 0, cd: ADM ? 0 : T.cd, text, mana: s.acc.mana });
         break;
       }
       case 'stats': { send(ws, { t: 'stats', stats: s.acc.stats || {} }); break; } // 프로필 통계
       case 'craft': { // 작업대: 내 가방 재료로 도구·횃불·가구 만들기 (하늘 상점가 작업대, 또는 우리 저장소 옆)
         const R = MPRules.RECIPE_BY[String(m.id || '')], cnt = Math.max(1, Math.min(20, m.n | 0)); if (!R) return;
         const n = world.nationOfPlayer(s.token), here = (s.scene === 'sky' && s.room === 'market') || (s.scene === 'ground' && n && nearStore(s, n, 4.6)); // 저장소 옆 제작대 (저장소에서 3칸 왼쪽)
-        if (!here) return send(ws, { t: 'err', text: '작업대 앞에서 만들어요 (하늘 상점가, 또는 우리 저장소 옆)' });
-        if (R.cat === 'build' && !(n && s.scene === 'ground' && nearStore(s, n, 4.6))) return send(ws, { t: 'err', text: '건축 자재는 우리 저장소 옆 제작대에서 만들어요 (나라가 있어야 해요)' });
+        const ADMC = !!s.acc.admin;
+        if (!here && !ADMC) return send(ws, { t: 'err', text: '작업대 앞에서 만들어요 (하늘 상점가, 또는 우리 저장소 옆)' });
+        if (R.cat === 'build' && !n) return send(ws, { t: 'err', text: '건축 자재는 나라가 있어야 만들어요' });
+        if (R.cat === 'build' && !ADMC && !(n && s.scene === 'ground' && nearStore(s, n, 4.6))) return send(ws, { t: 'err', text: '건축 자재는 우리 저장소 옆 제작대에서 만들어요 (나라가 있어야 해요)' });
         if (R.tool && needTool(s, R.tool)) return send(ws, { t: 'err', text: `이미 ${R.name}이(가) 있어요` });
         const k2 = R.tool || R.cat === 'magic' ? 1 : cnt; s.acc.bag = s.acc.bag || {};
         if (R.hidden && !MPRules.hiddenOpen(s.acc.skills || {}, R.el)) return send(ws, { t: 'err', text: '아직 알 수 없는 힘이에요' });
@@ -993,8 +1017,8 @@ wss.on('connection', (ws) => {
         const fishHave = () => Object.entries(s.acc.bag).filter(([k]) => k.startsWith('fi_')).reduce((a, [, v]) => a + v, 0);
         const matName = (k) => (k === 'fish' ? '물고기' : (MPRules.MATS[k] || MPRules.RECIPE_BY[k] || { name: k }).name);
         const lack = Object.entries(R.mats).filter(([k, v]) => (k === 'fish' ? fishHave() : s.acc.bag[k] | 0) < v * k2).map(([k, v]) => `${matName(k)} ${v * k2 - (k === 'fish' ? fishHave() : s.acc.bag[k] | 0)}`);
-        if (lack.length) return send(ws, { t: 'err', text: `재료가 모자라요: ${lack.join(', ')}` });
-        for (const [k, v] of Object.entries(R.mats)) { if (k === 'fish') { let left = v * k2; for (const fk of Object.keys(s.acc.bag)) { if (!fk.startsWith('fi_') || left <= 0) continue; const t2 = Math.min(left, s.acc.bag[fk]); s.acc.bag[fk] -= t2; left -= t2; if (!s.acc.bag[fk]) delete s.acc.bag[fk]; } continue; } s.acc.bag[k] -= v * k2; if (!s.acc.bag[k]) delete s.acc.bag[k]; }
+        if (lack.length && !ADMC) return send(ws, { t: 'err', text: `재료가 모자라요: ${lack.join(', ')}` });
+        if (!ADMC) for (const [k, v] of Object.entries(R.mats)) { if (k === 'fish') { let left = v * k2; for (const fk of Object.keys(s.acc.bag)) { if (!fk.startsWith('fi_') || left <= 0) continue; const t2 = Math.min(left, s.acc.bag[fk]); s.acc.bag[fk] -= t2; left -= t2; if (!s.acc.bag[fk]) delete s.acc.bag[fk]; } continue; } s.acc.bag[k] -= v * k2; if (!s.acc.bag[k]) delete s.acc.bag[k]; }
         if (R.daily) s.acc.ms3Day = gameDayKey(); stat(s.acc, 'craft');
         if (R.cat === 'build') { const g = (R.give || 1) * k2; n.items = normItems(n.items); n.items[R.item] = (n.items[R.item] || 0) + g; sendViews([n.id]); // 건축 자재 → 나라 저장소
           send(ws, { t: 'ok', text: `🔨 ${R.name} ${g}개 → 우리 저장소` }); notifyNation(n.id, `🔨 ${s.acc.name}님이 ${R.name} ${g}개를 만들어 저장소에 넣었어요`); }
@@ -1643,6 +1667,14 @@ async function adminOp(m) {
     }
     case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
     case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
+    case 'setAdmin': { // 관리자 계정 켜기/끄기 (시험용: 마법 전부·도구 전부·재료 넉넉, 마나·쿨타임·재료 제한 없음)
+      const ent = Object.entries(state.accounts).find(([, a]) => a && a.name === String(m.name || '')); if (!ent) return { ok: false, err: '그 이름의 사람이 없어요' };
+      const acc = ent[1]; acc.admin = !!m.on;
+      if (acc.admin) { acc.skills = acc.skills || {}; for (const [k, M] of Object.entries(MPRules.MAGIC)) acc.skills[k] = MPRules.MAGIC_TIER[M.tier].max;
+        acc.tools = acc.tools || {}; for (const k of Object.keys(TOOLS)) acc.tools[k] = 1; acc.bag = acc.bag || {}; for (const k of Object.keys(MPRules.MATS)) acc.bag[k] = Math.max(acc.bag[k] | 0, 99); acc.mana = MPRules.MANA.max; }
+      dirty = true;
+      for (const o of online.values()) if (o.token === ent[0]) { send(o.ws, { t: 'skills', skills: acc.skills || {}, slots: acc.slots || [null, null], text: acc.admin ? '🛠 관리자 계정이 켜졌어요 · 마법·도구 전부, 마나·쿨타임·재료 제한 없음' : '관리자 계정이 꺼졌어요' }); send(o.ws, { t: 'bag', bag: acc.bag || {} }); send(o.ws, { t: 'tools', tools: acc.tools || {}, text: '' }); send(o.ws, { t: 'admin', on: acc.admin }); }
+      return { ok: true, name: acc.name, admin: acc.admin }; }
     case 'giveBag': { // 관리자: 이름으로 찾은 사람 가방에 물건 넣기 (재료·마법석 시험용)
       const name = String(m.name || ''), k = String(m.k || ''), n = Math.max(1, Math.min(999, m.n | 0)); if (!/^(m_|ms_|fi_|f_)\w+$/.test(k)) return { ok: false, err: '물건 이름이 이상해요' };
       const ent = Object.entries(state.accounts).find(([, a]) => a && a.name === name); if (!ent) return { ok: false, err: '그 이름의 사람이 없어요' };

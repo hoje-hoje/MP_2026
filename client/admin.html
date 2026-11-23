@@ -154,6 +154,12 @@ tr.editing td { background: #fff1b8; }
   </section>
 
   <section class="card">
+    <h2>🛠 관리자 계정 <span class="hint">시험용 · 켜면 마법 전부 배움, 도구 전부, 재료 99개씩 · 마나·쿨타임·재료 제한 없음 · 어디서나 만들기</span></h2>
+    <div class="row"><label>닉네임 <input id="adName" placeholder="게임 닉네임" style="width:160px"></label><button id="adOn" type="button">관리자로 켜기</button><button id="adOff" type="button">끄기</button><span class="muted" id="adRes"></span></div>
+    <p class="muted">먼저 게임에 한 번 들어가서 닉네임을 정한 뒤 켜요. 학생 계정에는 켜지 마세요.</p>
+  </section>
+
+  <section class="card">
     <h2>👛 학생에게 내 코인 주기 <span class="hint">이벤트·발표 보상 · 학생 개인 지갑으로 들어가요 (머리 장식·작업 도구를 살 수 있어요)</span></h2>
     <div class="row"><label>닉네임 <input id="gpName" placeholder="게임 닉네임" style="width:140px"></label><label>코인 <input id="gpN" type="number" value="100" style="width:90px"></label><label>이유 <input id="gpWhy" placeholder="예: 퀴즈 1등" style="width:160px"></label><button id="gpGo" class="primary" type="button">주기</button><span class="muted" id="gpRes"></span></div>
     <p class="muted">빼려면 마이너스로 적어요 (예: -50). 접속 중이면 학생 화면에 바로 알림이 떠요.</p>
@@ -327,6 +333,7 @@ tr.editing td { background: #fff1b8; }
   document.addEventListener('click', async (e) => { if (e.target.id !== 'jobLoad') return; try { jobPlayers = (await api('players')).players; drawJobs(); } catch (er) {} });
   document.addEventListener('input', (e) => { if (e.target.id === 'jobFind') drawJobs(); });
   document.addEventListener('change', async (e) => { const n = e.target.dataset && e.target.dataset.job; if (!n) return; try { await api('setJob', { name: n, job: e.target.value }); const p = jobPlayers.find((x) => x.name === n); if (p) p.job = e.target.value; drawJobs(); say(`${n} → ${JOBS[e.target.value]}`); } catch (er) {} });
+  document.addEventListener('click', async (e) => { if (e.target.id !== 'adOn' && e.target.id !== 'adOff') return; try { const r = await api('setAdmin', { name: $('adName').value, on: e.target.id === 'adOn' }); $('adRes').textContent = `${r.name} → ${r.admin ? '관리자 켜짐' : '관리자 꺼짐'}`; say(r.admin ? '관리자 계정을 켰어요' : '관리자 계정을 껐어요'); } catch (er) {} });
   document.addEventListener('click', async (e) => { if (e.target.id !== 'gpGo') return; try { const r = await api('giveP', { name: $('gpName').value, n: +$('gpN').value, why: $('gpWhy').value || '신의 선물' }); $('gpRes').textContent = `${r.name} → 내 코인 ${r.pcoin}${r.online ? ' (접속 중 · 알림 보냄)' : ' (다음 접속 때 보여요)'}`; say('줬어요'); } catch (er) {} });
   async function api(op, data) {
     const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key, op }, data || {})) });
