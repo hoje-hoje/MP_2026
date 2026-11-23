@@ -38,8 +38,12 @@
   };
   // 낚시: 물고기 (w = 잡힐 무게, 비 오면 귀한 것(rare)이 1.5배)
   const FISH = {
-    crucian: { name: '붕어', w: 40, sell: 3 }, carp: { name: '잉어', w: 26, sell: 6 }, trout: { name: '송어', w: 16, sell: 10 },
-    salmon: { name: '연어', w: 10, sell: 15, rare: 1 }, goldcarp: { name: '황금 잉어', w: 3, sell: 60, rare: 1 }, legend: { name: '전설의 하늘고래', w: 0.6, sell: 150, rare: 1 },
+    crucian: { name: '붕어', w: 34, sell: 3 }, carp: { name: '잉어', w: 22, sell: 6 }, trout: { name: '송어', w: 14, sell: 10 },
+    clown: { name: '흰동가리', w: 8, sell: 5 }, puffer: { name: '복어', w: 7, sell: 7 }, tang: { name: '블루탱', w: 7, sell: 8 }, loach: { name: '메기', w: 6, sell: 6 }, eel: { name: '뱀장어', w: 6, sell: 8 },
+    blackfish: { name: '흑돔', w: 5, sell: 9 }, tuna: { name: '참치', w: 4, sell: 12 }, seahorse: { name: '해마', w: 4, sell: 12 }, starfish: { name: '불가사리', w: 4, sell: 10 },
+    crab: { name: '대게', w: 3, sell: 16 }, piranha: { name: '피라냐', w: 3, sell: 14 }, betta: { name: '베타', w: 3, sell: 16 },
+    salmon: { name: '연어', w: 8, sell: 15, rare: 1 }, goldcarp: { name: '황금 잉어', w: 2.5, sell: 60, rare: 1, gold: 1 }, turtle: { name: '황금 거북', w: 1.2, sell: 45, rare: 1, gold: 1 },
+    axolotl: { name: '황금 우파루파', w: 1, sell: 55, rare: 1, gold: 1 }, legend: { name: '전설의 하늘청새치', w: 0.6, sell: 150, rare: 1, gold: 1 },
   };
   const TOOLS = { pick: { name: '곡괭이', price: 300, use: '금광·산 캐기' }, axe: { name: '나무도끼', price: 150, use: '나무 베기' }, rod: { name: '낚싯대', price: 200, use: '낚시' }, shovel: { name: '삽', price: 150, use: '씨앗 심기·수확' } }; // 작업 도구: 사람마다 하나씩 (내 코인 = 개인 지갑으로 삼)
   for (const [k, f] of Object.entries(FISH)) BUILD.push({ id: 'fi_' + k, cat: 'crop', theme: 'stone', name: f.name, sell: f.sell, fish: k });

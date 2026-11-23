@@ -1408,7 +1408,7 @@
   for (const k in TOOL) TOOL[k].cv = pxRows(TOOL[k].px, k === 'fist' ? Object.assign({}, TPAL, { s: '#ffd2ae', W: '#fff4e8' }) : TPAL);
   // 도구 그림: 사용자 마크 도구 리스프라이트(assets/tools/철_*) — 대각선 그림이라 손에 들 때 45° 돌려 세움
   TOOL.hoe = { pv: [2, 12], px: ['SSS.', '..S.', '..b.', '..b.', '..b.', '..b.', '..b.', '..b.'] }; TOOL.hoe.cv = pxRows(TOOL.hoe.px, TPAL);
-  for (const [k, f] of [['axe', 'iron_axe'], ['pick', 'iron_pick'], ['shovel', 'iron_shovel'], ['sword', 'iron_sword'], ['dagger', 'stone_sword'], ['hoe', 'iron_hoe']]) { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d').drawImage(im, 0, 0); Object.assign(TOOL[k], { cv: c, pv: [2, im.height - 2], diag: true }); }; im.src = `assets/tools/${f}.png`; }
+  for (const [k, f] of [['axe', 'iron_axe'], ['pick', 'iron_pick'], ['shovel', 'iron_shovel'], ['sword', 'iron_sword'], ['dagger', 'stone_sword'], ['hoe', 'iron_hoe'], ['rod', 'rod_wood']]) { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d').drawImage(im, 0, 0); Object.assign(TOOL[k], { cv: c, pv: [2, im.height - 2], diag: true }); }; im.src = `assets/tools/${f}.png`; }
   const ACT_TOOL = { chop: 'axe', hit: 'axe', mine: 'pick', dig: 'pick', fish: 'rod', farm: 'shovel', till: 'hoe' };
   function drawToolOn(g, o, act, t) { // o = 캐릭터 (x, y는 발), 캐릭터 48px(3배) 기준 손 위치
     const k = TOOL[ACT_TOOL[act]]; if (!k) return;
@@ -1428,10 +1428,26 @@
   function rodTip(o) { const face = o.face | 0, side = face === 2 ? -1 : 1, up = face === 1, down = face === 0; const hx = o.x + (up ? -15 : down ? 17 : 17 * side), hy = o.y - (down || up ? 8 : 10), ang = (down || up) ? 0.2 : 1.0, L = 15 * 3; return [hx + Math.sin(ang) * L * side, hy - Math.cos(ang) * L]; }
   // 물고기 그림 (가게·저장소)
   const FISH_COL = { crucian: ['#8a9a6a', '#b7c48a'], carp: ['#c97a3c', '#f0a860'], trout: ['#6f8fa8', '#a9c6dc'], salmon: ['#e0705a', '#ffa48a'], goldcarp: ['#e8b020', '#fff0a0'], legend: ['#5a7fd6', '#bfe0ff'] };
+  // 물고기 그림 (assets/fish) · 귀한 물고기(gold)는 금빛으로 칠하고 반짝임
+  const FISH_IMG = {}, FISH_GOLD = {};
+  for (const k of Object.keys(MPRules.FISH)) { const im = new Image(); im.src = 'assets/fish/' + k + '.png'; FISH_IMG[k] = im; }
+  function goldFish(k) { if (FISH_GOLD[k]) return FISH_GOLD[k]; const im = FISH_IMG[k]; if (!im || !im.complete || !im.naturalWidth) return null;
+    const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0); const d = g.getImageData(0, 0, c.width, c.height), px = d.data;
+    const PAL = [[74, 40, 16], [150, 88, 18], [214, 150, 30], [246, 200, 64], [255, 236, 140], [255, 252, 220]];
+    for (let i = 0; i < px.length; i += 4) { if (!px[i + 3]) continue; const L = (px[i] * 0.3 + px[i + 1] * 0.55 + px[i + 2] * 0.15) / 255, j = Math.min(PAL.length - 1, Math.floor(L * 1.15 * PAL.length)); [px[i], px[i + 1], px[i + 2]] = PAL[j]; }
+    g.putImageData(d, 0, 0); return (FISH_GOLD[k] = c); }
   function drawFish(g, x, y, kind, k = 3) {
+    const F = MPRules.FISH[kind], im = FISH_IMG[kind];
+    if (im && im.complete && im.naturalWidth) {
+      const gold = F && F.gold, src = (gold && goldFish(kind)) || im, s = Math.max(1, Math.round(k * (gold ? 22 : 16) / Math.max(im.width, im.height * 1.2) * 2) / 2), w = im.width * s, h = im.height * s, t = performance.now() / 1000;
+      const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+      if (gold) { g.save(); g.shadowColor = `rgba(255,214,90,${0.65 + Math.sin(t * 4) * 0.25})`; g.shadowBlur = 6 + k * 2 + Math.sin(t * 4) * 3; g.drawImage(src, Math.round(x - w / 2), Math.round(y - h / 2), w, h); g.restore();
+        for (let q = 0; q < 3; q++) { const ph = (t * 0.9 + q / 3) % 1, a = Math.sin(ph * Math.PI); g.globalAlpha = a; g.fillStyle = '#fffbe0'; const sx = Math.round(x + Math.sin(q * 2.4 + Math.floor(t * 0.9 + q / 3) * 1.7) * w * 0.45), sy = Math.round(y + Math.cos(q * 3.1 + Math.floor(t * 0.9 + q / 3)) * h * 0.4), z = Math.max(1, Math.round(k * 0.7));
+          g.fillRect(sx - z, sy, z * 3, z); g.fillRect(sx, sy - z, z, z * 3); } g.globalAlpha = 1; }
+      else g.drawImage(src, Math.round(x - w / 2), Math.round(y - h / 2), w, h);
+      g.imageSmoothingEnabled = pv; return; }
     const [c1, c2] = FISH_COL[kind] || FISH_COL.carp, P = (a, b, w, h, c) => { g.fillStyle = c; g.fillRect(Math.round(x + a * k), Math.round(y + b * k), w * k, h * k); };
     P(-7, -3, 12, 6, '#2b2340'); P(-6, -2, 10, 4, c1); P(-6, -2, 10, 1, c2); P(4, -2, 2, 4, c1); P(5, -4, 3, 8, '#2b2340'); P(6, -3, 1, 6, c1); P(-5, -1, 1, 1, '#ffffff'); P(-1, 1, 3, 1, c2);
-    if (kind === 'goldcarp' || kind === 'legend') { P(-8, -5, 1, 1, '#fff6c8'); P(7, -6, 1, 1, '#fff6c8'); }
   }
   // 낚시 상태: cast(찌 던짐) → wait(입질 기다림) → bite(타이밍 바) → 끝
   const FISHING = { on: false };
@@ -1894,7 +1910,7 @@
   let MY_BAG = {};
   function matIcon(g, k, W2, H2) { // 재료 그림 (2px 도트)
     const s2 = Math.max(2, Math.floor(W2 / 24)), R = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(W2 / 2 + x * s2, H2 / 2 + y * s2, w * s2, h * s2); };
-    const ui = k === 'm_stone' ? UIIMG.mat_stone : k === 'm_ore' ? UIIMG.mat_ore : null; // 사용자 그림 (돌·광석)
+    const ui = k === 'm_stone' ? UIIMG.mat_stone : k === 'm_ore' ? UIIMG.mat_ore : k === 'm_wood' ? UIIMG.mat_log : k === 'm_flower' ? UIIMG.mat_flower : null; // 사용자 그림 (돌·광석)
     if (ui && ui.complete && ui.naturalWidth) { const kk = Math.min(W2 * 0.8 / ui.naturalWidth, H2 * 0.8 / ui.naturalHeight); g.drawImage(ui, (W2 - ui.naturalWidth * kk) / 2, (H2 - ui.naturalHeight * kk) / 2, ui.naturalWidth * kk, ui.naturalHeight * kk); return; }
     if (k === 'm_wood') { R('#2b2340', -8, -4, 16, 9); R('#9a6a35', -7, -3, 14, 7); R('#c98c4a', -7, -3, 14, 2); R('#e8c38a', 5, -3, 2, 7); R('#7a4e24', -4, 1, 6, 1); }
     else if (k === 'm_stone') { R('#2b2340', -7, -5, 14, 11); R('#8f8aa0', -6, -4, 12, 9); R('#b9b4c8', -6, -4, 8, 3); R('#6d6880', 1, 2, 5, 2); }
@@ -2076,6 +2092,7 @@
   $('cfClear').addEventListener('click', () => { cfFill(null); openCraft(); });
   // 마법석 그림: 사용자 보석 그림(assets/ui/stone_1~3: Ⅰ 원석 · Ⅱ 결정 · Ⅲ 보석)을 속성 색으로 칠함
   const UIIMG = {}; for (const n of ['stone_1', 'stone_2', 'stone_3', 'mat_stone', 'mat_ore']) { const im = new Image(); im.src = 'assets/ui/' + n + '.png'; UIIMG[n] = im; }
+  for (const [n, f] of [['mat_log', 'flora/log'], ['mat_flower', 'flora/marigold']]) { const im = new Image(); im.src = 'assets/' + f + '.png'; UIIMG[n] = im; }
   const stoneCache = {};
   function stoneSprite(el, n) { const key = el + n; if (stoneCache[key]) return stoneCache[key]; const im = UIIMG['stone_' + Math.max(1, n)]; if (!im || !im.complete || !im.naturalWidth) return null;
     const E = MPRules.magicEl(el), hex = el === 'dark' ? '#5a3f86' : E.hex, c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; const g = c.getContext('2d'); g.drawImage(im, 0, 0);

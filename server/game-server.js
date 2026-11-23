@@ -931,7 +931,7 @@ wss.on('connection', (ws) => {
         let r = Math.random() * list.reduce((a, [, w]) => a + w, 0), pick = list[0][0]; for (const [k, w] of list) { if ((r -= w) <= 0) { pick = k; break; } }
         s.acc.bag = s.acc.bag || {}; s.acc.bag['fi_' + pick] = (s.acc.bag['fi_' + pick] || 0) + 1; s.acc.fished.n++; stat(s.acc, 'fish'); dirty = true; send(ws, { t: 'bag', bag: s.acc.bag }); // 물고기는 내 가방
         send(ws, { t: 'fished', fish: pick, rare: !!FISH[pick].rare, text: `${FISH[pick].rare ? '✨ ' : ''}${FISH[pick].name}을(를) 낚았어요! (오늘 ${s.acc.fished.n}/${NUM.fishPerDay * (jobOf(s) === 'fisher' ? 2 : 1)}) → 내 가방` });
-        if (pick === 'legend' || pick === 'goldcarp') notifyNation(n.id, `🎣 ${s.acc.name}님이 ${FISH[pick].name}을(를) 낚았어요!`);
+        if (FISH[pick].gold) notifyNation(n.id, `🎣 ${s.acc.name}님이 ${FISH[pick].name}을(를) 낚았어요!`);
         break;
       }
       case 'act': { // 작업 중인 도구를 주변 사람에게 보여 주기 (낚싯대·곡괭이·도끼)
