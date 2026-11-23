@@ -17,3 +17,4 @@
 - nightsky.jpg: 사용자 zip의 별하늘 사진 — 하늘 방 밤 배경 (출처 확인 필요)
 - 하늘 색 6가지: 사용자 하늘 색 시안(@aitommylove) 색만 참고
 - ../tools/*.png: Minecraft Tool Resprites (Rappenem's Reforce, 사용자 zip) — 6재질×5도구, 지금은 철(iron) 도구를 씀 · 출처·허락 확인 필요
+- skycloud_0~3.png: 사용자 zip의 픽셀 구름 그림(Shape Design · clouds.jpeg)에서 구름 4개를 색 그대로 오려 낸 것 (하늘 뒤 구름) — 출처 확인 필요

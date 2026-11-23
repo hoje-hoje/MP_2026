@@ -2628,6 +2628,7 @@
     [15.5, ['#0b3a96', '#0b62b8', '#0a86c8', '#14a8c4', '#7fe0e6']], [18.5, ['#0b0a26', '#2a1650', '#5a2a6a', '#d9566a', '#f7c86a']],
     [20.5, ['#0a0a1e', '#16163f', '#1f2a66', '#2e559e', '#4a80c4']], [24, ['#0b0626', '#1a0f45', '#341a5a', '#5a2a70', '#83437f']]];
   const NIGHT_IMG = new Image(); NIGHT_IMG.src = 'assets/extra/nightsky.jpg';
+  const SKYC = [0, 1, 2, 3].map((k) => { const im = new Image(); im.src = `assets/extra/skycloud_${k}.png`; return im; }); // 하늘 뒤 구름: 사용자가 준 픽셀 구름 (Shape Design)
   let SKY_OVR = null; /* 관리자 하늘 시간 {h, speed, at(내 시계)} */
   function skyHour() { if (SKY_OVR) return ((SKY_OVR.h + (Date.now() - SKY_OVR.at) / 3600e3 * SKY_OVR.speed) % 24 + 24) % 24; if (!ONLINE || CLOCK_MANUAL) return SLOT === 'night' ? 22.5 : SLOT === 'morning' ? 8 : 14; const k = new Date(Date.now() + 9 * 3600e3); return k.getUTCHours() + k.getUTCMinutes() / 60; }
   const mixHex = (a, b, u) => { const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * u)).join(',')})`; };
@@ -2643,7 +2644,7 @@
     const n = night ? 6 : 9; // 구름: 밤엔 어둡고 보랏빛으로 빛나게 (몽환적)
     if (night) { ctx.save(); ctx.filter = 'brightness(0.32) saturate(1.4) hue-rotate(205deg) drop-shadow(0 0 10px rgba(190,160,255,0.55))'; }
     else if (dusk) { ctx.save(); ctx.filter = 'sepia(0.35) saturate(1.3) hue-rotate(-12deg) brightness(0.95)'; }
-    for (let i = 0; i < n; i++) { const sp = 7 + ((i * 7919) % 13) * 0.55, w = 120 + ((i * 131) % 5) * 26, x = ((i * 337 + t * sp) % (vw + 500)) - 250, y = (i * 173) % Math.max(1, vh); cloudAt(ctx, i, x, y + 60, w, night ? 0.8 : 1); } // 구름마다 속도·크기 조금씩 다름
+    for (let i = 0; i < n; i++) { const im = SKYC[(i * 3 + 1) % SKYC.length], sp = 7 + ((i * 7919) % 13) * 0.55, k = 1.5 + ((i * 131) % 5) * 0.25, w = im.naturalWidth * k, x = ((i * 337 + t * sp) % (vw + w + 300)) - w - 150, y = (i * 173) % Math.max(1, vh) + 20; if (!im.naturalWidth) continue; const pv = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false; ctx.globalAlpha = night ? 0.8 : 0.95; ctx.drawImage(im, Math.round(x), Math.round(y), Math.round(w), Math.round(im.naturalHeight * k)); ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = pv; } // 받은 픽셀 구름 · 구름마다 속도·크기 조금씩 다름
     if (night || dusk) ctx.restore();
   }
 
@@ -5236,7 +5237,9 @@
     g.putImageData(out, 0, 0); }
   // 타이틀 여러 종 (사용자 참고 그림 각각의 느낌) — 들어올 때 고르고, 시간이 지나면 연기처럼 흩어져 다음 타이틀로
   const TLn = (t, px, o) => Object.assign({ t, px }, o);
+  const LOGO_IMG = new Image(); LOGO_IMG.src = 'assets/logo/logo_gold.png'; // 메인 로고 (the adventures of MATH WORLD)
   const TITLES = [
+    { id: 'logo', lay: 'center', img: 1, logo: (cv) => { cv.width = 760; cv.height = 280; const g = cv.getContext('2d'); g.clearRect(0, 0, 760, 280); const draw = () => { g.clearRect(0, 0, 760, 280); g.drawImage(LOGO_IMG, 0, 0, 760, 280); }; if (LOGO_IMG.complete && LOGO_IMG.naturalWidth) draw(); else LOGO_IMG.addEventListener('load', draw, { once: true }); } },
     { id: 'serif', lay: 'left', orn: '✦', logo: (cv) => makeTitleLogo(cv) },
     { id: 'arco', lay: 'lefttop', menu: 'caps', logo: (cv) => makeTextLogo(cv, [TLn('MATH', 22, { bold: true, sp: 1, c: '#f6ecd6', c2: '#d8c29a', shadow: '#2a1a10', ol: '#2a1a10', align: 'left' }), TLn('PUZZLE', 22, { bold: true, sp: 1, c: '#f6ecd6', c2: '#d8c29a', shadow: '#2a1a10', ol: '#2a1a10', align: 'left' })]) },
     { id: 'witch', lay: 'right', logo: (cv) => makeTextLogo(cv, [TLn('the adventures of', 11, { c: '#efe3c4', align: 'center', gap: 2 }), TLn('MATH', 22, { bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' }), TLn('WORLD', 22, { bold: true, sp: 2, c: '#fff1c8', c2: '#d8a347', ol: '#3a2410', align: 'center' })]) },
@@ -5248,10 +5251,11 @@
     { id: 'word', lay: 'left', logo: (cv) => makeTextLogo(cv, [TLn('Math', 22, { sp: 1, c: '#e8f2ff', c2: '#8fb6ff', shadow: '#121c34', align: 'left' }), TLn('Puzzle World', 11, { sp: 1, c: '#c9dcff', align: 'left' })]) },
   ];
   function pickTitle(force) { let i = force;
+    { const q = new URLSearchParams(location.search).get('title'); if (i == null && q) { const j = TITLES.findIndex((T) => T.id === q); if (j >= 0) i = j; } } // 미리보기: ?title=logo
     if (i == null) { let last = -1; try { last = +localStorage.getItem('mp2026.titleV'); } catch (e) { /* 없음 */ } i = Math.floor(Math.random() * TITLES.length); if (i === last) i = (i + 1) % TITLES.length; }
     try { localStorage.setItem('mp2026.titleV', i); } catch (e) { /* 없음 */ } TITLE.v = i;
     const T = TITLES[i], tt = $('title'); tt.dataset.lay = T.lay; tt.dataset.menu = T.menu || ''; tt.dataset.tv = T.id;
-    const lc = $('tLogo2'); lc.hidden = !T.logo; if (T.logo) { T.logo(lc); const k = Math.max(2, Math.floor((T.big ? Math.min(620, innerWidth * 0.52) : Math.min(470, innerWidth * 0.46)) / lc.width)); lc.style.width = lc.width * k + 'px'; } /* 정수배로 키워 픽셀이 또렷하게 */
+    const lc = $('tLogo2'); lc.hidden = !T.logo; if (T.logo && T.img) { T.logo(lc); lc.style.imageRendering = 'auto'; lc.style.width = Math.round(Math.min(680, innerWidth * 0.62)) + 'px'; } else if (T.logo) { lc.style.imageRendering = ''; T.logo(lc); const k = Math.max(2, Math.floor((T.big ? Math.min(620, innerWidth * 0.52) : Math.min(470, innerWidth * 0.46)) / lc.width)); lc.style.width = lc.width * k + 'px'; } /* 정수배로 키워 픽셀이 또렷하게 */
     $('tOrnT').textContent = T.orn || ''; $('tOrnW').hidden = !T.orn;
     $('tStart').textContent = T.menu === 'caps' ? '새로 시작' : T.menu === 'bigfirst' ? 'PLAY' : '시작하기'; }
   // 연기: 지금 글자의 점들이 흩어져 → 다음 타이틀 글자 자리로 날아가 모임
