@@ -1237,7 +1237,7 @@
     for (const b of $('shopBody').querySelectorAll('[data-equip]')) b.onclick = () => ws.send(JSON.stringify({ t: 'equipWeapon', w: b.dataset.equip }));
     for (const b of $('shopBody').querySelectorAll('[data-buyhat]')) b.onclick = () => ws.send(JSON.stringify({ t: 'buyHat', id: b.dataset.buyhat }));
     for (const b of $('shopBody').querySelectorAll('[data-wear]')) b.onclick = () => { player.look.hat = b.dataset.wear; saveLook(); renderShop(); };
-    for (const c of $('shopBody').querySelectorAll('[data-tool]')) { const g = c.getContext('2d'), T2 = TOOL[{ pick: 'pick', rod: 'rod', shovel: 'shovel', axe: 'axe' }[c.dataset.tool]]; g.imageSmoothingEnabled = false; const k = Math.min(56 / T2.cv.width, 56 / T2.cv.height) | 0; g.save(); g.translate(32, 32); g.rotate(0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); }
+    for (const c of $('shopBody').querySelectorAll('[data-tool]')) { const g = c.getContext('2d'), T2 = TOOL[{ pick: 'pick', rod: 'rod', shovel: 'shovel', axe: 'axe' }[c.dataset.tool]]; g.imageSmoothingEnabled = false; const k = Math.min(56 / T2.cv.width, 56 / T2.cv.height) | 0; g.save(); g.translate(32, 32); g.rotate(T2.diag ? 0 : 0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); }
     for (const c of $('shopBody').querySelectorAll('[data-ico]')) { if (BUILD_BY[c.dataset.ico]) { itemIcon(c, c.dataset.ico); continue; } const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(ICON[c.dataset.ico], 0, 0, 64, 64); }
     for (const b of $('shopBody').querySelectorAll('[data-sell]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'sell', item: b.dataset.sell, n: +b.dataset.n })); $('shopSay').textContent = '싱싱하네요! 판 돈은 내 코인으로 들어갔어요.'; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
     for (const b of $('shopBody').querySelectorAll('[data-buy]')) b.onclick = () => { ws.send(JSON.stringify({ t: 'buy', item: b.dataset.buy, n: +b.dataset.n })); $('shopSay').textContent = ['다 만들었어요! 저장소로 보냈어요.', '좋은 선택이에요!', '또 와요~'][(Math.random() * 3) | 0]; SND.play('coin'); setTimeout(() => { if (!$('shopBox').hidden) renderShop(); }, 500); };
@@ -1406,7 +1406,10 @@
     fist: { pv: [3, 3], noRot: true, px: ['.KKKK.', 'KssssK', 'KsWssK', 'KssssK', 'KssssK', '.KKKK.'] },
   };
   for (const k in TOOL) TOOL[k].cv = pxRows(TOOL[k].px, k === 'fist' ? Object.assign({}, TPAL, { s: '#ffd2ae', W: '#fff4e8' }) : TPAL);
-  const ACT_TOOL = { chop: 'axe', hit: 'axe', mine: 'pick', dig: 'pick', fish: 'rod', farm: 'shovel' };
+  // 도구 그림: 사용자 마크 도구 리스프라이트(assets/tools/철_*) — 대각선 그림이라 손에 들 때 45° 돌려 세움
+  TOOL.hoe = { pv: [2, 12], px: ['SSS.', '..S.', '..b.', '..b.', '..b.', '..b.', '..b.', '..b.'] }; TOOL.hoe.cv = pxRows(TOOL.hoe.px, TPAL);
+  for (const [k, f] of [['axe', 'iron_axe'], ['pick', 'iron_pick'], ['shovel', 'iron_shovel'], ['sword', 'iron_sword'], ['dagger', 'stone_sword'], ['hoe', 'iron_hoe']]) { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d').drawImage(im, 0, 0); Object.assign(TOOL[k], { cv: c, pv: [2, im.height - 2], diag: true }); }; im.src = `assets/tools/${f}.png`; }
+  const ACT_TOOL = { chop: 'axe', hit: 'axe', mine: 'pick', dig: 'pick', fish: 'rod', farm: 'shovel', till: 'hoe' };
   function drawToolOn(g, o, act, t) { // o = 캐릭터 (x, y는 발), 캐릭터 48px(3배) 기준 손 위치
     const k = TOOL[ACT_TOOL[act]]; if (!k) return;
     const face = o.face | 0, side = face === 2 ? -1 : 1, up = face === 1, down = face === 0;
@@ -1414,8 +1417,12 @@
     let ang = 0.4;
     if (act === 'fish') ang = (down || up) ? 0.2 : 1.0 + Math.sin(t * 2) * 0.05; // 낚싯대는 물 쪽으로
     else { const ph = (t * (act === 'mine' ? 2.2 : 2.6)) % 1, sw = ph < 0.7 ? ph / 0.7 : 1 - (ph - 0.7) / 0.3; ang = -1.5 + sw * 3.0; } // 휘두르기
-    g.save(); g.translate(Math.round(hx), Math.round(hy)); if (side < 0) g.scale(-1, 1); g.rotate(ang); g.scale(3, 3);
-    const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(k.cv, -k.pv[0], -k.pv[1]); g.imageSmoothingEnabled = p; g.restore();
+    const r0 = k.diag ? -Math.PI / 4 : 0, p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+    if (act !== 'fish') { const ph = (t * (act === 'mine' ? 2.2 : 2.6)) % 1; if (ph < 0.7) for (let q = 1; q <= 3; q++) { const sw2 = Math.max(0, ph / 0.7 - q * 0.09), a2 = -1.5 + sw2 * 3.0; // 휘두를 때 잔상
+        g.save(); g.globalAlpha = 0.22 / q; g.translate(Math.round(hx), Math.round(hy)); if (side < 0) g.scale(-1, 1); g.rotate(a2 + r0); g.scale(3, 3); g.drawImage(k.cv, -k.pv[0], -k.pv[1]); g.restore(); }
+      if (ph >= 0.66 && ph < 0.8) { const D = FACE_D[face] || [0, 1]; for (let q = 0; q < 5; q++) { g.fillStyle = q % 2 ? '#fff6c8' : '#c9a46a'; const u = (ph - 0.66) / 0.14; g.fillRect(Math.round(hx + D[0] * 22 + (hash(q, 1, 3) - 0.5) * 18 * (1 + u)), Math.round(hy + D[1] * 14 - 10 - u * 12 * hash(q, 2, 3)), 3, 3); } } } // 맞는 순간 부스러기
+    g.save(); g.translate(Math.round(hx), Math.round(hy)); if (side < 0) g.scale(-1, 1); g.rotate(ang + r0); g.scale(3, 3);
+    g.drawImage(k.cv, -k.pv[0], -k.pv[1]); g.imageSmoothingEnabled = p; g.restore();
     return [hx, hy, ang, side];
   }
   function rodTip(o) { const face = o.face | 0, side = face === 2 ? -1 : 1, up = face === 1, down = face === 0; const hx = o.x + (up ? -15 : down ? 17 : 17 * side), hy = o.y - (down || up ? 8 : 10), ang = (down || up) ? 0.2 : 1.0, L = 15 * 3; return [hx + Math.sin(ang) * L * side, hy - Math.cos(ang) * L]; }
@@ -1899,7 +1906,7 @@
   function persIcon(cv, k) { // 개인 물건 그림: 물고기 · 모자 · 도구
     const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height; g.clearRect(0, 0, W2, H2); g.imageSmoothingEnabled = false;
     if (k.startsWith('hat:')) { const H = HATS[k.slice(4)]; if (H) { const s2 = Math.min(4, Math.floor((W2 - 6) / H.cv.width), Math.floor((H2 - 6) / H.cv.height)); g.drawImage(H.cv, (W2 - H.cv.width * s2) / 2, (H2 - H.cv.height * s2) / 2, H.cv.width * s2, H.cv.height * s2); } return; }
-    if (k.startsWith('tool:')) { const T2 = TOOL[k.slice(5)]; if (T2) { const s2 = Math.max(1, Math.floor((H2 - 6) / T2.cv.height)); g.save(); g.translate(W2 / 2, H2 / 2); g.rotate(0.5); g.drawImage(T2.cv, -T2.cv.width * s2 / 2, -T2.cv.height * s2 / 2, T2.cv.width * s2, T2.cv.height * s2); g.restore(); } return; }
+    if (k.startsWith('tool:')) { const T2 = TOOL[k.slice(5)]; if (T2) { const s2 = Math.max(1, Math.floor((H2 - 6) / T2.cv.height)); g.save(); g.translate(W2 / 2, H2 / 2); g.rotate(T2.diag ? 0 : 0.5); g.drawImage(T2.cv, -T2.cv.width * s2 / 2, -T2.cv.height * s2 / 2, T2.cv.width * s2, T2.cv.height * s2); g.restore(); } return; }
     if (MPRules.MATS[k]) { matIcon(g, k, W2, H2); return; }
     if (MPRules.RECIPE_BY[k]) { g.save(); g.scale(W2 / 64, H2 / 64); craftIcon(g, k); g.restore(); return; }
     const B = BUILD_BY[k]; if (B && B.fish) drawFish(g, W2 / 2, H2 / 2, B.fish, Math.max(2, Math.floor(W2 / 22)));
@@ -1994,7 +2001,7 @@
       const need = Object.entries(r.mats).map(([k, v]) => `<span class="${have(k) >= v ? 'okm' : 'nom'}">${mname(k)} ${have(k)}/${v}</span>`).join(' ') + (r.quiz ? ` <span class="okm">+ ${r.quiz === 'hard' ? '어려운 ' : ''}수학 문제</span>` : '');
       return `<div class="hvCard"><canvas data-cr="${r.id}" width="64" height="64"></canvas><div class="hvInfo"><b>${r.name}${r.give > 1 ? ` ×${r.give}` : ''}</b><small>${r.desc || '내 가방에 들어가요 (놓기는 나중에)'}</small><i>${need}</i>${!r.tool && have(r.id) ? `<i>가진 것 ${have(r.id)}개</i>` : ''}</div><div class="hvBuy"><div><button type="button" data-craft="${r.id}" ${ok ? '' : 'disabled'}>${owned ? '✔ 있음' : '만들기'}</button></div></div></div>`; }).join('');
     for (const c of $('craftBody').querySelectorAll('[data-cr]')) { const r = MPRules.RECIPE_BY[c.dataset.cr], g = c.getContext('2d'); g.imageSmoothingEnabled = false; const T2 = r.tool && TOOL[r.tool];
-      if (T2) { const k = Math.max(1, Math.min(56 / T2.cv.width, 56 / T2.cv.height) | 0); g.save(); g.translate(32, 32); g.rotate(0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); } else craftIcon(g, r.id); }
+      if (T2) { const k = Math.max(1, Math.min(56 / T2.cv.width, 56 / T2.cv.height) | 0); g.save(); g.translate(32, 32); g.rotate(T2.diag ? 0 : 0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); } else craftIcon(g, r.id); }
     for (const b of $('craftBody').querySelectorAll('[data-craft]')) b.onclick = () => { const r = MPRules.RECIPE_BY[b.dataset.craft]; if (!netOn) return; if (r.quiz) { $('craftBox').hidden = true; showQuiz(`✨ ${r.name} 만들기 · 맞히면 만들어져요`, r.quiz === 'hard' ? 5000 : 8000, (gr) => { if (gr !== 'miss') ws.send(JSON.stringify({ t: 'craft', id: r.id, n: 1, quiz: 'ok' })); else toast('문제를 틀려서 못 만들었어요 · 재료는 그대로예요'); setTimeout(openCraft, 900); }); return; } ws.send(JSON.stringify({ t: 'craft', id: b.dataset.craft, n: 1 })); };
   }
   // 제작대: 마크처럼 3×3 칸에 재료를 놓으면 조합법에 맞는 물건이 나옴
@@ -2005,7 +2012,7 @@
   const cfTimes = (r) => Math.min(r.tool ? 1 : 20, ...Object.entries(r.mats).map(([k, v]) => Math.floor((MY_BAG[k] | 0) / v)));
   function recIcon(cv, r) { const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); g.imageSmoothingEnabled = false; if (!r) return;
     if (r.cat === 'build') { itemIcon(cv, r.item); return; }
-    const T2 = r.tool && TOOL[r.tool]; if (T2) { const k = Math.max(1, Math.min((cv.width - 8) / T2.cv.width, (cv.height - 8) / T2.cv.height) | 0); g.save(); g.translate(cv.width / 2, cv.height / 2); g.rotate(0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); return; }
+    const T2 = r.tool && TOOL[r.tool]; if (T2) { const k = Math.max(1, Math.min((cv.width - 8) / T2.cv.width, (cv.height - 8) / T2.cv.height) | 0); g.save(); g.translate(cv.width / 2, cv.height / 2); g.rotate(T2.diag ? 0 : 0.5); g.drawImage(T2.cv, -T2.cv.width * k / 2, -T2.cv.height * k / 2, T2.cv.width * k, T2.cv.height * k); g.restore(); return; }
     g.save(); g.scale(cv.width / 64, cv.height / 64); craftIcon(g, r.id); g.restore(); }
   function cfFill(r, force) { CRAFT.cells = Array(9).fill(null); CRAFT.ghost = r; if (!r) return; // 조합법을 누르면: 재료가 있으면 칸에 놓고, 없으면 흐린 모양만
     const need = {}; r.grid.forEach((row, y) => [...row].forEach((c, x) => { const k = MPRules.GRID_KEY[c]; if (k) need[k] = (need[k] || 0) + 1; }));

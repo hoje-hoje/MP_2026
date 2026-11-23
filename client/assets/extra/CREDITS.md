@@ -16,3 +16,4 @@
 - workbench.png: 나무 가구 모음(SangrealPixel) 13번 — 출처 확인 필요
 - nightsky.jpg: 사용자 zip의 별하늘 사진 — 하늘 방 밤 배경 (출처 확인 필요)
 - 하늘 색 6가지: 사용자 하늘 색 시안(@aitommylove) 색만 참고
+- ../tools/*.png: Minecraft Tool Resprites (Rappenem's Reforce, 사용자 zip) — 6재질×5도구, 지금은 철(iron) 도구를 씀 · 출처·허락 확인 필요
