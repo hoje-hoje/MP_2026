@@ -69,7 +69,8 @@ const P = '/assets/pixelfx/';
 const core = await import(P + 'core/index.js');
 const cache = {}; const load = async (k) => (cache[k] = cache[k] || await import(P + 'fx/' + k + '.js'));
 const R = window.MPRules, BASE = R.MAGIC_BASE, HIDDEN = R.MAGIC_HIDDEN; // 마법 정의는 게임과 같은 rules.js 에서
-const CDT = (k) => (R.MAGIC_TIER[k].cd ? R.MAGIC_TIER[k].cd + '초' : '하루 1번');
+try { if (window.parent && window.parent.MP_TUNE) R.applyTune(window.parent.MP_TUNE); } catch (e) {}
+const CDT = (k, key) => { const c = key ? R.magicCost(key) : R.MAGIC_TIER[k]; return c.cd ? c.cd + '초' : '하루 1번'; };
 const MAX = { t1: 3, a: 1, b: 1, ult: 1 }, ROMAN = { t1: 'Ⅰ', a: 'Ⅱ', b: 'Ⅱ', ult: 'Ⅲ' };
 const CX = 600, CY = 520, pt = (deg, r) => [CX + r * Math.cos(deg * Math.PI / 180), CY - r * Math.sin(deg * Math.PI / 180)];
 const UA = BASE.map((_, i) => 162 - i * (144 / (BASE.length - 1))), DA = HIDDEN.map((_, i) => -148 + i * (116 / (HIDDEN.length - 1)));
@@ -127,7 +128,7 @@ function info() { if (N[sel].el && N[sel].el.req && !hiddenOpen(N[sel].el)) sel 
   const nd = needOf(sel), enough = nd.every((q) => haveS(q) >= 1), can = st === 'open' && enough;
   const lockMsg = n.el && n.el.req && !hiddenOpen(n.el) ? '아직 알 수 없는 힘이에요' : (n.tier === 'a' || n.tier === 'b') && L(n.el.id + '.' + (n.tier === 'a' ? 'b' : 'a')) ? '다른 쪽을 골랐어요' : '앞 마법을 먼저 배워요';
   box.innerHTML = `<h2>${n.name}</h2><div class="sub">${n.el ? `${n.el.name} 마법석 ${ROMAN[n.tier]}` : '첫 마법 · 효과 없음'} · ${L(sel)}/${n.max}</div><canvas id="pv" width="160" height="120"></canvas><p>${n.desc}</p>
-    <div class="kv">${nd.length ? `끼울 마법석: <b style="color:var(--c)">${nd.map(stoneName).join(' + ')}</b> · 가진 것 ${nd.map(haveS).join('')}개${n.max > 1 ? ' (한 번 올릴 때마다 1개)' : ''}<br>` : ''}쿨타임 ${n.tier ? CDT(n.tier) : '-'}</div>
+    <div class="kv">${nd.length ? `끼울 마법석: <b style="color:var(--c)">${nd.map(stoneName).join(' + ')}</b> · 가진 것 ${nd.map(haveS).join('')}개${n.max > 1 ? ' (한 번 올릴 때마다 1개)' : ''}<br>` : ''}쿨타임 ${n.tier ? CDT(n.tier, n.key) : '-'}</div>
     <button id="learn" type="button" ${can ? '' : 'disabled'}>${st === 'learned' ? '다 배웠어요' : st === 'locked' ? lockMsg : !enough ? `${nd.map(stoneName).join(', ')} 필요` : `${nd.map(stoneName).join(' + ')} 끼우기`}</button>`;
   if (GAME && L(sel) > 0) { const sb = document.createElement('div'); sb.className = 'slotRow'; sb.innerHTML = [0, 1].map((i) => `<button type="button" data-slot="${i}" class="${SLOTS[i] === sel ? 'on' : ''}">${SLOTS[i] === sel ? '✔ ' : ''}${i ? 'F' : 'R'} 칸에 넣기</button>`).join(''); box.append(sb); for (const b of sb.querySelectorAll('[data-slot]')) b.onclick = () => window.parent.MP_SKILL.equip(+b.dataset.slot, sel); }
   document.getElementById('learn').onclick = () => { if (!can) return; if (GAME) { window.parent.MP_SKILL.learn(sel); return; } lv[sel] = L(sel) + 1; for (const q of nd) INV[q[0] + '.' + q[1]] -= 1; render(); }; preview(n); }

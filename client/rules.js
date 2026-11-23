@@ -898,6 +898,13 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
+  // 관리자 조정값: 물고기 무게(잡힐 확률), 마법별 쿨타임·마나
+  const FISH_W0 = {}; for (const [k, f] of Object.entries(FISH)) FISH_W0[k] = f.w;
+  function applyTune(t) { t = t || {}; const fi = t.fish || {}, mg = t.magic || {};
+    for (const k of Object.keys(FISH)) FISH[k].w = fi[k] != null && isFinite(fi[k]) ? Math.max(0, +fi[k]) : FISH_W0[k];
+    for (const key of Object.keys(MAGIC)) { const o = mg[key] || {}; MAGIC[key].cdO = o.cd != null && isFinite(o.cd) ? Math.max(0, +o.cd) : null; MAGIC[key].mpO = o.mp != null && isFinite(o.mp) ? Math.max(0, +o.mp) : null; } }
+  function magicCost(key) { const M = MAGIC[key], T = MAGIC_TIER[M ? M.tier : 't1']; return Object.assign({}, T, M && M.cdO != null ? { cd: M.cdO } : {}, M && M.mpO != null ? { mp: M.mpO } : {}); }
+  function fishOdds(rain, perfect) { const L = Object.entries(FISH).map(([k, f]) => [k, f.w * (f.rare ? (rain ? 1.5 : 1) * (perfect ? 1.6 : 1) : 1)]), S = L.reduce((a, [, w]) => a + w, 0) || 1; const o = {}; for (const [k, w] of L) o[k] = w / S; return o; }
   // 빛 (밤에 둘레를 밝힘): r = 반지름(월드 px), a = 세기 0~1, c = 빛 색. 새 빛나는 가구를 만들면 여기에 적기
   const LIGHT_OF = {
     d_campfire: { r: 230, a: 1, c: '#ff9a3a', flick: 0.08 }, d_torch: { r: 160, a: 0.95, c: '#ffb050', flick: 0.1 },
@@ -906,5 +913,5 @@
     torchBag: { r: 150, a: 0.9, c: '#ffb050', flick: 0.1 }, self: { r: 75, a: 0.45, c: null }, lightBuff: { r: 240, a: 1, c: '#fff0b0', flick: 0.03 },
     spell: { r: 130, a: 0.9 }, flash: { r: 150, a: 0.8 }, rootFlash: { r: 300, a: 1 },
   };
-  return { LIGHT_OF, applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { LIGHT_OF, FISH_W0, applyTune, magicCost, fishOdds, applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

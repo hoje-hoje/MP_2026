@@ -1920,7 +1920,7 @@
   function openSkills() { const f = $('skillFrame'); if (!f.src) f.src = '/skilltree?game=1'; else try { f.contentWindow.MP_REFRESH && f.contentWindow.MP_REFRESH(); } catch (e) { /* 아직 로딩 */ } $('skillBox').hidden = false; }
   function closeSkills() { $('skillBox').hidden = true; try { $('skillFrame').blur(); document.activeElement && document.activeElement.blur && document.activeElement.blur(); window.focus(); } catch (e) { /* 무시 */ } } // 창을 닫으면 키보드가 다시 게임으로
   window.MP_SKILL_CLOSE = () => closeSkills();
-  function castSkill(slot) { if (document.body.classList.contains('padEdit')) return; if (!netOn || player.scene !== 'ground' || amDead() || TITLE.on) return; const key = MY_SLOTS[slot]; if (!key) { toast('마법 칸이 비었어요 · 마법(K)에서 배운 마법을 넣어요'); return; } if (performance.now() < SKCD[slot]) return; { const need = MPRules.MAGIC_TIER[MPRules.MAGIC[key].tier].mp; if (!MY_ADMIN && manaNow() < need) { toast(`마나가 모자라요 (${need} 필요)`); return; } } ws.send(JSON.stringify({ t: 'cast', slot, face: player.face | 0 })); }
+  function castSkill(slot) { if (document.body.classList.contains('padEdit')) return; if (!netOn || player.scene !== 'ground' || amDead() || TITLE.on) return; const key = MY_SLOTS[slot]; if (!key) { toast('마법 칸이 비었어요 · 마법(K)에서 배운 마법을 넣어요'); return; } if (performance.now() < SKCD[slot]) return; { const need = MPRules.magicCost(key).mp; if (!MY_ADMIN && manaNow() < need) { toast(`마나가 모자라요 (${need} 필요)`); return; } } ws.send(JSON.stringify({ t: 'cast', slot, face: player.face | 0 })); }
   const skIcoCache = {};
   async function skillIcon(cv, key) { const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); if (!key) return; const M = MPRules.MAGIC[key]; await loadPfxW(); if (!PFXW) return; const mod = await fxMod(M.fx); if (!mod) return;
     if (!skIcoCache[key]) { const m = mod.meta || {}, sz = m.size || [64, 64], o = m.origin || [sz[0] / 2, sz[1] / 2], fr = PFXW.core.createFrame(sz[0], sz[1]), f = PFXW.core.createFx(mod, Object.assign({ x: o[0], y: o[1] }, M.pal ? { palette: M.pal } : {})); f.update(Math.min(0.7, (m.duration || 1) * 0.5)); f.draw(fr); const im = new ImageData(sz[0], sz[1]); PFXW.core.composite(fr, im.data, null); const t = document.createElement('canvas'); t.width = sz[0]; t.height = sz[1]; t.getContext('2d').putImageData(im, 0, 0); skIcoCache[key] = t; }
@@ -3315,7 +3315,7 @@
   function onNet(m) {
     switch (m.t) {
       case 'welcome': {
-        myId = m.id; netOn = true; store('mp2026.token', m.token); MY_ADMIN = !!m.admin; if (m.recipes) MPRules.applyRecipes(m.recipes); if (m.texts && window.MP_TX) MP_TX.set(m.texts); if (MY_ADMIN) setTimeout(() => toast('🛠 관리자 계정이에요 · 마법·도구 전부, 마나·쿨타임·재료 제한 없음'), 1500);
+        myId = m.id; netOn = true; store('mp2026.token', m.token); MY_ADMIN = !!m.admin; if (m.recipes) MPRules.applyRecipes(m.recipes); MPRules.applyTune(m.tune); window.MP_TUNE = m.tune; if (m.texts && window.MP_TX) MP_TX.set(m.texts); if (MY_ADMIN) setTimeout(() => toast('🛠 관리자 계정이에요 · 마법·도구 전부, 마나·쿨타임·재료 제한 없음'), 1500);
         MY_SKILLS = m.skills || {}; MY_SLOTS = m.slots || [null, null]; setTimeout(renderSkillPad, 500); if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); }
         if (m.picked) { PICKED.clear(); const t0 = Date.now(); for (const i of m.picked) PICKED.set(i, t0); } // 뜯긴 풀·꽃
         if (m.bgm) { SND.setFiles(m.bgm.files); BGM_CUR = m.bgm.cur && m.bgm.cur.startsWith('f:') ? 'f:/bgm/' + m.bgm.cur.slice(2) : (m.bgm.cur || 'peace'); }
@@ -3413,6 +3413,7 @@
       case 'stats': PF.stats = m.stats || {}; if (!$('profile').hidden) renderProfile(); break;
       case 'admin': MY_ADMIN = !!m.on; break;
       case 'texts': if (window.MP_TX) MP_TX.set(m.texts || {}); break; // 관리자가 말투를 고침
+      case 'tune': MPRules.applyTune(m.tune); window.MP_TUNE = m.tune; break; // 관리자가 낚시 확률·마법 쿨타임을 고침
       case 'recipes': MPRules.applyRecipes(m.recipes || {}); if (!$('craftBox').hidden) openCraft(); break; // 관리자가 조합법을 고침
       case 'mapReset': toast('🌍 맵이 처음 상태로 돌아갔어요 · 다시 불러오는 중…'); setTimeout(() => location.reload(), 1600); break;
       case 'castOk': { if (m.mana != null) { MANA.v = m.mana; MANA.at = Date.now(); } if (m.cd) { SKCD[m.slot] = performance.now() + m.cd * 1000; SKCDLEN[m.slot] = m.cd * 1000; } if (m.text) toast(m.text); break; }

@@ -330,6 +330,7 @@ loadPuzzles();
 fs.watchFile(PUZZLE_FILE, { interval: 5000 }, loadPuzzles); // 문제 파일을 고치면 서버 재시작 없이 반영
 state.world = world.s;
 state.texts = state.texts || {}; // 관리자가 고친 말투 (원래 문장 → 바꿀 문장)
+state.tune = state.tune || {}; MPRules.applyTune(state.tune); // 관리자 조정값 (낚시 확률·마법 쿨타임)
 state.recipes = state.recipes || {}; MPRules.applyRecipes(state.recipes); // 관리자가 고친 조합법
 state.settings = state.settings || {};   // 관리자 설정: testMode(true/false/없음=환경변수), founding('auto'|'open'|'closed')
 state.coupons = state.coupons || {};     // 쿠폰 코드 -> { r:{coin|army}, memo, at, used:{name,nation,ts} }
@@ -467,7 +468,7 @@ wss.on('connection', (ws) => {
       if (nat) { world.refreshActions(nat, actionDayKey()); if (nat.memberNames) nat.memberNames[token] = acc.name; }
       if (!acc.rootGiven) { acc.rootGiven = 1; acc.skills = acc.skills || {}; acc.bag = acc.bag || {}; if (Object.keys(acc.skills).length) acc.skills.root = 1; else acc.bag.ms_root_0 = (acc.bag.ms_root_0 | 0) + 1; dirty = true; } // 처음 마법석 1개 (이미 마법을 배운 사람은 마력 깨우기를 배운 걸로)
       send(ws, {
-        t: 'welcome', admin: !!acc.admin, recipes: state.recipes, texts: state.texts, bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
+        t: 'welcome', admin: !!acc.admin, tune: state.tune, recipes: state.recipes, texts: state.texts, bgm: bgmMsg(), id: s.id, token, name: acc.name, nameSet: !!acc.nameSet, renamesLeft: NAME_CHANGES - (acc.renames || 0), pos: jailed(acc) ? jailPos(acc, token) : acc.x == null ? null : { x: acc.x, y: acc.y, scene: s.scene, room: s.room }, carry: acc.carry || null, red: acc.arrestStack | 0, jailUntil: jailed(acc) ? acc.jailUntil : 0,
         chat: nat ? (state.chats['nation:' + nat.id] || []).slice(-30) : [], emotes: EMOTES, wander: state.wander.map(({ token, ...r }) => r), board: boardPub(),
         view: nat ? world.view(nat.id, token) : null, owners: world.s.owner, nations: pubNations(), testMode: testMode(), foundingOpen: foundingOpen(), notice: state.notice || null,
         frags: fragList(), myFrags: myFrags(acc), side: acc.side || null, hp: acc.hp ?? NUM.pvp.hp, loot: [...LOOT.values()], picked: Object.entries(world.s.picked || {}).filter(([, t]) => MPRules.stillPicked(t, now())).map(([i]) => +i), job: acc.job || null, tools: acc.tools || {}, skills: acc.skills || {}, slots: acc.slots || [null, null], mana: Math.min(MPRules.MANA.max, (acc.mana ?? MPRules.MANA.max) + (Date.now() - (acc.manaAt || 0)) / 1000 * MPRules.MANA.rate), pcoin: acc.pcoin || 0, hats: acc.hats || {}, bag: acc.bag || {}, roomEdits: state.roomEdits, groundEdits: state.groundEdits, clock: clockMsg(), battles: world.publicBattles(), mines: world.s.mines, tiles: world.s.tiles, chopped: Object.keys(world.s.chopped).map(Number), dug: Object.keys(world.s.dug || {}).map(Number), weapons: acc.weapons || {}, weapon: acc.weapon || null, startDay: gameClock().day, traps: nat ? trapsOf(nat.id) : [], stun: Math.max(0, (acc.stunUntil || 0) - Date.now()),
@@ -990,7 +991,7 @@ wss.on('connection', (ws) => {
       case 'cast': { // 마법 쓰기 (R/F, 패드 동그라미)
         if (s.scene !== 'ground' || s.x == null || (s.deadUntil || 0) > now() || jailed(s.acc)) return;
         const slots = s.acc.slots || [], key = slots[m.slot === 1 ? 1 : 0], M = key && MPRules.MAGIC[key]; if (!M) return;
-        const lv = (s.acc.skills || {})[key] | 0; if (!lv) return; const T = MPRules.MAGIC_TIER[M.tier]; s.acc.cdAt = s.acc.cdAt || {};
+        const lv = (s.acc.skills || {})[key] | 0; if (!lv) return; const T = MPRules.magicCost(key); s.acc.cdAt = s.acc.cdAt || {};
         const manaNow = () => Math.min(MPRules.MANA.max, (s.acc.mana ?? MPRules.MANA.max) + (now() - (s.acc.manaAt || 0)) / 1000 * MPRules.MANA.rate);
         const ADM = !!s.acc.admin; // 관리자 계정: 마나·쿨타임·하루 1번 제한 없음
         if (!ADM && manaNow() < T.mp) return send(ws, { t: 'err', text: `마나가 모자라요 (${T.mp} 필요)` });
@@ -1691,6 +1692,12 @@ async function adminOp(m) {
       dirty = true; tickClock(); console.log('[관리자] 시계:', JSON.stringify(state.clock));
       return adminStatus();
     }
+    case 'tuneGet': return { ok: true, tune: state.tune, fish: Object.entries(MPRules.FISH).map(([k, f]) => ({ k, name: f.name, rare: !!f.rare, w: f.w, w0: MPRules.FISH_W0[k], sell: f.sell })), odds: [MPRules.fishOdds(0, 0), MPRules.fishOdds(1, 0), MPRules.fishOdds(1, 1)],
+      magic: Object.values(MPRules.MAGIC).map((M) => { const T = MPRules.MAGIC_TIER[M.tier], c = MPRules.magicCost(M.key); return { key: M.key, name: M.name, el: M.el, elName: (MPRules.magicEl(M.el) || {}).name || M.el, hex: M.hex || '#b57bff', tier: M.tier, cd0: T.cd, mp0: T.mp, cd: c.cd, mp: c.mp }; }) };
+    case 'tuneSet': { const t = m.tune || {}, out = { fish: {}, magic: {} };
+      for (const [k, v] of Object.entries(t.fish || {})) if (MPRules.FISH[k] && v !== '' && v != null && isFinite(v)) out.fish[k] = Math.max(0, Math.min(1000, +v));
+      for (const [k, o] of Object.entries(t.magic || {})) if (MPRules.MAGIC[k] && o) { const e = {}; if (o.cd !== '' && o.cd != null && isFinite(o.cd)) e.cd = Math.max(0, Math.min(3600, +o.cd)); if (o.mp !== '' && o.mp != null && isFinite(o.mp)) e.mp = Math.max(0, Math.min(100, +o.mp)); if (Object.keys(e).length) out.magic[k] = e; }
+      state.tune = out; MPRules.applyTune(out); dirty = true; const msg = JSON.stringify({ t: 'tune', tune: out }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return { ok: true }; }
     case 'skyGet': return { ok: true, sky: skyNow() };
     case 'sky': { if (m.off) state.sky = null; else { const h = Math.max(0, Math.min(23.99, +m.h || 0)), sp = Math.max(0, Math.min(3600, +m.speed || 0)); state.sky = { h, speed: sp, at: Date.now() }; } dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return { ok: true, sky: skyNow() }; }
     case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
