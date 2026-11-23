@@ -2013,7 +2013,7 @@
     const E = MPRules.magicEl(el), hex = el === 'dark' ? '#5a3f86' : E.hex, c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
     const d = g.getImageData(0, 0, c.width, c.height), px = d.data, R0 = parseInt(hex.slice(1, 3), 16), G0 = parseInt(hex.slice(3, 5), 16), B0 = parseInt(hex.slice(5, 7), 16);
     for (let i = 0; i < px.length; i += 4) { if (!px[i + 3]) continue; const L = px[i] / 255; // 어두운 곳 → 속성 색의 그림자, 밝은 곳 → 흰빛
-      const t = L < 0.55 ? L / 0.55 : 1, w = L < 0.55 ? 0 : (L - 0.55) / 0.45, dk = 0.18 + 0.82 * t;
+      const t = L < 0.78 ? L / 0.78 : 1, w = L < 0.78 ? 0 : (L - 0.78) / 0.22 * 0.6, dk = 0.22 + 0.9 * t;
       px[i] = Math.round((R0 * dk) * (1 - w) + 255 * w * 0.92 + R0 * w * 0.08); px[i + 1] = Math.round((G0 * dk) * (1 - w) + 255 * w * 0.92 + G0 * w * 0.08); px[i + 2] = Math.round((B0 * dk) * (1 - w) + 255 * w * 0.92 + B0 * w * 0.08);
       if (L < 0.12) { px[i] = px[i] * 0.4 + 6; px[i + 1] = px[i + 1] * 0.4 + 6; px[i + 2] = px[i + 2] * 0.4 + 10; } }
     g.putImageData(d, 0, 0); return (stoneCache[key] = c); }

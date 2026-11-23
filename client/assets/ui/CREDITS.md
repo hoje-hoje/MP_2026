@@ -34,3 +34,6 @@
 |---|---|---|
 | ../extra/workbench.png | 나무 가구 모음 그림(SangrealPixel 트위터, Archive.zip 5번) 13번 작업대 | 잘라서 배경 지움 — **출처·허락 확인 필요** |
 | stall.png · stall_slot.png · stall_x.png · btn_ok.png · btn_no.png | 덩굴 감긴 나무 가판대 UI 참고 그림 (판매용 미리보기, 워터마크 있음) | 그림은 쓰지 않고 같은 느낌으로 새로 그림 |
+
+## 마법석 다시 (2026-11-23)
+| stone_1~3.png | 32x32 Runes pack (금빛 룬) 미리보기 — Ⅰ 거친 룬돌 · Ⅱ 팔각 룬 · Ⅲ 오각 룬 | 흑백으로 바꿔 속성 색으로 칠함 — **출처·허락 확인 필요** |
