@@ -1978,18 +1978,15 @@
       else if (e === 'dark') { blob('#0a0612', R, 0.65); dots('#8c78b0', 8, R, 2, 2); } // 검은 자국
       else { ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = a * 0.6; ctx.beginPath(); ctx.ellipse(mk.x, mk.y, R, R * 0.5, 0, 0, 7); ctx.stroke(); dots('#ffffff', 12, R, 2, 3); } // 시공: 별 고리
       ctx.restore(); } }
-  async function playCast(m) { // 마법 연출 (나·다른 사람 모두)
+  // 마법 연출: 위에서 내려다보는 화면용 (magicfx.js) · 쓴 자리에서 나가고 캐릭터를 따라다니지 않음
+  const GFX = window.MPMagicFX.create({ scale: 1.5, onMark: (key, x, y) => { const M = MPRules.MAGIC[key]; if (M) addMark(M, x, y + 6); } });
+  function playCast(m) { // 나·다른 사람 모두
     const M = MPRules.MAGIC[m.key]; if (!M) return;
-    { const c = elHex(M.el), D = FACE_D[m.face | 0] || [0, 1]; // 빛: 날아가는 마법은 빛 동그라미가 같이 날아가고, 나머지는 잠깐 번쩍 (깨달음은 크고 길게)
-      if (M.dir) MLIGHT.push({ x: m.x + D[0] * 20, y: m.y - 20 + D[1] * 10, vx: D[0] * 260, vy: D[1] * 260, t0: performance.now(), life: 0.95, stop: 0.7, move: 1, kind: 'spell', c });
-      lightFlash(m.x, m.y - 20, M.el === 'root' ? 'rootFlash' : 'flash', M.el === 'root' ? '#e6d2ff' : c, M.el === 'root' ? 4 : 0.7); }
-    await loadPfxW(); if (!PFXW) return; const mod = await fxMod(M.fx); if (!mod) return; PFXW.fx[M.fx] = mod;
-    const D = FACE_D[m.face | 0] || [0, 1], o = M.pal ? { palette: M.pal } : {}, who = m.id === myId ? player : others('ground', null).find((b) => b.id === m.id);
-    { const far = M.dir ? 170 : (M.eff === 'boulder' || M.eff === 'quake' || M.eff === 'freeze' || M.eff === 'bridge' || M.eff === 'grow') ? 36 : 0; setTimeout(() => addMark(M, m.x + D[0] * far, m.y + 6 + D[1] * far * 0.6), M.dir ? 650 : 150); } // 바닥 자국
-    if (M.dir) { const e = wfx(M.fx, m.x + D[0] * 20, m.y - 20 + D[1] * 10, Object.assign({ flip: D[0] < 0, angle: D[1] ? (D[1] > 0 ? Math.PI / 2 : -Math.PI / 2) : 0 }, o), { vx: D[0] * 260, vy: D[1] * 260, life: 0.7 }); if (e && D[1]) e.f.options.angle = D[1] > 0 ? Math.PI / 2 : -Math.PI / 2; }
-    else if (M.eff === 'boulder' || M.eff === 'quake' || M.eff === 'freeze' || M.eff === 'bridge' || M.eff === 'grow') wfx(M.fx, m.x + D[0] * 36, m.y + D[1] * 36 - 6, o, { life: 1.6 });
-    else wfx(M.fx, m.x, m.y - 10, o, Object.assign({ life: (mod.meta && mod.meta.loop) ? 1.8 : Infinity }, who ? { follow: who, fdy: -10 } : {}));
-    SND.play('chargeFull');
+    const D = FACE_D[m.face | 0] || [0, 1];
+    if (M.el === 'root') lightFlash(m.x, m.y - 20, 'rootFlash', '#e6d2ff', 4); // 깨달음: 크게 환해짐
+    GFX.cast(m.key, { x: m.x, y: m.y, dir: D });
+    { const C = MPRules.MAGIC_COMBAT[m.key] || {}; if (C.shape === 'self' || C.shape === 'zone') addMark(M, m.x + D[0] * (C.at || 0) * 1.5, m.y + 6 + D[1] * (C.at || 0) * 1.2); }
+    SND.play(MPRules.MAGIC_COMBAT[m.key] && MPRules.MAGIC_COMBAT[m.key].shake >= 5 ? 'boom' : 'chargeFull');
     if (m.frozen) { const until = Date.now() + (m.sec || 10) * 1000; for (const i of m.frozen) FROZEN.set(i, until); }
     if (m.id === myId) { if (m.speed) BUFF.speed = performance.now() + m.speed * 1000; if (m.light) BUFF.light = performance.now() + m.light * 1000; if (m.heal) { DROWN.t = 0; player._sk = 0; } }
   }
@@ -4508,6 +4505,7 @@
     for (let i = MLIGHT.length - 1; i >= 0; i--) { const L = MLIGHT[i], age = (now - L.t0) / 1000; if (age > L.life) { MLIGHT.splice(i, 1); continue; }
       const f = L.move ? (age < L.life - 0.25 ? 1 : (L.life - age) / 0.25) : Math.min(1, age * 8) * (1 - age / L.life) ** 0.7;
       addLight(ctx, L.x + L.vx * Math.min(age, L.stop || 9), L.y + L.vy * Math.min(age, L.stop || 9), L.kind, { c: L.c, a: (MPRules.LIGHT_OF[L.kind].a || 1) * f, bloom: L.kind === 'rootFlash' }); }
+    for (const L of GFX.lights()) addLight(ctx, L.x, L.y, 'spell', { r: L.r, c: L.c, a: L.a });
     if (player && !TITLE.on) { const px = player.x, py = player.y - 24;
       addLight(ctx, px, py, 'self');
       if (BUFF.light > now) addLight(ctx, px, py, 'lightBuff');
@@ -4577,7 +4575,8 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#1f62c0'; ctx.fillRect(0, 0, vw, vh); // 맵 밖도 바다
     if (shakeT > 0) shakeT = Math.max(0, shakeT - lastDt); const shk = shakeT > 0 ? 4 * shakeT / 0.3 : 0; // 맞으면 화면 흔들림
-    const camX = (TITLE.on ? TITLE.x : player.x) - vw / 2 / zoom + (Math.random() - 0.5) * shk, camY = (TITLE.on ? TITLE.y : player.y) - 40 - vh / 2 / zoom + (Math.random() - 0.5) * shk;
+    GFX.update(Math.min(0.05, lastDt || 0.016)); const gsk = GFX.shake();
+    const camX = (TITLE.on ? TITLE.x : player.x) - vw / 2 / zoom + (Math.random() - 0.5) * shk + gsk.x, camY = (TITLE.on ? TITLE.y : player.y) - 40 - vh / 2 / zoom + (Math.random() - 0.5) * shk + gsk.y;
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -camX * dpr * zoom, -camY * dpr * zoom);
     ctx.imageSmoothingEnabled = false;
     groundCam.x = camX; groundCam.y = camY;
@@ -4661,10 +4660,12 @@
     drawLoots(ctx, t);
     buildShadeMask(tx0, tx1, ty0, ty1);
     drawMarks(); // 마법 자국 (캐릭터 아래)
+    GFX.drawGround(ctx); // 마법: 땅에 붙는 것 (그림자·마법진·장판)
     drawActors(list, t);
     SHADE.on = false;
     { const c = atkCharge(); if (c >= 0.25 && !ATK.chFx && PFXW) { ATK.chFx = wfx('spell-charge', player.x, player.y, {}, { follow: player }); SND.play('charge'); ATK.full = false; } if (c >= 1 && !ATK.full) { ATK.full = true; SND.play('chargeFull'); } if (c >= 0) { ctx.strokeStyle = c >= 1 ? '#fff2a8' : 'rgba(159,211,255,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(player.x, player.y - 24, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c); ctx.stroke(); if (c >= 1) { ctx.font = `700 12px ${PFONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff2a8'; ctx.fillText('차징!', player.x, player.y - 100); } } }
     drawWfx(Math.min(0.05, lastDt || 0.016), groundCam.x, groundCam.y);
+    GFX.drawTop(ctx); // 마법: 공중 (구슬·번개·파편)
     { const nw = performance.now(); for (let q = DROPS.length - 1; q >= 0; q--) { const d = DROPS[q], a = (nw - d.t0) / d.life; if (a >= 1) { DROPS.splice(q, 1); continue; } const yy = d.y + d.vy * a * d.life / 1000 * 0.9; // 물뿌리개 물방울
       ctx.globalAlpha = 1 - a * 0.5; ctx.fillStyle = a > 0.8 ? '#cfefff' : '#6cc4ff'; ctx.fillRect(Math.round(d.x), Math.round(yy), 2, a > 0.8 ? 1 : 3); } ctx.globalAlpha = 1; }
     if (hold.on) { // 꾹 누르기 게이지
