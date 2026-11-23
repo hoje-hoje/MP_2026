@@ -353,12 +353,13 @@
       return Promise.all([...j.chars, ...j.animals, ...j.monsters].map(async (k) => { ART['u_' + k] = await loadImg('assets/user/' + k + '.png'); }));
     });
     for (const k of EXTRA) names['x_' + k] = 'extra/' + k + '.png';
+    for (const k of ['cliff_a','cliff_b','cliff_c','bridge_h','bridge_v','crystal_big','crystal','crystal_plant','crystal_plant2','crystal_flower','lily','lily2','bloomtree_a','bloomtree_b','bloomtree_c','crystaltree','twisttree_a','twisttree_b','twisttree_c','bonsai_a','bonsai_b','bonsai_c','angel_statue','ghost_statue','agave_a','agave_b','agave_c','bush_a','bush_b','bush_c','cairn_a','cairn_b','ruins_a','ruins_b','ruins_c','rock_a','rock_b','floor_teal','floor_cream_raw','rim']) names['i_' + k] = 'isle/' + k + '.png'; // Flying Islands 타일셋 (하늘섬)
     for (const k of ['lily', 'whitelily', 'lavender', 'marigold']) names['x_fl_' + k] = 'flora/' + k + '.png'; // 받은 꽃 그림
     for (const k of TEMPLE) names['x_' + k] = 'na/' + k + '.png';
     const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
     await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
-  const EXTRA = ['coin_spin', 'door_isaac', 'door_isaac_down', 'sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry', 'skycloud_0', 'skycloud_1', 'skycloud_2', 'skycloud_3', 'wing'];
+  const EXTRA = ['coin_spin', 'door_isaac', 'door_isaac_down', 'sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry', 'skycloud_0', 'skycloud_1', 'skycloud_2', 'skycloud_3'];
   const TEMPLE = ['emote0', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'emote6', 'emote7', 'statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
@@ -960,11 +961,13 @@
     planks: (g) => { for (let y = 0; y < 64; y += 8) { g.fillStyle = (y / 8) % 2 ? '#c98f55' : '#d9a066'; g.fillRect(0, y, 64, 8); g.fillStyle = '#9a6a3a'; g.fillRect(0, y + 6, 64, 2); const off = (y * 13) % 48; g.fillRect(off, y, 2, 6); g.fillRect((off + 32) % 64, y, 2, 6); } },
   };
   // 구름 광장 꾸미기: 꽃밭 소품, 이벤트 무대(무지개), 유랑민 모집 게시판
+  const ISLE_K = { angel_statue: 0.62, ghost_statue: 0.7, crystaltree: 0.62, bloomtree_a: 0.8, bloomtree_b: 0.8, bloomtree_c: 0.8, twisttree_a: 0.8, twisttree_b: 0.8, twisttree_c: 0.8, bonsai_a: 0.75, bonsai_b: 0.75, bonsai_c: 0.75, agave_a: 0.75, agave_b: 0.75, agave_c: 0.75, ruins_a: 0.75, ruins_b: 0.75, ruins_c: 0.75, crystal_big: 0.9, crystal_flower: 0.75 };
+  const isleProp = (key, x, y, w = 1, h = 1, walk = false) => ({ x, y, w, h, walk, draw: (g, X, Y) => drawArt(g, ART['i_' + key], X, Y + 4, ISLE_K[key] || 0.8) }); // 하늘섬 소품 (Flying Islands)
   function gardenProps(x0, y0) {
-    const kinds = ['flower_r', 'flower_y', 'fern', 'flower_r', 'mushroom', 'flower_y', 'berry', 'fern'];
+    const kinds = ['lily', 'agave_a', 'bush_a', 'lily2', 'crystal_flower', 'bush_b', 'agave_b', 'lily'];
     const out = [];
-    for (let k = 0; k < 8; k++) out.push({ x: x0 + 1 + (k % 4) * 3, y: y0 + 1 + Math.floor(k / 4) * 4, w: 1, h: 1, walk: true, draw: (g, X, Y) => pix(g, kinds[k], X, Y + 2, 2) });
-    out.push({ x: x0 + 6, y: y0 + 3, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'plant', X, Y + 2, 2.5) });
+    for (let k = 0; k < 8; k++) out.push({ x: x0 + 1 + (k % 4) * 3, y: y0 + 1 + Math.floor(k / 4) * 4, w: 1, h: 1, walk: true, draw: (g, X, Y) => drawArt(g, ART['i_' + kinds[k]], X, Y + 4, 0.6) });
+    out.push(isleProp(['bloomtree_a', 'twisttree_a', 'bloomtree_b', 'bonsai_a'][(x0 + y0) % 4], x0 + 6, y0 + 3, 2, 1));
     return out;
   }
   function plazaStage(g, x, y) {
@@ -972,15 +975,23 @@
     sign(g, x, y - 40, '이벤트 무대');
   }
   let BOARD = [];
-  function bigBoard(g, x, y) { // 하늘 신전 자유 게시판: 타이니 타운 팻말 그림을 크게 + 최근 글 제목
-    drawArt(g, kTile('k_town', 83), x, y + 4, 11);
-    const last = BOARD.slice(-4).reverse(); g.font = `700 12px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (let i = 0; i < 4; i++) { const q = last[i]; if (!q) continue; g.fillStyle = '#3a2410'; g.fillText(q.title.slice(0, 9), x, y - 138 + i * 18); }
-    plaque(g, x, y - 196, '자유 게시판');
+  function bigBoard(g, x, y) { // 하늘 신전 자유 게시판: 최근 글 4개가 쪽지로 붙어 보임
+    g.fillStyle = '#5a4630'; g.fillRect(x - 128, y - 50, 8, 50); g.fillRect(x + 120, y - 50, 8, 50);
+    g.fillStyle = '#2b2340'; g.fillRect(x - 140, y - 150, 280, 108); g.fillStyle = '#8a6a44'; g.fillRect(x - 136, y - 146, 272, 100); g.fillStyle = '#6b5034'; g.fillRect(x - 128, y - 138, 256, 84);
+    g.fillStyle = '#e8c260'; g.fillRect(x - 136, y - 146, 272, 4); g.fillRect(x - 136, y - 50, 272, 4);
+    const last = BOARD.slice(-4).reverse(), cols = ['#fff6d6', '#ffe3e3', '#e3f6ff', '#e8ffe3'];
+    g.font = `700 10px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 0; i < 4; i++) { const px = x - 122 + i * 62, py = y - 132 + (i % 2) * 6, q = last[i];
+      g.fillStyle = q ? cols[i] : 'rgba(255,255,255,0.18)'; g.fillRect(px, py, 54, 64); g.fillStyle = '#c0392b'; g.fillRect(px + 25, py - 2, 4, 4);
+      if (q) { g.fillStyle = q.color || '#2b2340'; const t = q.title; for (let L = 0; L < 4; L++) { const seg = t.slice(L * 5, L * 5 + 5); if (!seg) break; g.fillText(seg, px + 27, py + 12 + L * 13); } } }
+    plaque(g, x, y - 166, '자유 게시판');
   }
-  function posterBoard(g, x, y) { // 모집 게시판: 타이니 타운 팻말 그림
-    drawArt(g, kTile('k_town', 83), x, y + 4, 7); g.font = `700 11px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#3a2410';
-    ['용병 구함', '건국 동료', '귀화 환영'].forEach((t, i) => g.fillText(t, x, y - 88 + i * 14)); plaque(g, x, y - 128, '모집 게시판');
+  function posterBoard(g, x, y) {
+    g.fillStyle = '#5a4630'; g.fillRect(x - 56, y - 60, 6, 60); g.fillRect(x + 50, y - 60, 6, 60);
+    g.fillStyle = '#8a6a44'; g.fillRect(x - 60, y - 96, 120, 50); g.fillStyle = '#6b5034'; g.fillRect(x - 60, y - 50, 120, 4);
+    const papers = [['용병', '구함', '#fff6d6'], ['건국', '동료', '#ffe3e3'], ['귀화', '환영', '#e3f6ff']];
+    papers.forEach(([a, b, c], i) => { const px = x - 52 + i * 38; g.fillStyle = c; g.fillRect(px, y - 90, 32, 38); g.fillStyle = '#c0392b'; g.fillRect(px + 14, y - 92, 4, 4); g.fillStyle = '#2b2340'; g.font = `700 11px ${PFONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(a, px + 16, y - 77); g.fillText(b, px + 16, y - 63); });
+    sign(g, x, y - 112, '모집 게시판');
   }
   // 감옥 창살: 가로 줄(y=8)과 방 사이 세로 줄(x=5,10,15,20,25), 방 이름표
   const drawBars = (g, x, y) => { const t = recolor(kTile('k_dungeon', 77), 'brightness(1.05)'); drawArt(g, t, x, y + 4, 2); }; // 감옥 창살: 타이니 던전 쇠울타리
@@ -1022,13 +1033,13 @@
     },
   });
   Object.assign(GEN_FLOOR, { // 하늘 바닥: 받은 타일(kenney 타이니 타운·고딕·숲)을 색만 바꿔서
-    lawn: (g) => tilesTo(g, 'k_town', [0, 0, 1, 0]),
-    meadow: (g) => tilesTo(g, 'k_town', [1, 2, 2, 1]),
-    cobble: (g) => tilesTo(g, 'k_town', [43, 43, 43, 43], 'brightness(1.15) saturate(0.7)'),
+    lawn: (g) => { const t = ART.i_floor_teal; if (t) { g.imageSmoothingEnabled = false; g.drawImage(t, 0, 0, 64, 64); } }, // 하늘섬 청록 잔디 (Flying Islands)
+    meadow: (g) => { const t = ART.i_floor_teal; if (t) { g.imageSmoothingEnabled = false; g.drawImage(recolor(t, 'brightness(1.12) saturate(1.1)'), 0, 0, 64, 64); } },
+    cobble: (g) => { const t = ART.i_floor_cream_raw; if (t) { g.imageSmoothingEnabled = false; for (let y = 0; y < 64; y += 32) for (let x = 0; x < 64; x += 32) g.drawImage(t, x, y, 32, 32); } }, // 흰 자갈 바닥
     planks: (g) => tilesTo(g, 'k_town', [25, 25, 25, 25]),
     marble_w: (g) => imgTo(g, ART.x_marble, 'brightness(1.25) saturate(0.5)'),
     cloud: (g) => imgTo(g, ART.x_marble, 'brightness(1.35) saturate(0.3) hue-rotate(190deg)'),
-    aisle: (g) => imgTo(g, ART.x_marble, 'sepia(0.8) hue-rotate(175deg) saturate(2.2) brightness(1.08)'), // 하늘색 융단: 고딕 대리석을 하늘색으로
+    aisle: (g) => { const t = ART.i_floor_teal; if (t) { g.imageSmoothingEnabled = false; g.drawImage(recolor(t, 'brightness(1.18) saturate(0.9)'), 0, 0, 64, 64); } }, // 길: 하늘섬 청록 잔디 (Flying Islands)
     silver: (g) => imgTo(g, ART.x_stonefloor, 'saturate(0.3) brightness(0.85) hue-rotate(200deg)'),
   });
 
@@ -1061,36 +1072,71 @@
     const t = performance.now() / 1000, bob = statue ? 0 : Math.round(Math.sin(t * 2 + x * 0.01) * 1.5) * 2, flap = !statue && Math.sin(t * 3 + x) > 0.55 ? 2 : 0;
     g.fillStyle = 'rgba(40,40,90,0.18)'; ell(g, x, y + 1, 18, 5);
     if (statue) g.filter = 'grayscale(1) contrast(0.55) brightness(1.9)';
-    if (ART.x_wing) { drawArt(g, ART.x_wing, x - 11, y - 8 + bob - flap, 2); drawArt(g, ART.x_wing, x + 11, y - 8 + bob - flap, 2, true); } // 날개: 고딕 팩 타락천사 날개를 흰색으로
+    blit(g, WING, x - 12, y - 10 + bob - flap, 2); blit(g, WING, x + 12, y - 10 + bob - flap, 2, true);
     const k = Math.max(0, CHARS.names.indexOf(name));
     if (ART.chars) { const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(ART.chars, (k % CHARS.cols) * 64, Math.floor(k / CHARS.cols) * 112, 16, 16, Math.round(x - 16), Math.round(y - 30 + bob), 32, 32); g.imageSmoothingEnabled = p; }
     g.filter = 'none';
     if (!statue) { g.fillStyle = 'rgba(255,230,120,0.25)'; ell(g, x, y - 36 + bob, 14, 5); blit(g, HALO, x, y - 32 + bob, 2); }
   }
-  function holyAltar(g, x, y, wide = 40, top = 'book') { // 제단: 고딕 석제 제단 + 성서/성배 (받은 그림)
-    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 2, wide + 6, 7); const k = Math.max(2, Math.round(wide / 16)); drawArt(g, recolor(ART.x_altar, 'brightness(2.1) saturate(0.3)'), x, y + 2, k);
-    if (ART.x_altar) drawArt(g, top === 'book' ? ART.x_book : ART.x_chalice, x, y + 2 - ART.x_altar.height * k + 6, 2);
+  function holyAltar(g, x, y, wide = 40, top = 'book') { // 흰 대리석 제단 + 금 띠 + 하늘색 천 + 위에 책/성배
+    const t = performance.now() / 1000;
+    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 2, wide + 10, 8);
+    g.fillStyle = '#2b2340'; g.fillRect(x - wide - 2, y - 38, wide * 2 + 4, 40);
+    g.fillStyle = '#efe8dc'; g.fillRect(x - wide, y - 30, wide * 2, 30); g.fillStyle = '#fffdf8'; g.fillRect(x - wide, y - 36, wide * 2, 8);
+    g.fillStyle = '#e8c260'; g.fillRect(x - wide, y - 28, wide * 2, 3); g.fillRect(x - wide, y - 4, wide * 2, 3);
+    g.fillStyle = '#7fa6ec'; g.fillRect(x - 12, y - 36, 24, 30); g.fillStyle = '#e8c260'; for (let i = 0; i < 6; i++) g.fillRect(x - 12 + i * 4, y - 6, 2, 4);
+    g.fillStyle = '#ffd84d'; g.fillRect(x - 3, y - 24, 6, 6); g.fillRect(x - 1, y - 28, 2, 14); g.fillRect(x - 6, y - 22, 12, 2);
+    const grd = g.createRadialGradient(x, y - 46, 2, x, y - 46, 34); grd.addColorStop(0, `rgba(255,240,170,${0.45 + Math.sin(t * 2) * 0.1})`); grd.addColorStop(1, 'rgba(255,240,170,0)'); g.fillStyle = grd; g.fillRect(x - 34, y - 80, 68, 68);
+    if (top === 'book') { g.fillStyle = '#b8862b'; g.fillRect(x - 16, y - 44, 32, 8); g.fillStyle = '#ffffff'; g.fillRect(x - 15, y - 48, 14, 8); g.fillRect(x + 1, y - 48, 14, 8); g.fillStyle = '#c9c0d8'; g.fillRect(x - 12, y - 46, 8, 2); g.fillRect(x + 4, y - 46, 8, 2); g.fillRect(x - 1, y - 48, 2, 10); }
+    else { g.fillStyle = '#e8c260'; g.fillRect(x - 8, y - 56, 16, 10); g.fillRect(x - 2, y - 46, 4, 6); g.fillRect(x - 6, y - 40, 12, 4); g.fillStyle = '#fff0b0'; g.fillRect(x - 6, y - 56, 4, 6); g.fillStyle = '#d6455b'; g.fillRect(x - 6, y - 58, 12, 2); }
   }
   function plaque(g, x, y, text) { // 이름판: 사용자 명찰 그림 (금빛으로)
     const c = plateTag(text, '#e8c260'); if (!c) return; const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = true; g.drawImage(c.cv, Math.round(x - c.w / 2), Math.round(y - c.h / 2), c.w, c.h); g.imageSmoothingEnabled = p;
   }
   function lantern(g, x, y) { // 등불: 고딕 쇠 촛대 (받은 그림)
-    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 1, 10, 3); drawArt(g, ART.x_candelabra, x, y + 2, 2.5);
+    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 1, 10, 3); drawArt(g, ART.i_crystal_plant || ART.x_candelabra, x, y + 2, 0.9); // 빛나는 크리스털 (Flying Islands)
   }
-  function urn(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); drawArt(g, ART.x_plant, x, y + 2, 2); } // 화분: NA 화분 그림
-  function column(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); drawArt(g, recolor(ART.x_pillar, 'brightness(2.2) saturate(0.25)'), x, y + 4, 2); } // 기둥: 고딕 기둥 (밝게)
-  function lightFountain(g, x, y) { // 분수: NA 연못 그림
-    g.fillStyle = 'rgba(40,40,90,0.15)'; ell(g, x, y + 2, 70, 18); drawArt(g, ART.x_pool, x, y + 8, 3);
+  function urn(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); drawArt(g, ART.i_lily || ART.x_plant, x, y + 2, 0.7); } // 파란 꽃 (Flying Islands)
+  function column(g, x, y) { g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 14, 4); drawArt(g, ART.i_crystal_big || ART.x_pillar, x, y + 4, 0.95); } // 큰 크리스털 기둥 (Flying Islands)
+  function lightFountain(g, x, y) { // 2단 분수: 아래 큰 못 + 가운데 기둥 위 작은 그릇 + 물줄기가 아치로 떨어짐
+    const t = performance.now() / 1000;
+    g.fillStyle = 'rgba(40,40,90,0.15)'; ell(g, x, y + 2, 78, 20);
+    // 아래 못
+    g.fillStyle = '#cfc4b0'; ell(g, x, y - 4, 74, 22); g.fillStyle = '#fffdf8'; ell(g, x, y - 8, 72, 21); g.fillStyle = '#e8c260'; ell(g, x, y - 10, 66, 18); g.fillStyle = '#fffaf0'; ell(g, x, y - 11, 62, 16);
+    g.fillStyle = '#6cc4ee'; ell(g, x, y - 11, 58, 14); g.fillStyle = '#9fdcff'; ell(g, x - 10, y - 14, 36, 7);
+    for (let i = 0; i < 3; i++) { const k = (t * 0.6 + i / 3) % 1; g.strokeStyle = `rgba(255,255,255,${0.7 * (1 - k)})`; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y - 11, 14 + k * 40, 4 + k * 10, 0, 0, Math.PI * 2); g.stroke(); }
+    // 기둥
+    g.fillStyle = '#2b2340'; g.fillRect(x - 9, y - 46, 18, 36); g.fillStyle = '#fffdf8'; g.fillRect(x - 7, y - 44, 14, 34); g.fillStyle = '#e9e3f2'; g.fillRect(x + 3, y - 44, 4, 34); g.fillStyle = '#e8c260'; g.fillRect(x - 9, y - 28, 18, 3);
+    // 위 그릇
+    g.fillStyle = '#2b2340'; ell(g, x, y - 48, 26, 9); g.fillStyle = '#fffdf8'; ell(g, x, y - 50, 25, 8); g.fillStyle = '#e8c260'; ell(g, x, y - 51, 22, 6); g.fillStyle = '#7fd0f4'; ell(g, x, y - 52, 19, 5);
+    // 물줄기: 꼭대기에서 솟아 네 방향 아치로 아래 못에 떨어짐
+    const top = y - 72 + Math.sin(t * 6) * 2;
+    g.fillStyle = '#bfe9ff'; g.fillRect(x - 2, top, 4, y - 52 - top); g.fillStyle = '#ffffff'; g.fillRect(x - 1, top, 2, y - 52 - top);
+    for (const s2 of [-1, 1]) for (let k = 0; k < 14; k++) { const u = ((t * 1.4 + k / 14) % 1), px = x + s2 * (6 + u * 46), py = top + 4 - Math.sin(u * Math.PI) * 6 + u * u * 66; g.fillStyle = k % 3 ? '#a9e4ff' : '#ffffff'; g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3); }
+    for (let k = 0; k < 6; k++) { const a = t * 2 + k, px = x + Math.cos(a) * 18, py = y - 52 + Math.sin(a) * 4; g.fillStyle = 'rgba(255,255,255,0.8)'; g.fillRect(Math.round(px), Math.round(py), 2, 2); }
+    if (Math.sin(t * 3) > 0.7) { g.fillStyle = '#fff6c8'; g.fillRect(x + 22, y - 30, 2, 6); g.fillRect(x + 20, y - 28, 6, 2); }
   }
   function cloudBench(g, x, y) { // 쉼터 의자: 숲 통나무 그림
-    g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 36, 5); drawArt(g, ART.x_log, x - 18, y + 2, 1.5); drawArt(g, ART.x_log, x + 18, y + 2, 1.5, true);
+    g.fillStyle = 'rgba(40,40,90,0.14)'; ell(g, x, y + 1, 36, 5); drawArt(g, ART.i_cairn_a || ART.x_log, x - 16, y + 2, 0.8); drawArt(g, ART.i_rock_b || ART.x_log, x + 18, y + 2, 0.7);
   }
-  function pavilion(g, x, y, c1, label, keeper) { // 상점: 숲 천막 그림을 상점 색으로 + 통·상자 (타이니 타운·던전)
-    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 2, 70, 10);
-    drawArt(g, recolor(ART.x_tent, `hue-rotate(${Math.round(hueOf(c1) - 30)}deg) saturate(1.1) brightness(1.15)`), x, y - 20, 5);
-    if (keeper) drawAngel(g, keeper, x, y - 18);
-    drawArt(g, kTile('k_town', 107), x - 52, y + 2, 2); drawArt(g, kTile('k_dungeon', 89), x + 52, y + 2, 2);
-    plaque(g, x, y - 150, label);
+  function pavilion(g, x, y, c1, label, keeper) { // 상점 정자: 줄무늬 차양 + 금 지붕 + 대리석 계산대 + 천사 상인
+    g.fillStyle = 'rgba(40,40,90,0.16)'; ell(g, x, y + 2, 72, 10);
+    blit(g, ART_COL, x - 56, y - 8, 2); blit(g, ART_COL, x + 56, y - 8, 2);
+    if (keeper) drawAngel(g, keeper, x, y - 44);
+    // 지붕
+    g.fillStyle = '#b8862b'; g.fillRect(x - 70, y - 124, 140, 6);
+    g.fillStyle = '#e8c260'; for (let i = 0; i < 9; i++) g.fillRect(x - 66 + i * 6, y - 130 - i * 3, 132 - i * 12, 6);
+    g.fillStyle = '#fff0b0'; for (let i = 0; i < 9; i++) g.fillRect(x - 66 + i * 6, y - 130 - i * 3, 132 - i * 12, 2);
+    g.fillStyle = '#ffd84d'; pxDisc(g, x, y - 162, 6); g.fillStyle = '#ffffff'; g.fillRect(x - 2, y - 166, 2, 2);
+    // 줄무늬 차양 + 물결 끝
+    for (let i = 0; i < 9; i++) { g.fillStyle = i % 2 ? '#ffffff' : c1; g.fillRect(x - 72 + i * 16, y - 118, 16, 22); pxDisc(g, x - 64 + i * 16, y - 96, 8); g.fillRect(x - 72 + i * 16, y - 104, 16, 8); }
+    g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(x - 72, y - 100, 144, 4);
+    // 계산대
+    g.fillStyle = '#2b2340'; g.fillRect(x - 58, y - 36, 116, 30); g.fillStyle = '#fffdf8'; g.fillRect(x - 56, y - 34, 112, 26);
+    g.fillStyle = '#e8c260'; g.fillRect(x - 58, y - 38, 116, 6); g.fillStyle = '#fff0b0'; g.fillRect(x - 58, y - 38, 116, 2);
+    g.fillStyle = '#efe6d4'; for (let i = -2; i <= 2; i++) { g.fillRect(x + i * 22 - 4, y - 24, 8, 8); } g.fillStyle = '#e8c260'; for (let i = -2; i <= 2; i++) g.fillRect(x + i * 22 - 2, y - 22, 4, 4);
+    g.fillStyle = '#e6dccb'; g.fillRect(x - 56, y - 10, 112, 2);
+    plaque(g, x, y - 108, label);
   }
   // ------------------------------------------------------------ NPC 말 걸기 (대화창) · 천상 상점 · 영역전 규칙서
   const NPCS = {
@@ -2271,6 +2317,13 @@
   };
   // ---------------------------------------------------------- 하늘섬: 방을 벽·문 없이 구름다리로 이어 한 장의 지도로 (가로·세로로 길게)
   // 방 번호·방 안 좌표는 그대로 (서버·감옥·맵 고치기와 호환). 다리 위에 서 있으면 왼쪽/위쪽 방 좌표로 셈 (좌표가 음수가 안 되게)
+  // 하늘섬 꾸미기 (Flying Islands 타일셋): 석상·꽃나무·꼬인 나무·크리스털 나무
+  ROOMS.temple.props.push(isleProp('angel_statue', 6, 16, 2, 1), isleProp('angel_statue', 23, 16, 2, 1), isleProp('crystal_flower', 1, 4), isleProp('crystal_flower', 28, 4));
+  ROOMS.market.props.push(isleProp('bloomtree_c', 1, 16), isleProp('bloomtree_c', 28, 16), isleProp('crystal_big', 1, 4), isleProp('crystal_big', 28, 3));
+  ROOMS.council.props.push(isleProp('ghost_statue', 22, 14), isleProp('bonsai_a', 1, 14), isleProp('crystal_flower', 13, 14));
+  ROOMS.plaza.props.push(isleProp('bloomtree_a', 2, 13, 2, 1), isleProp('twisttree_a', 52, 13, 2, 1), isleProp('twisttree_b', 2, 22, 2, 1), isleProp('bloomtree_b', 52, 22, 2, 1), isleProp('crystaltree', 47, 11, 3, 1), isleProp('ruins_b', 14, 30, 2, 1), isleProp('ruins_c', 41, 30, 2, 1));
+  ROOMS.wander.props.push(isleProp('twisttree_c', 30, 16, 2, 1), isleProp('bloomtree_c', 12, 16, 2, 1), isleProp('agave_c', 19, 6), isleProp('bush_b', 2, 6));
+  for (const id of ['secret1', 'secret2']) ROOMS[id].props.push(isleProp('bonsai_b', 2, 7), isleProp('crystal_plant2', 11, 7));
   const SKY = { off: {}, bridge: new Map(), bcv: null, bx0: 0, by0: 0, gap: 6 };
   for (const [id, R] of Object.entries(ROOMS)) if (id !== 'jail') R.wall = false; // 감옥만 벽
   const skyLinked = (R, d) => d.to !== 'ground' && ROOMS[d.to] && ROOMS[d.to].doors.some((q) => q.to === R.id);
@@ -2283,7 +2336,7 @@
     for (const id of Object.keys(ROOMS)) if (!off[id]) off[id] = [0, 200]; // 이어지지 않은 방 (없어야 함)
     for (const [id, A] of Object.entries(ROOMS)) { const [ax, ay] = off[id];
       for (const d of A.doors) { if (!skyLinked(A, d) || (d.side !== 'E' && d.side !== 'S')) continue; // 오른쪽·아래로 가는 다리만 (한 번씩)
-        for (let k = 1; k <= G; k++) for (let w = -1; w <= 1; w++) { const gx = d.side === 'E' ? ax + A.w - 1 + k : ax + d.at + w, gy = d.side === 'E' ? ay + d.at + w : ay + A.h - 1 + k; SKY.bridge.set(gx + ',' + gy, id); } } }
+        for (let k = 1; k <= G; k++) for (let w = -1; w <= 1; w++) { const gx = d.side === 'E' ? ax + A.w - 1 + k : ax + d.at + w, gy = d.side === 'E' ? ay + d.at + w : ay + A.h - 1 + k; SKY.bridge.set(gx + ',' + gy, { id, dir: d.side, mid: w === 0, k }); } } }
   })();
   const skyRoomAt = (gx, gy) => { for (const [id, R] of Object.entries(ROOMS)) { const [ox, oy] = SKY.off[id]; if (gx >= ox && gy >= oy && gx < ox + R.w && gy < oy + R.h) return R; } return null; };
   function skyBlocked(R, tx, ty) { // 방 안 칸 좌표 → 하늘섬 전체에서 막혔는지
@@ -2293,7 +2346,7 @@
   }
   function skyRebase() { // 걸어서 다른 섬(방)에 들어가면 그 방 좌표로 바꿈
     const R = player.room; if (!R || !SKY.off[R.id]) return; const [ox, oy] = SKY.off[R.id], gx = Math.floor(player.x / TILE) + ox, gy = Math.floor(player.y / TILE) + oy;
-    let Q = skyRoomAt(gx, gy); if (!Q) { const own = SKY.bridge.get(gx + ',' + gy); Q = own ? ROOMS[own] : R; }
+    let Q = skyRoomAt(gx, gy); if (!Q) { const own = SKY.bridge.get(gx + ',' + gy); Q = own ? ROOMS[own.id] : R; }
     if (Q === R) return; const [qx, qy] = SKY.off[Q.id]; player.x += (ox - qx) * TILE; player.y += (oy - qy) * TILE; player.room = Q; lastTerr = null; netTp = true;
   }
   function buildBridges() { // 구름다리 그림 (한 장)
@@ -2301,8 +2354,10 @@
     const x0 = Math.min(...keys.map((k) => k[0])) - 2, y0 = Math.min(...keys.map((k) => k[1])) - 2, x1 = Math.max(...keys.map((k) => k[0])) + 3, y1 = Math.max(...keys.map((k) => k[1])) + 3;
     const c = document.createElement('canvas'); c.width = (x1 - x0) * TILE; c.height = (y1 - y0) * TILE; const g = c.getContext('2d'), NC = ROOM_NIGHT;
     const pts = keys.map(([x, y]) => [(x - x0) * TILE + 16, (y - y0) * TILE + 16]);
-    const CLS = [ART.x_skycloud_3, ART.x_skycloud_2].filter(Boolean).map((cl) => (NC ? recolor(cl, 'brightness(0.42) saturate(1.5) hue-rotate(205deg)') : cl)); g.imageSmoothingEnabled = false; // 구름다리: 사용자 픽셀 구름을 이어 붙임
-    for (const [x, y] of pts) if (CLS.length) { const cl = CLS[(hash(x, y, 5) * CLS.length) | 0], k = 0.9 + hash(x, y, 6) * 0.3; g.drawImage(cl, Math.round(x - cl.width * k / 2), Math.round(y - cl.height * k / 2 + 6), Math.round(cl.width * k), Math.round(cl.height * k)); }
+    const nk = (c) => (c && NC ? recolor(c, 'brightness(0.5) saturate(1.2) hue-rotate(205deg)') : c), BH = nk(ART.i_bridge_h), BV = nk(ART.i_bridge_v); g.imageSmoothingEnabled = false; // 밧줄 다리 (Flying Islands)
+    for (const [bx, by] of keys) { const B = SKY.bridge.get(bx + ',' + by), x = (bx - x0) * TILE, y = (by - y0) * TILE; if (!B.mid) continue;
+      if (B.dir === 'E' && BH && B.k % 2 === 1) g.drawImage(BH, x - 8, y - 16, 94, 64); // 가로 밧줄 다리
+      if (B.dir === 'S' && BV && B.k % 2 === 1) g.drawImage(BV, x - 20, y - 8, 74, 76); } // 세로 사다리 다리
     SKY.bcv = c; SKY.bx0 = x0 * TILE; SKY.by0 = y0 * TILE;
   }
   const SKY_M = 90;
@@ -2423,10 +2478,10 @@
     const step = 26;
     for (let x = 0; x <= w; x += step) { rim.push([x, 0]); rim.push([x, h]); }
     for (let y = 0; y <= h; y += step) { rim.push([0, y]); rim.push([w, y]); }
-    const NC = ROOM_NIGHT; // 섬 둘레 구름: 사용자가 준 픽셀 구름 (밤엔 어둡고 보랏빛으로 색만 바꿈)
-    { const CLS = [ART.x_skycloud_3, ART.x_skycloud_2].filter(Boolean).map((c) => (NC ? recolor(c, 'brightness(0.42) saturate(1.5) hue-rotate(205deg)') : c)); const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
-      if (CLS.length) for (let x = -10; x <= w + 10; x += 46) for (const y of [0, h]) { const c = CLS[(hash(x, y, 7) * CLS.length) | 0], k = 1.6 + hash(x, y, 3) * 0.5; g.drawImage(c, Math.round(x - c.width * k / 2), Math.round(y - c.height * k / 2 + (y ? 14 : 4)), Math.round(c.width * k), Math.round(c.height * k)); }
-      if (CLS.length) for (let y = 20; y <= h - 20; y += 40) for (const x of [0, w]) { const c = CLS[(hash(x, y, 8) * CLS.length) | 0], k = 1.5 + hash(x, y, 4) * 0.4; g.drawImage(c, Math.round(x - c.width * k / 2), Math.round(y - c.height * k / 2 + 8), Math.round(c.width * k), Math.round(c.height * k)); }
+    const NC = ROOM_NIGHT; // 섬 아래 바위 절벽 (Flying Islands) · 밤엔 어둡고 보랏빛으로 색만 바꿈
+    const nightK = (c) => (c && NC ? recolor(c, 'brightness(0.45) saturate(1.3) hue-rotate(205deg)') : c);
+    { const CL = ['cliff_a', 'cliff_b', 'cliff_c'].map((k) => nightK(ART['i_' + k])).filter(Boolean); const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
+      if (CL.length) for (let x = 6; x < w - 20; x += 104) { const c = CL[(hash(x, 1, 9) * CL.length) | 0], k = 1.05, cw = c.width * k; g.drawImage(c, Math.round(Math.min(x, w - cw - 6)), h - 44, Math.round(cw), Math.round(c.height * k)); }
       g.imageSmoothingEnabled = pv; void rim; }
     const pat = (key) => {
       const tc = document.createElement('canvas'); const tg = tc.getContext('2d');
@@ -2441,6 +2496,10 @@
     else if (R.floor === 'stonefloor') { g.fillStyle = 'rgba(255,248,235,0.22)'; rr(g, 18, 18, w - 36, h - 36, 18); }
     for (const [cx, cy, cw, ch] of R.carpets || []) { g.fillStyle = pat(R.carpet || 'aisle'); g.fillRect(cx * TILE, cy * TILE, cw * TILE, ch * TILE); }
     for (const [px, py, pw, ph, key, rad] of R.patches || []) { g.fillStyle = pat(key); rr(g, px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0); }
+    { const rimI = nightK(ART.i_rim); if (rimI) { const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; // 섬 가장자리 흰 자갈 (Flying Islands)
+      for (let x = 10; x < w - 30; x += 36) { g.drawImage(rimI, x, 8, 40, 22); g.drawImage(rimI, x, h - 34, 40, 22); }
+      for (let y = 26; y < h - 40; y += 20) { g.drawImage(rimI, 6, y, 22, 22 * 0.9); g.drawImage(rimI, w - 28, y, 22, 22 * 0.9); }
+      g.imageSmoothingEnabled = pv; } }
     if (R.wall && R.wallStyle !== 'iron') heavenWall(g, w, R);
     else if (R.wall) {
       const bt = document.createElement('canvas'); bt.width = bt.height = TILE; const bg2 = bt.getContext('2d'); bg2.imageSmoothingEnabled = false; bg2.drawImage(ART.x_brick, 0, 0, TILE, TILE);
