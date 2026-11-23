@@ -591,7 +591,7 @@
 
   // 칸이 바뀌면 그 칸이 들어 있는 청크만 바로 다시 그린다 (깜빡임 없게)
   const staleChunks = new Map();
-  const PICKED = new Map(); const pickedNow = (i) => { const t2 = PICKED.get(i); return t2 != null && Date.now() - t2 < MPRules.NUM.regrowMin * 60e3; }; // 뜯은 풀·꽃 (다시 자랄 때까지 안 보임)
+  const PICKED = new Map(); const pickedNow = (i) => MPRules.stillPicked(PICKED.get(i)); let REGEN_AT = MPRules.lastRegen(); setInterval(() => { const r = MPRules.lastRegen(); if (r !== REGEN_AT) { REGEN_AT = r; PICKED.clear(); invalidateChunks(); if (player.scene === 'ground' && !TITLE.on) toast('🌿 풀과 꽃이 다시 자랐어요'); } }, 30000); // 뜯은 풀·꽃 (다시 자랄 때까지 안 보임)
   function dirtyTile(i) {
     const x = i % W, y = Math.floor(i / W), keys = new Set();
     for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) keys.add(Math.floor((x + dx * 3) / CHUNK) + ',' + Math.floor((y + dy * 3) / CHUNK));

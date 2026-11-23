@@ -84,7 +84,7 @@
     erodeStep: 10, erodeFall: 50,  // 균열: 멸망 선포 다음 날부터 매일 아침 영역마다 침식 +10%, 나라 전체 침식 50% 이상이면 멸망 (수도는 침식 안 됨)
     maxWalls: 60, maxTraps: 12,    // 나라당 설치 한도
     floorSpeed: 1.5,               // 우리 나라 바닥 위에서 빨라지는 배수
-    chopHandSec: 4, regrowMin: 20, gatherSec: 0.8, // 맨손 나무 베기 4초 · 풀·꽃은 20분 뒤 다시 자람
+    chopHandSec: 4, regrowMin: 20, gatherSec: 0.8, // 맨손 나무 베기 4초 · 풀·꽃은 밤 12시·낮 12시에 다시 자람 (lastRegen)
     wallBreakSec: 5, chopSec: 2,   // 방벽 부수기·나무 베기 시간
     scoutHits: 10,                 // 적 수정을 이만큼 때리면 그 나라 병력이 보임
     scoutResetMin: 10,             // 10분 동안 다시 안 때리면 횟수 처음부터
@@ -201,6 +201,9 @@
   const GRID_INDEX = {}; for (const r of RECIPES) if (r.grid) { const k = r.grid.join('/'); if (GRID_INDEX[k]) throw new Error('조합법 겹침: ' + r.id + ' / ' + GRID_INDEX[k].id); GRID_INDEX[k] = r; }
   const matchGrid = (cells) => GRID_INDEX[gridKey(cells)] || null;
   RECIPES.push({ id: stoneKey('root', 0), cat: 'magic', el: 'root', sn: 0, name: stoneName('root', 0), mats: {}, nocraft: true, desc: '처음에 받는 마법석 · 스킬 트리 가운데 칸에 끼워요' });
+  // 풀·꽃 다시 자람: 매일 밤 12시·낮 12시(한국 시간)에 한꺼번에. 그 시각 뒤에 뜯은 것만 '뜯긴 상태'
+  function lastRegen(t = Date.now()) { const k = new Date(t + 9 * 3600e3); return Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate(), k.getUTCHours() >= 12 ? 12 : 0) - 9 * 3600e3; }
+  const stillPicked = (pt, t = Date.now()) => pt != null && pt >= lastRegen(t);
   const RECIPE_BY = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
   function plantKind(t, x, y) {
     if (t !== T.GRASS) return null; const h = hash(x, y, 7);
@@ -883,5 +886,5 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });
