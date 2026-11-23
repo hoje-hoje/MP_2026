@@ -358,7 +358,7 @@
     const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
     await Promise.all([meta, users, fonts, ...Object.entries(names).map(async ([k, f]) => { ART[k] = await loadImg('assets/' + f); })]);
   }
-  const EXTRA = ['coin_spin', 'door_isaac', 'door_isaac_down', 'sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry', 'skycloud_0', 'skycloud_1', 'skycloud_2', 'skycloud_3'];
+  const EXTRA = ['coin_spin', 'door_isaac', 'door_isaac_down', 'sky_floor', 'obelisk', 'portal_red', 'portal_blue', 'door_gold', 'door_cloud', 'store1', 'store2', 'store3', 'store4', 'coin', 'cloud', 'burst', 'pin', 'tower', 'marble', 'stonefloor', 'carpet', 'grass', 'dirt', 'pillar', 'candelabra', 'rosewin', 'tomb', 'altar', 'book', 'candles', 'chalice', 'key', 'bishop', 'keeper', 'tent', 'cabin', 'campfire', 'woodpile', 'log', 'boulder', 'boulder_sm', 'flower_r', 'flower_y', 'mushroom', 'fern', 'stump', 'berry', 'skycloud_0', 'skycloud_1', 'skycloud_2', 'skycloud_3', 'wing'];
   const TEMPLE = ['emote0', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'emote6', 'emote7', 'statue_orb', 'statue_lion', 'pillar_na', 'plant', 'arch', 'pool', 'floor_palace', 'brick', 'banner0', 'banner1', 'banner2', 'banner3', 'banner4', 'banner5', 'banner6'];
   // 픽셀 그림 하나를 '바닥 가운데'에 맞춰 그린다. k: 배율 / fitH: 높이(px)에 맞추기 (큰 그림용)
   function pix(g, key, cx, bottom, k = 2, fitH = 0, alpha = 1) {
@@ -1061,7 +1061,7 @@
     const t = performance.now() / 1000, bob = statue ? 0 : Math.round(Math.sin(t * 2 + x * 0.01) * 1.5) * 2, flap = !statue && Math.sin(t * 3 + x) > 0.55 ? 2 : 0;
     g.fillStyle = 'rgba(40,40,90,0.18)'; ell(g, x, y + 1, 18, 5);
     if (statue) g.filter = 'grayscale(1) contrast(0.55) brightness(1.9)';
-    blit(g, WING, x - 12, y - 10 + bob - flap, 2); blit(g, WING, x + 12, y - 10 + bob - flap, 2, true);
+    if (ART.x_wing) { drawArt(g, ART.x_wing, x - 11, y - 8 + bob - flap, 2); drawArt(g, ART.x_wing, x + 11, y - 8 + bob - flap, 2, true); } // 날개: 고딕 팩 타락천사 날개를 흰색으로
     const k = Math.max(0, CHARS.names.indexOf(name));
     if (ART.chars) { const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(ART.chars, (k % CHARS.cols) * 64, Math.floor(k / CHARS.cols) * 112, 16, 16, Math.round(x - 16), Math.round(y - 30 + bob), 32, 32); g.imageSmoothingEnabled = p; }
     g.filter = 'none';
@@ -2587,7 +2587,6 @@
     if (night && NIGHT_IMG.complete && NIGHT_IMG.naturalWidth) { // 별하늘 사진: 화면을 덮고 아주 천천히 흐름
       const sc = Math.max(vw / NIGHT_IMG.naturalWidth, vh / NIGHT_IMG.naturalHeight) * 1.15, w = NIGHT_IMG.naturalWidth * sc, hh = NIGHT_IMG.naturalHeight * sc, ox = -((t * 4) % Math.max(1, w - vw)) * 0 - (w - vw) / 2 + Math.sin(t / 40) * (w - vw) / 2, oy = -(hh - vh) / 2;
       ctx.globalAlpha = 0.85; ctx.drawImage(NIGHT_IMG, ox, oy, w, hh); ctx.globalAlpha = 0.35; ctx.fillStyle = grd; ctx.fillRect(0, 0, vw, vh); ctx.globalAlpha = 1; }
-    if (night || dusk) drawStarSky(t, night ? 1 : 0.4); // 반짝이는 별·별똥별·달 (해 질 녘엔 옅게)
     const n = night ? 6 : 9; // 구름: 밤엔 어둡고 보랏빛으로 빛나게 (몽환적)
     if (night) { ctx.save(); ctx.filter = 'brightness(0.32) saturate(1.4) hue-rotate(205deg) drop-shadow(0 0 10px rgba(190,160,255,0.55))'; }
     else if (dusk) { ctx.save(); ctx.filter = 'sepia(0.35) saturate(1.3) hue-rotate(-12deg) brightness(0.95)'; }
