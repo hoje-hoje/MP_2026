@@ -68,7 +68,7 @@
     maxMembersEarly: 6,            // 1~2일차 나라 인원 (3일차부터 제한 없음)
     claimPerDay: 5, claimFreeDay: 5, claimStartDay: 2, // 주인 없는 땅: 2일차부터, 하루 5곳, 5일차부터 제한 없음
     joinBanH: 24,                  // 나가거나 내보내진 사람은 24시간 동안 가입 불가
-    sudokuSec: 300, slideSec: 180, sudokuGivens: 46, // 퍼즐 시간 제한(초), 스도쿠 쉬운 난이도(처음 보이는 칸 수)
+    sudokuSec: 240, slideSec: 180, sudokuGivens: 36, // 퍼즐 시간 제한(초), 스도쿠 쉬운 난이도(처음 보이는 칸 수)
     // 영지 (나라 공용 저장소)
     woodPerTree: 2,                // 나무 1그루 목재
     price: { floor: 20, wall: 60, deco: 30, trap: 150 }, // 건축 상점 가격 (코인, 1개 · 종류별로 같음, 테마는 모양만 다름)
@@ -791,23 +791,24 @@
   }
   // ------------------------------------------------------------ 제단 퍼즐: 스도쿠 · 슬라이딩
   const shuffle = (a, rnd = Math.random) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  // 스도쿠 9×9: 꽉 찬 판을 만들고 givens 칸만 남김. 답은 '규칙에 맞고 처음 칸과 같으면' 정답 (답이 여럿이어도 됨)
+  // 스도쿠 8×8 (상자 2×4): 꽉 찬 판을 만들고 givens 칸만 남김. 답은 '규칙에 맞고 처음 칸과 같으면' 정답 (답이 여럿이어도 됨)
+  const SDK = { n: 8, br: 2, bc: 4 }; // 9×9는 너무 오래 걸려서 8×8 (가로·세로·2×4 칸에 1~8 한 번씩)
   function genSudoku(givens = NUM.sudokuGivens, rnd = Math.random) {
-    const g = new Array(81).fill(0);
-    const ok = (i, v) => { const r = Math.floor(i / 9), c = i % 9, br = r - r % 3, bc = c - c % 3; for (let k = 0; k < 9; k++) { if (g[r * 9 + k] === v || g[k * 9 + c] === v || g[(br + Math.floor(k / 3)) * 9 + bc + k % 3] === v) return false; } return true; };
-    const fill = (i) => { if (i === 81) return true; for (const v of shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9], rnd)) if (ok(i, v)) { g[i] = v; if (fill(i + 1)) return true; g[i] = 0; } return false; };
+    const N = SDK.n, NN = N * N, g = new Array(NN).fill(0), vals = Array.from({ length: N }, (_, i) => i + 1);
+    const ok = (i, v) => { const r = Math.floor(i / N), c = i % N, r0 = r - r % SDK.br, c0 = c - c % SDK.bc; for (let k = 0; k < N; k++) { if (g[r * N + k] === v || g[k * N + c] === v || g[(r0 + Math.floor(k / SDK.bc)) * N + c0 + k % SDK.bc] === v) return false; } return true; };
+    const fill = (i) => { if (i === NN) return true; for (const v of shuffle(vals.slice(), rnd)) if (ok(i, v)) { g[i] = v; if (fill(i + 1)) return true; g[i] = 0; } return false; };
     fill(0);
-    const keep = new Set(shuffle([...Array(81).keys()], rnd).slice(0, givens));
+    const keep = new Set(shuffle([...Array(NN).keys()], rnd).slice(0, Math.min(NN - 8, givens)));
     return g.map((v, i) => (keep.has(i) ? v : 0));
   }
   function checkSudoku(puzzle, ans) {
-    if (!Array.isArray(ans) || ans.length !== 81) return false;
+    const N = SDK.n, NN = N * N; if (!Array.isArray(ans) || ans.length !== NN || !Array.isArray(puzzle) || puzzle.length !== NN) return false;
     const a = ans.map((v) => v | 0);
-    if (a.some((v, i) => v < 1 || v > 9 || (puzzle[i] && puzzle[i] !== v))) return false;
-    for (let k = 0; k < 9; k++) {
-      const row = new Set(), col = new Set(), box = new Set();
-      for (let j = 0; j < 9; j++) { row.add(a[k * 9 + j]); col.add(a[j * 9 + k]); box.add(a[(Math.floor(k / 3) * 3 + Math.floor(j / 3)) * 9 + (k % 3) * 3 + j % 3]); }
-      if (row.size !== 9 || col.size !== 9 || box.size !== 9) return false;
+    if (a.some((v, i) => v < 1 || v > N || (puzzle[i] && puzzle[i] !== v))) return false;
+    for (let k = 0; k < N; k++) {
+      const row = new Set(), col = new Set(), box = new Set(), r0 = Math.floor(k / (N / SDK.bc)) * SDK.br, c0 = (k % (N / SDK.bc)) * SDK.bc;
+      for (let j = 0; j < N; j++) { row.add(a[k * N + j]); col.add(a[j * N + k]); box.add(a[(r0 + Math.floor(j / SDK.bc)) * N + c0 + j % SDK.bc]); }
+      if (row.size !== N || col.size !== N || box.size !== N) return false;
     }
     return true;
   }
@@ -882,5 +883,5 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

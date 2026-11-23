@@ -4202,7 +4202,7 @@
     curPuzzle = Object.assign({}, p, { local, t0: performance.now(), moves: [], cur: p.board.slice(), sel: -1 });
     $('pzTitle').textContent = p.kind === 'sudoku' ? '🔢 스도쿠' : '🧩 슬라이딩 퍼즐';
     $('pzMode').textContent = (p.mode === 'claim' ? `풀면 ${terrLabel(p.terr)}을(를) 점령해요` : `풀면 병력 +${MPRules.NUM.puzzleArmy}`) + ` · 제한 ${Math.round(p.sec / 60)}분 · 행동력 1을 썼어요`;
-    $('pzMsg').textContent = p.kind === 'sudoku' ? '칸을 누르고 숫자 키(1~9)를 눌러요. 지우기는 0이나 Backspace. 가로·세로·3×3 칸에 1~9가 한 번씩.' : '빈칸 옆 숫자를 누르거나 방향키로 움직여서 1~8 순서로 맞춰요.'; $('pzMsg').className = 'msg';
+    $('pzMsg').textContent = p.kind === 'sudoku' ? '칸을 누르고 숫자 키(1~8)를 눌러요. 지우기는 0이나 Backspace. 가로·세로·굵은 선 2×4 칸에 1~8이 한 번씩.' : '빈칸 옆 숫자를 누르거나 방향키로 움직여서 1~8 순서로 맞춰요.'; $('pzMsg').className = 'msg';
     $('pzSend').hidden = p.kind !== 'sudoku';
     renderPuzzle();
     $('puzzle').hidden = false;
@@ -4218,7 +4218,7 @@
     const P = curPuzzle, box = $('pzBoard');
     if (P.kind === 'sudoku') {
       box.className = 'sudoku';
-      box.innerHTML = P.cur.map((v, i) => `<button type="button" data-i="${i}" class="${P.board[i] ? 'fix' : ''}${i === P.sel ? ' sel' : ''}${Math.floor(i / 9) % 3 === 2 && Math.floor(i / 9) < 8 ? ' bb' : ''}${i % 9 % 3 === 2 && i % 9 < 8 ? ' br' : ''}">${v || ''}</button>`).join('');
+      box.innerHTML = P.cur.map((v, i) => `<button type="button" data-i="${i}" class="${P.board[i] ? 'fix' : ''}${i === P.sel ? ' sel' : ''}${Math.floor(i / 8) % 2 === 1 && Math.floor(i / 8) < 7 ? ' bb' : ''}${i % 8 % 4 === 3 && i % 8 < 7 ? ' br' : ''}">${v || ''}</button>`).join('');
       for (const b of box.querySelectorAll('button')) b.onclick = () => { const i = +b.dataset.i; if (!P.board[i]) { P.sel = i; renderPuzzle(); } };
     } else {
       box.className = 'slide';
@@ -4235,9 +4235,9 @@
   addEventListener('keydown', (e) => {
     const P = curPuzzle; if (!P || $('puzzle').hidden) return;
     if (P.kind === 'sudoku' && P.sel >= 0) {
-      if (/^[1-9]$/.test(e.key)) { P.cur[P.sel] = +e.key; renderPuzzle(); e.preventDefault(); }
+      if (/^[1-8]$/.test(e.key)) { P.cur[P.sel] = +e.key; renderPuzzle(); e.preventDefault(); }
       else if (e.key === '0' || e.key === 'Backspace' || e.key === 'Delete') { P.cur[P.sel] = 0; renderPuzzle(); e.preventDefault(); }
-      else if (e.key.startsWith('Arrow')) { const d = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -9, ArrowDown: 9 }[e.key]; let i = P.sel; do { i += d; } while (i >= 0 && i < 81 && P.board[i]); if (i >= 0 && i < 81) { P.sel = i; renderPuzzle(); } e.preventDefault(); }
+      else if (e.key.startsWith('Arrow')) { const d = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -8, ArrowDown: 8 }[e.key]; let i = P.sel; do { i += d; } while (i >= 0 && i < 64 && P.board[i]); if (i >= 0 && i < 64) { P.sel = i; renderPuzzle(); } e.preventDefault(); }
       else if (e.key === 'Enter') submitPuzzle();
     } else if (P.kind === 'slide' && e.key.startsWith('Arrow')) { // 방향키: 빈칸 쪽으로 옆 칸을 밀기
       const z = P.cur.indexOf(0), zr = Math.floor(z / 3), zc = z % 3;
