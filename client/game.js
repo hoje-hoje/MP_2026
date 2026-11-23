@@ -1436,6 +1436,19 @@
     if (bite) { g.font = `700 22px ${PFONT}`; g.textAlign = 'center'; g.lineWidth = 4; g.strokeStyle = '#2b2340'; g.strokeText('!', o.x, o.y - 70); g.fillStyle = '#ffd84d'; g.fillText('!', o.x, o.y - 70); }
   }
   // 비 (땅에서만): 빗줄기 + 살짝 어둡게 + 물 위 동그라미
+  // 구름 그림자: 사용자 구름 그림(assets/extra/cloudsh_0~3)을 크게 키워 땅 위로 천천히 흘려 보냄 → 구름 위를 걷는 느낌. 비 올 땐 없음, 밤엔 아주 옅게
+  const CLOUDSH = [0, 1, 2, 3].map((k) => { const im = new Image(); im.src = `assets/extra/cloudsh_${k}.png`; return im; }); const cloudShC = [];
+  function cloudShSprite(k) { if (cloudShC[k]) return cloudShC[k]; const im = CLOUDSH[k]; if (!im.complete || !im.naturalWidth) return null;
+    const pad = 24, c = document.createElement('canvas'); c.width = im.naturalWidth + pad * 2; c.height = im.naturalHeight + pad * 2; const g = c.getContext('2d');
+    g.filter = 'blur(7px)'; g.drawImage(im, pad, pad); g.filter = 'none'; g.globalCompositeOperation = 'source-in'; g.fillStyle = '#0b1a26'; g.fillRect(0, 0, c.width, c.height); return (cloudShC[k] = c); }
+  function drawCloudShadows(camX, camY) { if (WEATHER === 'rain' || player.scene !== 'ground') return;
+    const tt = performance.now() / 1000, A = SLOT === 'night' ? 0.06 : SLOT === 'morning' ? 0.18 : 0.22, CELL = 1150, ox = tt * 16, oy = tt * 5;
+    const x0 = camX - 900, x1 = camX + vw / zoom + 300, y0 = camY - 500, y1 = camY + vh / zoom + 300; ctx.save();
+    for (let cy = Math.floor((y0 - oy) / (CELL * 0.8)) - 1; cy <= Math.ceil((y1 - oy) / (CELL * 0.8)); cy++) for (let cx = Math.floor((x0 - ox) / CELL) - 1; cx <= Math.ceil((x1 - ox) / CELL); cx++) {
+      if (hash(cx, cy, 71) < 0.3) continue; const sp = cloudShSprite(Math.floor(hash(cx, cy, 72) * 4)); if (!sp) continue;
+      const sc = 2.2 + hash(cx, cy, 73) * 1.8, w = sp.width * sc, h = sp.height * sc * 0.85, px = cx * CELL + hash(cx, cy, 74) * CELL * 0.5 + ox, py = cy * CELL * 0.8 + hash(cx, cy, 75) * CELL * 0.45 + oy;
+      if (px + w < x0 || px > x1 || py + h < y0 || py > y1) continue; ctx.globalAlpha = A; ctx.drawImage(sp, px, py, w, h); }
+    ctx.restore(); }
   function drawRain(t) { // 빗줄기·물방울을 세상 좌표에 고정 → 내가 움직여도 비가 따라오지 않고 땅에 떨어짐
     const cx = groundCam.x * zoom, cy = groundCam.y * zoom, md = (a, m) => ((a % m) + m) % m;
     ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = 'rgba(40,60,100,0.16)'; ctx.fillRect(0, 0, vw, vh);
@@ -4455,6 +4468,7 @@
     if (FISHPOP && performance.now() - FISHPOP.t0 < 1600) { const k = (performance.now() - FISHPOP.t0) / 1600; ctx.globalAlpha = 1 - Math.max(0, k - 0.7) / 0.3; drawFish(ctx, player.x, player.y - 80 - k * 30, FISHPOP.kind, 3); ctx.globalAlpha = 1; }
     if (hold.on && hold.kind === 'mine' && hold.nx != null) for (let i = 0; i < 5; i++) { const u = ((performance.now() / 400) + i / 5) % 1; ctx.fillStyle = i % 2 ? '#8c8a96' : '#ffd84d'; ctx.fillRect(Math.round(hold.nx + Math.cos(i * 1.7) * u * 26), Math.round(hold.ny - 20 - Math.sin(u * Math.PI) * 22), 4, 4); } // 곡괭이 돌 부스러기
     if (EDIT.on) { groundEditOverlay(tx0, tx1, ty0, ty1); propGhost(); if (EDIT.lastScene !== 'ground') { EDIT.lastScene = 'ground'; editUI(); } }
+    drawCloudShadows(camX, camY); // 흘러가는 구름 그림자
     nightTint(); // 낮·밤
     if (performance.now() < BUFF.light) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; const k = Math.min(1, (BUFF.light - performance.now()) / 2000), gr = ctx.createRadialGradient(player.x, player.y - 16, 10, player.x, player.y - 16, 150); gr.addColorStop(0, `rgba(255,190,90,${0.35 * k})`); gr.addColorStop(1, 'rgba(255,190,90,0)'); ctx.fillStyle = gr; ctx.fillRect(player.x - 150, player.y - 166, 300, 300); ctx.restore(); } // 불씨: 내 둘레 밝게
     if (WEATHER === 'rain' && ONLINE) drawRain(t); // 비
