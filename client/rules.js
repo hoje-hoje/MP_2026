@@ -198,7 +198,19 @@
   function gridKey(cells) { let x0 = 3, y0 = 3, x1 = -1, y1 = -1; for (let i = 0; i < 9; i++) if (cells[i]) { const x = i % 3, y = (i / 3) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
     if (x1 < 0) return ''; const inv = Object.fromEntries(Object.entries(GRID_KEY).map(([k, v]) => [v, k])), rows = [];
     for (let y = y0; y <= y1; y++) { let r = ''; for (let x = x0; x <= x1; x++) { const c = cells[y * 3 + x]; r += c ? (inv[c] || '?') : '.'; } rows.push(r); } return rows.join('/'); }
-  const GRID_INDEX = {}; for (const r of RECIPES) if (r.grid) { const k = r.grid.join('/'); if (GRID_INDEX[k]) throw new Error('조합법 겹침: ' + r.id + ' / ' + GRID_INDEX[k].id); GRID_INDEX[k] = r; }
+  const GRID_INDEX = {}; for (const r of RECIPES) if (r.grid) { const k = r.grid.join('/'); if (GRID_INDEX[k]) throw new Error('조합법 겹침: ' + r.id + ' / ' + GRID_INDEX[k].id); GRID_INDEX[k] = r; r.grid0 = r.grid.slice(); r.give0 = r.give || 1; }
+  // 관리자가 고친 조합법 (서버 저장 → 모두에게): { 조합법id: { grid: ['WW', ...], give } }. 틀리거나 겹치면 그 조합법만 원래대로
+  function normGrid(g) { if (!Array.isArray(g)) return null; let rows = g.map((r) => String(r || '').toUpperCase().slice(0, 3).replace(/[^WSOFLH.]/g, '.')).slice(0, 3); const W = Math.max(...rows.map((r) => r.length)); rows = rows.map((r) => r.padEnd(W, '.'));
+    while (rows.length && /^\.*$/.test(rows[0])) rows.shift(); while (rows.length && /^\.*$/.test(rows[rows.length - 1])) rows.pop(); if (!rows.length) return null;
+    while (rows.every((r) => r[0] === '.')) rows = rows.map((r) => r.slice(1)); while (rows.every((r) => r[r.length - 1] === '.')) rows = rows.map((r) => r.slice(0, -1)); return rows; }
+  function applyRecipes(over) { const bad = [], mine = []; for (const k of Object.keys(GRID_INDEX)) delete GRID_INDEX[k];
+    for (const r of RECIPES) if (r.grid0) { r.grid = r.grid0.slice(); r.give = r.give0; r.mats = gridMats(r.grid); const o = over && over[r.id]; if (o) mine.push([r, o]); }
+    const mineSet = new Set(mine.map(([r, o]) => (normGrid(o.grid) ? r : null)).filter(Boolean));
+    for (const r of RECIPES) if (r.grid && !mineSet.has(r)) GRID_INDEX[r.grid.join('/')] = r; // 안 고친 것 먼저
+    for (const [r, o] of mine) { const g = normGrid(o.grid); if (!g) continue; const k = g.join('/');
+      if (GRID_INDEX[k] && GRID_INDEX[k] !== r) { bad.push([r.id, GRID_INDEX[k].id]); GRID_INDEX[r.grid.join('/')] = r; continue; } // 겹치면 그 조합법만 원래 모양
+      r.grid = g; r.mats = gridMats(g); r.give = Math.max(1, Math.min(20, (o.give | 0) || r.give0)); GRID_INDEX[k] = r; }
+    return bad; }
   const matchGrid = (cells) => GRID_INDEX[gridKey(cells)] || null;
   RECIPES.push({ id: stoneKey('root', 0), cat: 'magic', el: 'root', sn: 0, name: stoneName('root', 0), mats: {}, nocraft: true, desc: '처음에 받는 마법석 · 스킬 트리 가운데 칸에 끼워요' });
   // 풀·꽃 다시 자람: 매일 밤 12시·낮 12시(한국 시간)에 한꺼번에. 그 시각 뒤에 뜯은 것만 '뜯긴 상태'
@@ -886,5 +898,5 @@
     sideDay: 13,
   };
   const HAT_PRICE = { crown: 500, halo: 400, wizard: 300, horns: 300, viking: 300, tophat: 250, chef: 200, cat: 200, party: 150, cap: 120, beanie: 120, bow: 100, flower: 80, sprout: 80 };
-  return { lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
+  return { applyRecipes, normGrid, lastRegen, stillPicked, SDK, GRID_KEY, BUILD_RECIPE, matchGrid, gridKey, STATS, statsOf, MANA, MAGIC, MAGIC_BASE, MAGIC_HIDDEN, MAGIC_EL, MAGIC_TIER, magicEl, stoneKey, stoneName, hiddenOpen, magicPre, canLearn, RECIPES, RECIPE_BY, MATS, MAT_NAME, costOf, costText, plantKind, STORY, WEAPONS, JOBS, HAT_PRICE, TOOLS, weatherOf, FISH, COLORS, CROPS, BUILD, BUILD_BY, THEMES, normItems, tileItem, World, NUM, RACES, FRONTS, notorietyTier, notorietyBadge, frontName, terrName, nameAll, genSudoku, checkSudoku, genSlide, checkSlide, slideNext, minPerFront, okMin, portalSpot, teamColor, emptyState, sameAnswer, hash, treeKind, storageSpot, mineSpot, T };
 });

@@ -155,6 +155,15 @@ tr.editing td { background: #fff1b8; }
   </section>
 
   <section class="card">
+    <h2>🔨 제작대 조합법 고치기 <span class="hint">칸을 누를 때마다 재료가 바뀌어요 (빈칸 → 목재 → 돌 → 광석 → 풀 → 꽃 → 가죽) · 저장하면 접속 중인 학생에게 바로 적용</span></h2>
+    <div class="row"><button id="rcLoad" type="button">조합법 불러오기</button><select id="rcCat"><option value="build">건축 자재</option><option value="tool">도구</option><option value="light">빛</option><option value="furniture">가구</option></select><input id="rcFind" placeholder="이름 찾기" style="width:140px"><span class="muted" id="rcRes"></span></div>
+    <div id="rcList" class="rcList"></div>
+  </section>
+  <style>.rcList { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 8px; } .rcCard { border: 1px solid #ddd; border-radius: 8px; padding: 8px; background: #fffdf8; } .rcCard.ch { border-color: #e0a040; background: #fff6e4; }
+  .rcGrid { display: grid; grid-template-columns: repeat(3, 40px); gap: 3px; margin: 6px 0; } .rcGrid button { width: 40px; height: 40px; padding: 0; font-size: 13px; border: 1px solid #b8936a; background: #f1e2c4; cursor: pointer; } .rcGrid button.e { background: #fafafa; color: #bbb; }
+  .rcCard .rcRow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 13px; }</style>
+
+  <section class="card">
     <h2>🛠 관리자 계정 <span class="hint">시험용 · 켜면 마법 전부 배움, 도구 전부, 재료 99개씩 · 마나·쿨타임·재료 제한 없음 · 어디서나 만들기</span></h2>
     <div class="row"><label>닉네임 <input id="adName" placeholder="게임 닉네임" style="width:160px"></label><button id="adOn" type="button">관리자로 켜기</button><button id="adOff" type="button">끄기</button><span class="muted" id="adRes"></span></div>
     <p class="muted">먼저 게임에 한 번 들어가서 닉네임을 정한 뒤 켜요. 학생 계정에는 켜지 마세요.</p>
@@ -336,6 +345,20 @@ tr.editing td { background: #fff1b8; }
   document.addEventListener('change', async (e) => { const n = e.target.dataset && e.target.dataset.job; if (!n) return; try { await api('setJob', { name: n, job: e.target.value }); const p = jobPlayers.find((x) => x.name === n); if (p) p.job = e.target.value; drawJobs(); say(`${n} → ${JOBS[e.target.value]}`); } catch (er) {} });
   document.addEventListener('click', async (e) => { if (e.target.id !== 'adOn' && e.target.id !== 'adOff') return; try { const r = await api('setAdmin', { name: $('adName').value, on: e.target.id === 'adOn' }); $('adRes').textContent = `${r.name} → ${r.admin ? '관리자 켜짐' : '관리자 꺼짐'}`; say(r.admin ? '관리자 계정을 켰어요' : '관리자 계정을 껐어요'); } catch (er) {} });
   document.addEventListener('click', async (e) => { if (e.target.id !== 'gpGo') return; try { const r = await api('giveP', { name: $('gpName').value, n: +$('gpN').value, why: $('gpWhy').value || '신의 선물' }); $('gpRes').textContent = `${r.name} → 내 코인 ${r.pcoin}${r.online ? ' (접속 중 · 알림 보냄)' : ' (다음 접속 때 보여요)'}`; say('줬어요'); } catch (er) {} });
+
+  // 제작대 조합법 고치기
+  let RC = [], RCK = {}; const RC_ORDER = ['.', 'W', 'S', 'O', 'F', 'L', 'H'], RC_NAME = { '.': '', W: '목재', S: '돌', O: '광석', F: '풀', L: '꽃', H: '가죽' }, RC_COL = { W: '#b07a42', S: '#8a8a96', O: '#c08a2a', F: '#4a9a3a', L: '#e070a0', H: '#a0623a' };
+  const rcPad = (g) => { const rows = (g || []).map((r) => r.padEnd(3, '.')).concat(['...', '...', '...']).slice(0, 3); return rows.join('').split(''); };
+  function drawRecipes() { const cat = $('rcCat').value, q = $('rcFind').value.trim(); const L = RC.filter((r) => r.cat === cat && (!q || r.name.includes(q)));
+    $('rcList').innerHTML = L.map((r) => { const cells = RCK[r.id] || rcPad(r.grid); RCK[r.id] = cells; return `<div class="rcCard${r.changed ? ' ch' : ''}" data-rc="${r.id}"><b>${r.name}</b>${r.changed ? ' <small>(고침)</small>' : ''}<div class="rcGrid">${cells.map((c, i) => `<button type="button" class="${c === '.' ? 'e' : ''}" data-cell="${i}" style="${c !== '.' ? 'color:#fff;background:' + RC_COL[c] : ''}">${RC_NAME[c] || '·'}</button>`).join('')}</div><div class="rcRow">나오는 개수 <input type="number" min="1" max="20" value="${r.give}" style="width:56px" data-give><button type="button" data-save>저장</button><button type="button" data-reset>원래대로</button></div></div>`; }).join('') || '<p class="muted">없어요</p>'; }
+  document.addEventListener('click', async (e) => {
+    if (e.target.id === 'rcLoad') { const r = await api('recipeList'); RC = r.list; RCK = {}; drawRecipes(); $('rcRes').textContent = `${RC.length}개`; return; }
+    const card = e.target.closest && e.target.closest('[data-rc]'); if (!card) return; const id = card.dataset.rc, R = RC.find((x) => x.id === id);
+    if (e.target.dataset.cell != null) { const i = +e.target.dataset.cell, c = RCK[id][i]; RCK[id][i] = RC_ORDER[(RC_ORDER.indexOf(c) + 1) % RC_ORDER.length]; drawRecipes(); return; }
+    if (e.target.dataset.save != null) { const cells = RCK[id], grid = [0, 1, 2].map((y) => cells.slice(y * 3, y * 3 + 3).join('')); try { const r = await api('recipeSet', { id, grid, give: +card.querySelector('[data-give]').value }); R.grid = r.grid; R.give = r.give; R.changed = true; RCK[id] = rcPad(r.grid); drawRecipes(); say(`${R.name} 조합법을 바꿨어요`); } catch (er) {} return; }
+    if (e.target.dataset.reset != null) { try { const r = await api('recipeReset', { id }); R.grid = r.grid; R.give = r.give; R.changed = false; RCK[id] = rcPad(r.grid); drawRecipes(); say(`${R.name} 조합법을 원래대로`); } catch (er) {} }
+  });
+  document.addEventListener('change', (e) => { if (e.target.id === 'rcCat') drawRecipes(); }); document.addEventListener('input', (e) => { if (e.target.id === 'rcFind') drawRecipes(); });
   async function api(op, data) {
     const r = await fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ key, op }, data || {})) });
     let j = null; try { j = await r.json(); } catch (e) { j = { ok: false, err: '서버 응답 오류 (' + r.status + ')' }; }
