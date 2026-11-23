@@ -110,6 +110,14 @@ main > .tabHide { display: none !important; }
       <button id="ckAuto">실제 시간으로 (자동)</button>
       <label>날씨 <select id="ckWeather"><option value="auto">자동 (가끔 30분씩 비)</option><option value="rain">🌧 비</option><option value="clear">☀ 맑음</option></select></label>
     </div>
+    <div class="row" id="skyRow"><b>🌅 하늘 시간</b>
+      <label><input id="skyH" type="range" min="0" max="23.75" step="0.25" value="12" style="width:200px"> <span id="skyHv">12:00</span></label>
+      <label>배속 <select id="skySp"><option value="0">멈춤</option><option value="1">1배 (실제)</option><option value="60">60배 (1분=1시간)</option><option value="360">360배 (10초=1시간)</option><option value="1440">1440배 (1분=하루)</option></select></label>
+      <button id="skyGo" type="button" class="primary">하늘에 적용</button>
+      <button id="skyOff" type="button">실제 시간으로</button>
+      <span class="muted" id="skyNow"></span>
+    </div>
+    <p class="muted" style="margin-top:-4px">하늘·밤 어둠·빛만 바뀌어요 (전투·일차는 그대로). 확인용이에요. 끝나면 꼭 '실제 시간으로'.</p>
     <div class="row"><label>멸망 선포일 <select id="ckDoom"></select></label><span class="muted" id="ckWaves"></span></div>
     <p class="muted">앞으로 이동하면 그 사이의 일이 차례대로 일어나요: 점심·밤 → 전투 처리, 선포일 점심 → 멸망 선포·첫 균열 예고, 균열 날 아침 → 균열 웨이브. 뒤로 이동하면 아무 일도 다시 일어나지 않아요.</p>
   </section>
@@ -711,6 +719,20 @@ main > .tabHide { display: none !important; }
   document.body.appendChild(bar); document.body.classList.add('tabbed');
   window.MP_ADMIN_TAB = show;
   show(TABS.some((t) => t[0] === cur) ? cur : 'now');
+})();
+</script>
+<script>
+(function () {
+  const $ = (i) => document.getElementById(i), key = () => { try { return sessionStorage.getItem('mpAdminKey') || ''; } catch (e) { return ''; } };
+  const fmt = (h) => String(Math.floor(h)).padStart(2, '0') + ':' + String(Math.round((h % 1) * 60)).padStart(2, '0');
+  let cur = null, got = 0;
+  const paint = () => { $('skyNow').textContent = cur ? '지금 하늘 ' + fmt(((cur.h + (Date.now() - got) / 3600e3 * cur.speed) % 24 + 24) % 24) + (cur.speed ? ' · ' + cur.speed + '배' : ' · 멈춤') : '실제 시간(KST) 따라가는 중'; };
+  const send = async (body) => { const r = await fetch('/admin/api', { method: 'POST', body: JSON.stringify(Object.assign({ key: key(), op: 'sky' }, body)) }); const j = await r.json(); cur = j.sky || null; got = Date.now(); paint(); };
+  $('skyH').oninput = () => { $('skyHv').textContent = fmt(+$('skyH').value); };
+  $('skyGo').onclick = () => send({ h: +$('skyH').value, speed: +$('skySp').value });
+  $('skyOff').onclick = () => send({ off: true });
+  setInterval(paint, 500);
+  fetch('/admin/api', { method: 'POST', body: JSON.stringify({ key: key(), op: 'skyGet' }) }).then((r) => r.json()).then((j) => { cur = j.sky || null; got = Date.now(); paint(); }).catch(() => {});
 })();
 </script>
 <script>document.getElementById('ckWeather').addEventListener('change', async (e) => { let key = ''; try { key = sessionStorage.getItem('mpAdminKey') || ''; } catch (er) {} await fetch('/admin/api', { method: 'POST', body: JSON.stringify({ key, op: 'weather', w: e.target.value }) }); });</script>

@@ -2546,7 +2546,8 @@
     [15.5, ['#0b3a96', '#0b62b8', '#0a86c8', '#14a8c4', '#7fe0e6']], [18.5, ['#0b0a26', '#2a1650', '#5a2a6a', '#d9566a', '#f7c86a']],
     [20.5, ['#0a0a1e', '#16163f', '#1f2a66', '#2e559e', '#4a80c4']], [24, ['#0b0626', '#1a0f45', '#341a5a', '#5a2a70', '#83437f']]];
   const NIGHT_IMG = new Image(); NIGHT_IMG.src = 'assets/extra/nightsky.jpg';
-  function skyHour() { if (!ONLINE || CLOCK_MANUAL) return SLOT === 'night' ? 22.5 : SLOT === 'morning' ? 8 : 14; const k = new Date(Date.now() + 9 * 3600e3); return k.getUTCHours() + k.getUTCMinutes() / 60; }
+  let SKY_OVR = null; /* 관리자 하늘 시간 {h, speed, at(내 시계)} */
+  function skyHour() { if (SKY_OVR) return ((SKY_OVR.h + (Date.now() - SKY_OVR.at) / 3600e3 * SKY_OVR.speed) % 24 + 24) % 24; if (!ONLINE || CLOCK_MANUAL) return SLOT === 'night' ? 22.5 : SLOT === 'morning' ? 8 : 14; const k = new Date(Date.now() + 9 * 3600e3); return k.getUTCHours() + k.getUTCMinutes() / 60; }
   const mixHex = (a, b, u) => { const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * u)).join(',')})`; };
   function skyColors(h) { let i = 0; while (i < SKY_KEYS.length - 2 && h >= SKY_KEYS[i + 1][0]) i++; const [h0, c0] = SKY_KEYS[i], [h1, c1] = SKY_KEYS[i + 1], u = Math.min(1, Math.max(0, (h - h0) / (h1 - h0))), e = u * u * (3 - 2 * u); return c0.map((c, k) => mixHex(c, c1[k], e)); }
   function drawSkyBackground(t) {
@@ -4550,7 +4551,7 @@
   // ------------------------------------------------------------ 게임 시계 (서버) · 낮밤 · 멸망 D-day
   const SLOT_NAME = { morning: '아침 9시', lunch: '점심 1시', night: '밤 10시' };
   function setClock(c) {
-    if (!c) return; CLOCK_MANUAL = !!c.manual;
+    if (!c) return; CLOCK_MANUAL = !!c.manual; if ('sky' in c) SKY_OVR = c.sky ? { h: c.sky.h, speed: c.sky.speed, at: Date.now() } : null;
     const dayChanged = c.day !== DAY;
     if (c.weather && c.weather !== WEATHER) { WEATHER = c.weather; whereDirty = true; if (WEATHER === 'rain' && !TITLE.on) toast('🌧 비가 내리기 시작했어요 (30분쯤) · 물고기 입질이 빨라지고 귀한 물고기가 잘 잡혀요'); }
     DAY = c.day; SLOT = EDIT.on && EDIT.slot ? EDIT.slot : c.slot; DOOM_DAY = c.doomDay || 5; LAST_DAY = c.lastDay || 15; PHASE = phaseOf(DAY);

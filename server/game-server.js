@@ -1497,7 +1497,8 @@ function fragList() {
 const myFrags = (acc) => Object.keys(acc.frags || {}).map(Number);
 const boardPub = () => (state.board || []).map(({ tok, nat, ...r }) => r);
 function broadcastBoard() { const msg = JSON.stringify({ t: 'board', posts: boardPub() }); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); }
-function clockMsg() { const c = gameClock(); return { t: 'clock', manual: !!c.manual, frags: fragList(), day: c.day, slot: c.slot, weather: curWeather(), doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
+function skyNow() { const k = state.sky; if (!k) return null; return { h: ((k.h + (Date.now() - k.at) / 3600e3 * (k.speed || 0)) % 24 + 24) % 24, speed: k.speed || 0 }; } // 관리자가 정한 하늘 시간 (보기용 · 배속)
+function clockMsg() { const c = gameClock(); return { t: 'clock', sky: skyNow(), manual: !!c.manual, frags: fragList(), day: c.day, slot: c.slot, weather: curWeather(), doomDay: doomDay(), lastDay: LAST_DAY, riftNext: null, gone: Object.keys(world.s.gone).map(Number), erosion: world.s.erosion }; }
 function onEnter(c) {
   if (c.slot === 'lunch' || c.slot === 'night') resolveNight(`${c.day}일차 ${SLOT_LABEL[c.slot]}`, slotIdx(c.day, c.slot));
   // 멸망 선포: 선포일 점심. 다음 날 아침부터 균열이 매일 영역마다 10%씩 침식
@@ -1685,6 +1686,8 @@ async function adminOp(m) {
       dirty = true; tickClock(); console.log('[관리자] 시계:', JSON.stringify(state.clock));
       return adminStatus();
     }
+    case 'skyGet': return { ok: true, sky: skyNow() };
+    case 'sky': { if (m.off) state.sky = null; else { const h = Math.max(0, Math.min(23.99, +m.h || 0)), sp = Math.max(0, Math.min(3600, +m.speed || 0)); state.sky = { h, speed: sp, at: Date.now() }; } dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return { ok: true, sky: skyNow() }; }
     case 'weather': { state.weather = ['rain', 'clear'].includes(m.w) ? m.w : 'auto'; dirty = true; const msg = JSON.stringify(clockMsg()); for (const o of online.values()) if (o.ws.readyState === 1) o.ws.send(msg); return adminStatus(); }
     case 'doomDay': { state.doomDay = Math.max(1, Math.min(LAST_DAY - 1, m.day | 0)); dirty = true; tickClock(); return adminStatus(); }
     case 'setAdmin': { // 관리자 계정 켜기/끄기 (시험용: 마법 전부·도구 전부·재료 넉넉, 마나·쿨타임·재료 제한 없음)
