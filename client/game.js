@@ -2481,7 +2481,7 @@
       R.doors.forEach((d) => { if (skyLinked(R, d)) return; // 이어진 곳은 문 없이 구름다리
         const label = d.to === 'ground' ? '땅으로 내려가기' : ROOMS[d.to].name;
         const [x, y] = d.side === 'N' ? [(d.at + 0.5) * TILE, TILE] : d.side === 'S' ? [(d.at + 0.5) * TILE, R.h * TILE] : d.side === 'W' ? [TILE, (d.at + 1) * TILE] : [(R.w - 1) * TILE, (d.at + 1) * TILE];
-        if (d.to === 'ground') R.sprites.push({ x, y: y - TILE * 0.4, draw: (g, X, Y) => groundPortal(g, X, Y, label) }); // 바닥에 깔린 포털 (위에서 내려다보는 화면이라 세운 문 대신)
+        if (d.to === 'ground') R.sprites.push({ x, y: y - TILE * 1.3, draw: (g, X, Y) => groundPortal(g, X, Y, label) }); // 바닥에 깔린 포털 (위에서 내려다보는 화면이라 세운 문 대신)
         else R.sprites.push({ x, y, draw: (g, X, Y) => arch(g, X, Y, d.side, label, false) });
       });
       R.canvas = renderRoom(R);
@@ -2627,7 +2627,7 @@
     })); }
   function groundPortal(g, x, y, label) { // 땅으로 내려가는 포털: 바닥에 빛나는 소용돌이
     const t = performance.now() / 1000, cy = y - 18;
-    const gr = g.createRadialGradient(x, cy, 4, x, cy, 54); gr.addColorStop(0, 'rgba(255,250,210,0.95)'); gr.addColorStop(0.45, 'rgba(140,220,255,0.75)'); gr.addColorStop(1, 'rgba(120,180,255,0)');
+    const gr = g.createRadialGradient(x, cy, 4, x, cy, 54); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(110,190,255,0.95)'); gr.addColorStop(0.7, 'rgba(90,90,230,0.75)'); gr.addColorStop(1, 'rgba(90,70,220,0)');
     g.save(); g.translate(x, cy); g.scale(1, 0.5); g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 54, 0, Math.PI * 2); g.fill();
     for (let k = 0; k < 3; k++) { g.strokeStyle = `rgba(255,255,255,${0.7 - k * 0.2})`; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 18 + k * 12, t * (1.5 + k * 0.5) + k, t * (1.5 + k * 0.5) + k + Math.PI * 1.2); g.stroke(); }
     g.restore();
