@@ -2558,11 +2558,14 @@
     const W = 48, B = 20, n = 3 + (v % 3), m = []; for (let y = 0; y < 24; y++) m.push(new Array(W).fill(0));
     const x0 = 5 + Math.floor(rnd() * 3), x1 = W - 6 - Math.floor(rnd() * 3), bumps = [];
     for (let i = 0; i < n; i++) { const r = 4 + Math.floor(rnd() * 5) + (i > 0 && i < n - 1 ? 2 : 0); bumps.push([x0 + 3 + (x1 - x0 - 6) * (i / (n - 1)) + (rnd() - 0.5) * 3, B - 2 - r * 0.55, r]); }
-    for (let y = 0; y <= B; y++) for (let x = 0; x < W; x++) { let on = y >= B - 4 && x >= x0 && x <= x1; for (const [cx, cy, r] of bumps) if ((x - cx) ** 2 + (y - cy) ** 2 * 1.15 <= r * r) on = true; if (on) m[y][x] = 1; }
-    for (let x = 0; x < W; x++) { let top = -1; for (let y = 0; y <= B; y++) if (m[y][x]) { top = y; break; } if (top >= 0) for (let y = top; y <= B; y++) m[y][x] = 1; } // 세로로 꽉 채움 → 구멍 없음
-    m[B][x0] = 0; m[B][x1] = 0; // 아래 모서리 둥글게
-    for (let y = 0; y <= B; y++) for (let x = 0; x < W; x++) { if (!m[y][x]) continue; const up = y > 0 && m[y - 1][x], up2 = y > 1 && m[y - 2][x];
-      g.fillStyle = !up ? '#ffffff' : y >= B ? '#b9cfee' : y >= B - 2 ? '#d2e2f7' : !up2 ? '#fbfdff' : '#eef5ff'; g.fillRect(x, y, 1, 1); }
+    const split = v % 3 === 1, holey = v % 3 === 2; // 갈라진 구름 · 가운데 빈 구름도 섞음
+    if (split) for (let i = 0; i < bumps.length; i++) bumps[i][0] += (i - (bumps.length - 1) / 2) * 3.2;
+    for (let y = 0; y <= B; y++) for (let x = 0; x < W; x++) { let on = !split && y >= B - 4 && x >= x0 && x <= x1; for (const [cx, cy, r] of bumps) if ((x - cx) ** 2 + (y - cy) ** 2 * 1.15 <= r * r) on = true; if (on) m[y][x] = 1; }
+    if (!split) { for (let x = 0; x < W; x++) { let top = -1; for (let y = 0; y <= B; y++) if (m[y][x]) { top = y; break; } if (top >= 0) for (let y = top; y <= B; y++) m[y][x] = 1; } m[B][x0] = 0; m[B][x1] = 0; }
+    if (holey) for (let q = 0; q < 1; q++) { const [cx, cy, r] = bumps[1 + q % Math.max(1, bumps.length - 2)], hx = Math.round(cx + (rnd() - 0.5) * r * 0.6), hy = Math.round(cy + r * 0.2), hr = 2.6 + rnd() * 1.2; // 구멍 (하늘이 비침)
+      for (let y = Math.floor(hy - hr); y <= hy + hr; y++) for (let x = Math.floor(hx - hr * 1.3); x <= hx + hr * 1.3; x++) if (y > 0 && y < B - 2 && x > 0 && x < W && ((x - hx) / 1.3) ** 2 + (y - hy) ** 2 <= hr * hr - 0.5) m[y][x] = 0; }
+    for (let y = 0; y <= B; y++) for (let x = 0; x < W; x++) { if (!m[y][x]) continue; const up = y > 0 && m[y - 1][x], up2 = y > 1 && m[y - 2][x], dn = y < B && m[y + 1][x];
+      g.fillStyle = !up ? '#ffffff' : (y >= B || !dn) ? '#b9cfee' : y >= B - 2 ? '#d2e2f7' : !up2 ? '#fbfdff' : '#eef5ff'; g.fillRect(x, y, 1, 1); }
     for (const [cx, cy, r] of bumps) { g.fillStyle = '#ffffff'; g.fillRect(Math.round(cx - r * 0.45), Math.round(cy - r * 0.55), 2, 1); } // 반짝 하이라이트
   }));
   function cloudAt(g, i, x, bottom, w, alpha = 1) { const c = CLOUDS[i % CLOUD_N], k = w / 48; g.globalAlpha = alpha; const p = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; g.drawImage(c, Math.round(x - w / 2), Math.round(bottom - 24 * k), Math.round(w), Math.round(24 * k)); g.imageSmoothingEnabled = p; g.globalAlpha = 1; }
