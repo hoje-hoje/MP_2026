@@ -28,8 +28,11 @@ svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
 .node.small { width: 3.6%; }
 .node.open { border-color: var(--r, var(--c)); box-shadow: 0 0 0 0 var(--c); animation: pulse 1.5s ease-in-out infinite; }
 .node.open canvas { filter: grayscale(.4) brightness(.9); }
-.node.learned { border-color: var(--r, var(--c)); background: var(--c); box-shadow: 0 0 14px 2px var(--r, var(--c)); }
-.node.learned canvas { filter: none; }
+.node.learned { border-color: var(--r, var(--c)); background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--c) 38%, #10181d) 0%, #10181d 72%); box-shadow: 0 0 14px 2px color-mix(in srgb, var(--r, var(--c)) 70%, transparent), inset 0 0 0 2px color-mix(in srgb, var(--c) 30%, transparent); }
+.node.learned canvas { display: none; }
+.node .glyph { display: none; width: 56%; height: 56%; color: var(--c); filter: drop-shadow(0 0 3px var(--c)); }
+.node.big .glyph { width: 60%; height: 60%; }
+.node.learned .glyph { display: block; }
 .node.sel { outline: 3px solid #fff; outline-offset: 4px; }
 @keyframes pulse { 50% { box-shadow: 0 0 12px 3px var(--r, var(--c)); } }
 @media (prefers-reduced-motion: reduce) { .node.open { animation: none; } }
@@ -97,7 +100,15 @@ const needOf = (k) => (k === 'root' ? [['root', '']] : [[N[k].el.id, ROMAN[N[k].
 const elName = (id) => EL.find((e) => e.id === id).name, stoneName = ([id, r]) => (id === 'root' ? '깨달음의 마법석' : `${elName(id)} 마법석 ${r}`), haveS = ([id, r]) => INV[id + '.' + r] | 0;
 const stage = document.getElementById('stage'), map = document.getElementById('map');
 for (const k of Object.keys(N)) { const n = N[k], b = document.createElement('button'); b.type = 'button'; b.className = 'node' + (n.big ? ' big' : ''); b.dataset.k = k; b.style.setProperty('--c', n.hex); b.style.setProperty('--r', n.ring || n.hex); b.style.left = (n.pos[0] / 12) + '%'; b.style.top = 'calc(' + n.pos[1] + ' / var(--vh, 10.6) * 1%)'; b.setAttribute('aria-label', n.name);
-  if (n.el && n.el.req) b.classList.add('low'); b.innerHTML = `<canvas width="48" height="48" data-ico="${k}"></canvas><span class="pill"></span>`; b.onclick = () => { sel = k; render(); }; stage.append(b); }
+  if (n.el && n.el.req) b.classList.add('low'); b.innerHTML = `<canvas width="48" height="48" data-ico="${k}"></canvas>${glyph(n.el ? n.el.id : 'root', n.tier)}<span class="pill"></span>`; b.onclick = () => { sel = k; render(); }; stage.append(b); }
+function glyph(el, tier) { // 배운 칸: 속성 문양 (Ⅱ는 점 하나, Ⅲ는 둘레 고리)
+  const G = { fire: '<path fill="currentColor" d="M12 2c1 4 5 6 5 11a5 5 0 0 1-10 0c0-3 2-4 2-7 1 1 2 2 2 4 1-2 1-5 1-8z"/>', ice: '<g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5"/></g>',
+    bolt: '<path fill="currentColor" d="M13 2 4 14h7l-1 8 9-12h-7z"/>', wind: '<g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/></g>',
+    nature: '<path fill="currentColor" d="M5 19C5 9 11 4 20 4c0 9-5 15-15 15z"/><path d="M6 18 15 9" stroke="#10181d" stroke-width="1.6"/>', holy: '<path fill="currentColor" d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/>',
+    water: '<path fill="currentColor" d="M12 2C8 8 5 11 5 15a7 7 0 0 0 14 0c0-4-3-7-7-13z"/><path d="M9 15a3 3 0 0 0 3 3" stroke="#10181d" stroke-width="1.6" fill="none"/>', poison: '<g fill="currentColor"><circle cx="12" cy="15" r="6"/><circle cx="6.5" cy="6.5" r="2.6"/><circle cx="16.5" cy="5" r="1.8"/></g>',
+    dark: '<path fill="currentColor" d="M15 3a9 9 0 1 0 6 15A8 8 0 0 1 15 3z"/>', chrono: '<path fill="currentColor" d="M6 2h12v2l-5 8 5 8v2H6v-2l5-8-5-8z"/>', root: '<path fill="currentColor" d="M12 2 20 12 12 22 4 12z"/><path fill="#10181d" d="M12 7 16 12 12 17 8 12z"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>' };
+  const extra = tier === 'ult' ? '<circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="1" opacity=".55"/>' : (tier === 'a' || tier === 'b') ? '<circle cx="20.5" cy="3.5" r="2" fill="currentColor"/>' : '';
+  return `<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">${G[el] || G.root}${extra}</svg>`; }
 const labels = [];
 BASE.forEach((e, i) => labels.push([e, pt(UA[i], 498)]));
 HIDDEN.forEach((e, i) => labels.push([e, pt(DA[i], 478)]));
