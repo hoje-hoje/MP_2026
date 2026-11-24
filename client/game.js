@@ -2357,7 +2357,7 @@
   }
   function skyBridgeSeg(g, px, py, horiz, start, end, lamp, night) { // 땅 다리 그림(drawBridgeTile)과 같은 모양 · 32칸 기준을 2배로 (64×64)
     const P = { deck: ['#b07a44', '#c58a50', '#9a6a3a'], rail: '#7a4f28', post: '#8a5a2b', cap: '#e0aa6a', gap: '#5a3416' };
-    g.save(); g.translate(px, py); g.scale(2, 2); if (night) g.filter = 'brightness(0.55) saturate(0.9) hue-rotate(200deg)';
+    g.save(); g.translate(px, py); g.scale(2, 2); void night;
     const R = (X, Y, w, h, c) => { g.fillStyle = c; if (horiz) g.fillRect(X, Y, w, h); else g.fillRect(Y, X, h, w); };
     R(0, 7, 32, 18, P.gap); for (let k = 0; k < 8; k++) R(k * 4, 8, 3, 16, P.deck[k % 3]); R(0, 8, 32, 2, 'rgba(255,255,255,0.18)');
     R(0, 4, 32, 3, P.rail); R(0, 25, 32, 3, P.rail); R(0, 4, 32, 1, P.cap); R(0, 25, 32, 1, P.cap);
@@ -2372,7 +2372,7 @@
     const x0 = Math.min(...keys.map((k) => k[0])) - 2, y0 = Math.min(...keys.map((k) => k[1])) - 2, x1 = Math.max(...keys.map((k) => k[0])) + 3, y1 = Math.max(...keys.map((k) => k[1])) + 3;
     const c = document.createElement('canvas'); c.width = (x1 - x0) * TILE; c.height = (y1 - y0) * TILE; const g = c.getContext('2d'), NC = ROOM_NIGHT;
     const pts = keys.map(([x, y]) => [(x - x0) * TILE + 16, (y - y0) * TILE + 16]);
-    const nk = (c) => (c && NC ? recolor(c, 'brightness(0.5) saturate(1.2) hue-rotate(205deg)') : c), BH = nk(ART.i_bridge_h), BV = nk(ART.i_bridge_v); g.imageSmoothingEnabled = false; // 밧줄 다리 (Flying Islands)
+    const nk = (c) => c, BH = nk(ART.i_bridge_h), BV = nk(ART.i_bridge_v); g.imageSmoothingEnabled = false; // 밧줄 다리 (Flying Islands)
     for (const [bx, by] of keys) { const B = SKY.bridge.get(bx + ',' + by), x = (bx - x0) * TILE, y = (by - y0) * TILE; if (!B.mid || B.k % 2 !== 1) continue; // 우리 나무 다리(땅 건축 다리)를 2배로
       const seg = (B.k - 1) / 2, last = Math.ceil(SKY.gap / 2) - 1; skyBridgeSeg(g, B.dir === 'E' ? x : x - 16, B.dir === 'E' ? y - 16 : y, B.dir === 'E', seg === 0, seg === last, seg === Math.floor(last / 2) && last >= 2, NC); }
     SKY.bcv = c; SKY.bx0 = x0 * TILE; SKY.by0 = y0 * TILE;
@@ -2510,7 +2510,7 @@
     for (let x = 0; x <= w; x += step) { rim.push([x, 0]); rim.push([x, h]); }
     for (let y = 0; y <= h; y += step) { rim.push([0, y]); rim.push([w, y]); }
     const NC = ROOM_NIGHT; // 섬 아래 바위 절벽 (Flying Islands) · 밤엔 어둡고 보랏빛으로 색만 바꿈
-    const nightK = (c) => (c && NC ? recolor(c, 'brightness(0.45) saturate(1.3) hue-rotate(205deg)') : c);
+    const nightK = (c) => c; // 밤 어둡기는 화면 전체 밤 효과가 맡음 (그림 색은 그대로)
     { const CL = ['cliff_a', 'cliff_b', 'cliff_c'].map((k) => nightK(ART['i_' + k])).filter(Boolean); const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
       const ol = R.shape ? R.shape.outline : [[18, h - 18], [w - 18, h - 18]], low = (x) => { let y = -1; for (const [px, py] of ol) if (Math.abs(px - x) < 14 && py > y) y = py; return y; };
       const segs = []; if (CL.length) for (let x = 24; x < w - 12; x += 40) { const y = low(x); if (y < h * 0.55) continue; segs.push([x + (hash(x, 3, 9) - 0.5) * 10, y]); } // 빈틈없이 겹쳐서 이어 붙임
@@ -2531,9 +2531,14 @@
     else { g.fillStyle = floorPat; rr(g, 18, 18, w - 36, h - 36, 18); }
     if (R.dark) { g.fillStyle = 'rgba(30,20,60,0.35)'; rr(g, 18, 18, w - 36, h - 36, 18); }
     else if (R.floor === 'stonefloor') { g.fillStyle = 'rgba(255,248,235,0.22)'; rr(g, 18, 18, w - 36, h - 36, 18); }
-    for (const [cx, cy, cw, ch] of R.carpets || []) { g.fillStyle = pat(R.carpet || 'aisle'); g.fillRect(cx * TILE, cy * TILE, cw * TILE, ch * TILE); }
+    const edgeStones = (x0, y0, ww, hh) => { const rimI = nightK(ART.i_rim); if (!rimI) return; const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; // 잔디 가장자리 흰 자갈 (하늘섬 타일셋처럼)
+      for (let x = x0 + 4; x < x0 + ww - 24; x += 30) { g.drawImage(rimI, x, y0 - 10, 40, 22); g.drawImage(rimI, x, y0 + hh - 12, 40, 22); }
+      for (let y = y0 + 8; y < y0 + hh - 20; y += 18) { g.drawImage(rimI, x0 - 18, y, 40, 22); g.drawImage(rimI, x0 + ww - 22, y, 40, 22); } g.imageSmoothingEnabled = pv; };
+    const CARP = (R.carpets || []).map(([cx, cy, cw, ch]) => [cx * TILE, cy * TILE, cw * TILE, ch * TILE]);
+    for (const [x, y, ww, hh] of CARP) { g.fillStyle = pat(R.carpet || 'aisle'); rr(g, x, y, ww, hh, 14); }
+    for (const [x, y, ww, hh] of CARP) edgeStones(x, y, ww, hh);
     for (const [px, py, pw, ph, key, rad] of R.patches || []) { g.fillStyle = pat(key); rr(g, px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0); }
-    if (R.shape) { g.restore(); g.fillStyle = floorPat; for (const d of R.doors) { const L = 5 * TILE; if (d.side === 'N') g.fillRect((d.at - 1) * TILE, 0, 3 * TILE, L); if (d.side === 'S') g.fillRect((d.at - 1) * TILE, h - L, 3 * TILE, L); if (d.side === 'W') g.fillRect(0, (d.at - 1) * TILE, L, 3 * TILE); if (d.side === 'E') g.fillRect(w - L, (d.at - 1) * TILE, L, 3 * TILE); } } // 문(다리) 쪽 길
+    if (R.shape) { g.restore(); g.fillStyle = R.floor === 'lawn' || R.floor === 'meadow' ? pat('cobble') : floorPat; for (const d of R.doors) { const L = 5 * TILE; if (d.side === 'N') g.fillRect((d.at - 1) * TILE, 0, 3 * TILE, L); if (d.side === 'S') g.fillRect((d.at - 1) * TILE, h - L, 3 * TILE, L); if (d.side === 'W') g.fillRect(0, (d.at - 1) * TILE, L, 3 * TILE); if (d.side === 'E') g.fillRect(w - L, (d.at - 1) * TILE, L, 3 * TILE); } } // 문(다리) 쪽 길
     { const rimI = nightK(ART.i_rim); if (rimI) { const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; // 섬 가장자리 흰 자갈 (Flying Islands)
       if (R.shape) { let last = null; for (const [x, y] of R.shape.outline) { if (last && Math.hypot(x - last[0], y - last[1]) < 26) continue; last = [x, y];
         const nearDoor = R.doors.some((d) => skyLinked(R, d) && ((d.side === 'N' && y < h / 2 && Math.abs(x - (d.at + 0.5) * TILE) < 48) || (d.side === 'S' && y > h / 2 && Math.abs(x - (d.at + 0.5) * TILE) < 48) || (d.side === 'W' && x < w / 2 && Math.abs(y - (d.at + 0.5) * TILE) < 48) || (d.side === 'E' && x > w / 2 && Math.abs(y - (d.at + 0.5) * TILE) < 48)));
@@ -4584,7 +4589,7 @@
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -camX * dpr * zoom, -camY * dpr * zoom);
     skyCam.x = camX - pox * TILE; skyCam.y = camY - poy * TILE;
     const vis = Object.values(ROOMS).filter((Q) => { const [ox, oy] = SKY.off[Q.id]; return ox * TILE - SKY_M < camX + sw && (ox + Q.w) * TILE + SKY_M > camX && oy * TILE - SKY_M < camY + sh && (oy + Q.h) * TILE + SKY_M > camY; });
-    { const pv = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false; for (const I of SKY.islets) { const im = ROOM_NIGHT ? recolor(ART['i_' + I.kind], 'brightness(0.45) saturate(1.3) hue-rotate(205deg)') : ART['i_' + I.kind]; if (!im) continue; const bob = Math.round(Math.sin(t * 0.8 + I.ph) * 3); ctx.drawImage(im, Math.round(I.x - im.width), Math.round(I.y - im.height + bob), im.width * 2, im.height * 2); } ctx.imageSmoothingEnabled = pv; } // 작은 떠 있는 섬
+    { const pv = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false; for (const I of SKY.islets) { const im = ART['i_' + I.kind]; if (!im) continue; const bob = Math.round(Math.sin(t * 0.8 + I.ph) * 3); ctx.drawImage(im, Math.round(I.x - im.width), Math.round(I.y - im.height + bob), im.width * 2, im.height * 2); } ctx.imageSmoothingEnabled = pv; } // 작은 떠 있는 섬
     for (const Q of vis) { const [ox, oy] = SKY.off[Q.id]; ctx.drawImage(Q.canvas, ox * TILE - SKY_M, oy * TILE - SKY_M); }
     if (SKY.bcv) ctx.drawImage(SKY.bcv, SKY.bx0, SKY.by0); // 구름다리
     const rem = others('sky', R);
