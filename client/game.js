@@ -1757,7 +1757,7 @@
   // ------------------------------------------------------------ 자유 게시판 (가까이 가면 위에 작게 뜸 · 움직일 수 있음)
   const BP = { view: 'list', sel: null, closed: false, open: false };
   const fmtMD = (ts) => { const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()}`; };
-  function nearBigBoard() { if (player.scene !== 'sky' || !player.room) return false; for (const sp of player.room.sprites) if (sp.prop && sp.prop.bigBoard && Math.abs(sp.x - player.x) < 220 && player.y - sp.y < 170) return true; return false; }
+  function nearBigBoard() { if (player.scene !== 'sky' || !player.room) return false; for (const sp of player.room.sprites) if (sp.prop && sp.prop.bigBoard && Math.abs(sp.x - player.x) < 220 && player.y - sp.y > -10 && player.y - sp.y < 230) return true; /* 게시판이 뒤로 가서 보는 범위도 뒤로 */ return false; }
   function tickWelcome() { // 처음 세상에 들어오면 환영 인사 (한 번만)
     if (!ONLINE || !netOn || !titleDone || TITLE.on || OP.on || store('mp2026.welcomed')) return;
     if (document.querySelector('.modalbox:not([hidden]), #found:not([hidden]), #doomPop:not([hidden]), #closet:not([hidden]), #loading:not([hidden])')) return;
@@ -2210,7 +2210,7 @@
         P1(4, 4, column), P1(4, 12, column), P1(25, 4, column), P1(25, 12, column), P1(10, 4, column), P1(20, 4, column),
         P1(2, 3, urn), P1(27, 3, urn), P1(2, 15, urn), P1(27, 15, urn),
         P1(12, 12, lantern), P1(18, 12, lantern),
-        { x: 11, y: 3, w: 8, h: 1, bigBoard: true, draw: bigBoard },
+        { x: 11, y: 1, w: 8, h: 1, bigBoard: true, draw: bigBoard },
         { x: 5, y: 11, w: 3, h: 1, board: true, draw: (g, x, y) => { holyAltar(g, x, y, 40, 'book'); plaque(g, x, y - 92, '신탁 제단'); } },
         npcProp('priest', 9, 12),
         P1(11, 15, (g, x, y) => { g.fillStyle = '#d9d0c0'; g.fillRect(x - 18, y - 14, 36, 14); g.fillStyle = '#fffdf8'; g.fillRect(x - 16, y - 18, 32, 6); drawAngel(g, 'Princess', x, y - 16, true); }),
@@ -2267,11 +2267,10 @@
     plaza: { // 넓은 구름 광장: 가운데 빛의 분수, 네 귀퉁이 꽃밭, 위쪽 이벤트 무대
       name: '구름 광장', desc: '모여서 노는 곳 · 이벤트가 열리는 곳', w: 56, h: 34, pos: [1, 0], crowd: 24,
       floor: 'lawn', trim: '#4bb3c4',
-      patches: [[26, 2, 4, 31, 'cobble', 0], [3, 16, 50, 3, 'cobble', 0], [17, 11, 22, 12, 'marble_w', 30], [4, 4, 13, 7, 'meadow', 22], [39, 4, 13, 7, 'meadow', 22], [4, 23, 13, 7, 'meadow', 22], [39, 23, 13, 7, 'meadow', 22], [20, 3, 16, 5, 'planks', 6]],
+      patches: [[26, 2, 4, 31, 'cobble', 0], [3, 16, 50, 3, 'cobble', 0], [17, 11, 22, 12, 'marble_w', 30], [4, 4, 13, 7, 'meadow', 22], [39, 4, 13, 7, 'meadow', 22], [4, 23, 13, 7, 'meadow', 22], [39, 23, 13, 7, 'meadow', 22]],
       emotes: ['3팀 모여~', 'ㅋㅋㅋ', '안녕!', '이벤트 언제?', '같이 다닐 사람', '우리 나라 짱', '분수 예쁘다', '무대 올라가 봐'],
       doors: [{ side: 'S', at: 28, to: 'temple' }, { side: 'N', at: 28, to: 'wander' }],
       props: [
-        { x: 21, y: 3, w: 14, h: 2, draw: plazaStage },
         { x: 26, y: 15, w: 4, h: 3, draw: lightFountain },
         P1(20, 13, column), P1(35, 13, column), P1(20, 20, column), P1(35, 20, column),
         ...[[24, 9], [31, 9], [24, 25], [31, 25], [24, 29], [31, 29]].map(([x, y]) => P1(x, y, lantern)),
@@ -2279,8 +2278,6 @@
         ...[[7, 15], [12, 15], [7, 18], [12, 18]].map(([x, y]) => ({ x, y, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'log', X, Y + 2, 2) })),
         P1(45, 16, cloudBench, { w: 2 }), P1(45, 19, cloudBench, { w: 2 }),
         ...gardenProps(4, 4), ...gardenProps(39, 4), ...gardenProps(4, 23), ...gardenProps(39, 23),
-        { x: 8, y: 7, w: 1, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'chick', x, y + 2, 101) }, { x: 44, y: 8, w: 1, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'rabbit', x, y + 2, 102) },
-        { x: 10, y: 26, w: 1, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'hen', x, y + 2, 103) }, { x: 46, y: 27, w: 2, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'pig', x, y + 2, 104) },
         { x: 2, y: 2, w: 1, h: 1, walk: true, draw: (g, x, y) => cloudAt(g, 0, x + 20, y + 20, 110) }, { x: 53, y: 2, w: 1, h: 1, walk: true, draw: (g, x, y) => cloudAt(g, 1, x - 10, y + 20, 110) },
         { x: 2, y: 31, w: 1, h: 1, walk: true, draw: (g, x, y) => cloudAt(g, 2, x + 20, y + 10, 100) }, { x: 53, y: 31, w: 1, h: 1, walk: true, draw: (g, x, y) => cloudAt(g, 0, x - 10, y + 10, 100) },
       ],
@@ -2299,19 +2296,16 @@
     wander: { // 유랑민 캠프: 등록 창구, 모집 게시판, 천막과 모닥불
       name: '유랑민 등록소', desc: '나라 없는 사람이 귀화·용병·건국을 등록하는 곳', w: 32, h: 18, pos: [1, -1], crowd: 8,
       floor: 'lawn', trim: '#3fa37a',
-      patches: [[14, 4, 5, 14, 'cobble', 0], [2, 8, 10, 8, 'meadow', 18], [21, 8, 9, 8, 'meadow', 18], [11, 2, 10, 3, 'planks', 6]],
+      patches: [[14, 4, 5, 14, 'cobble', 0], [2, 8, 10, 8, 'meadow', 18], [21, 8, 9, 8, 'meadow', 18]],
       emotes: ['용병 구합니다', '귀화시켜 주세요', '우리 4명 모이면 건국함', '몸값 얼마?', '어느 나라가 좋음?', '여기 따뜻하다'],
       doors: [{ side: 'S', at: 16, to: 'plaza' }],
       props: [
-        { x: 13, y: 2, w: 6, h: 2, board: true, desk: 'wander', draw: (g, x, y) => { pix(g, 'cabin', x, y + 6, 3); plaque(g, x, y - 132, '등록 창구'); } },
+        { x: 13, y: 2, w: 6, h: 2, board: true, desk: 'wander', draw: (g, x, y) => { holyAltar(g, x, y, 40, 'book'); plaque(g, x, y - 92, '등록 창구'); } },
         npcProp('clerk', 11, 4),
         { x: 21, y: 3, w: 4, h: 1, draw: posterBoard },
-        { x: 4, y: 9, w: 2, h: 1, draw: (g, x, y) => pix(g, 'tent', x, y + 4, 3) }, { x: 8, y: 12, w: 2, h: 1, draw: (g, x, y) => pix(g, 'tent', x, y + 4, 3) }, { x: 4, y: 14, w: 2, h: 1, draw: (g, x, y) => pix(g, 'tent', x, y + 4, 3) },
         { x: 25, y: 11, w: 2, h: 1, draw: bonfire },
         ...[[23, 10], [28, 10], [23, 13], [28, 13]].map(([x, y]) => ({ x, y, w: 1, h: 1, draw: (g, X, Y) => pix(g, 'log', X, Y + 2, 2) })),
         { x: 2, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'woodpile', x, y + 2, 3) }, { x: 29, y: 4, w: 1, h: 1, draw: (g, x, y) => pix(g, 'woodpile', x, y + 2, 3) },
-        { x: 21, y: 15, w: 2, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'cow', x, y + 2, 105) }, { x: 10, y: 15, w: 1, h: 1, walk: true, draw: (g, x, y) => drawAnimal(g, 'rabbit', x, y + 2, 106) },
-        ...[[3, 11], [10, 9], [27, 15], [22, 8], [29, 9]].map(([x, y], i) => ({ x, y, w: 1, h: 1, walk: true, draw: (g, X, Y) => pix(g, ['flower_y', 'fern', 'mushroom', 'berry', 'flower_r'][i], X, Y + 2, 2) })),
         { x: 24, y: 6, w: 1, h: 1, draw: (g, x, y) => { g.fillStyle = '#5a4630'; g.fillRect(x - 2, y - 40, 4, 40); sign(g, x, y - 44, '유랑민 캠프'); } },
       ],
     },
@@ -2360,7 +2354,7 @@
     for (const id of Object.keys(ROOMS)) if (!off[id]) off[id] = [0, 200]; // 이어지지 않은 방 (없어야 함)
     for (const [id, A] of Object.entries(ROOMS)) { const [ax, ay] = off[id];
       for (const d of A.doors) { if (!skyLinked(A, d) || (d.side !== 'E' && d.side !== 'S')) continue; // 오른쪽·아래로 가는 다리만 (한 번씩)
-        for (let k = 1; k <= G; k++) for (let w = -1; w <= 1; w++) { const gx = d.side === 'E' ? ax + A.w - 1 + k : ax + d.at + w, gy = d.side === 'E' ? ay + d.at + w : ay + A.h - 1 + k; if (w === 0) SKY.bridge.set(gx + ',' + gy, { id, dir: d.side, mid: true, k }); } } } // 다리는 가운데 한 줄만 걸을 수 있음 (그림과 딱 맞게)
+        for (let k = 1; k <= G; k++) for (let w = -1; w <= 1; w++) { const gx = d.side === 'E' ? ax + A.w - 1 + k : ax + d.at + w, gy = d.side === 'E' ? ay + d.at + w : ay + A.h - 1 + k; SKY.bridge.set(gx + ',' + gy, { id, dir: d.side, mid: w === 0, k }); } } } // 다리 3칸 너비 (그림도 3칸)
   })();
   // 섬 주변 작은 떠 있는 섬 (장식, 못 걸음)
   SKY.islets = []; for (const [id, R] of Object.entries(ROOMS)) { const [ox, oy] = SKY.off[id];
@@ -2380,7 +2374,7 @@
   }
   function skyBridgeSeg(g, px, py, horiz, start, end, lamp, night) { // 땅 다리 그림(drawBridgeTile)과 같은 모양 · 32칸 기준을 2배로 (64×64)
     const P = { deck: ['#b07a44', '#c58a50', '#9a6a3a'], rail: '#7a4f28', post: '#8a5a2b', cap: '#e0aa6a', gap: '#5a3416' };
-    g.save(); g.translate(px, py); g.scale(2, 2); void night;
+    g.save(); g.translate(px, py); g.scale(3, 3); void night;
     const R = (X, Y, w, h, c) => { g.fillStyle = c; if (horiz) g.fillRect(X, Y, w, h); else g.fillRect(Y, X, h, w); };
     R(0, 7, 32, 18, P.gap); for (let k = 0; k < 8; k++) R(k * 4, 8, 3, 16, P.deck[k % 3]); R(0, 8, 32, 2, 'rgba(255,255,255,0.18)');
     R(0, 4, 32, 3, P.rail); R(0, 25, 32, 3, P.rail); R(0, 4, 32, 1, P.cap); R(0, 25, 32, 1, P.cap);
@@ -2396,8 +2390,8 @@
     const c = document.createElement('canvas'); c.width = (x1 - x0) * TILE; c.height = (y1 - y0) * TILE; const g = c.getContext('2d'), NC = ROOM_NIGHT;
     const pts = keys.map(([x, y]) => [(x - x0) * TILE + 16, (y - y0) * TILE + 16]);
     const nk = (c) => c, BH = nk(ART.i_bridge_h), BV = nk(ART.i_bridge_v); g.imageSmoothingEnabled = false; // 밧줄 다리 (Flying Islands)
-    for (const [bx, by] of keys) { const B = SKY.bridge.get(bx + ',' + by), x = (bx - x0) * TILE, y = (by - y0) * TILE; if (!B.mid || B.k % 2 !== 1) continue; // 우리 나무 다리(땅 건축 다리)를 2배로
-      const seg = (B.k - 1) / 2, last = Math.ceil(SKY.gap / 2) - 1; skyBridgeSeg(g, B.dir === 'E' ? x : x - 16, B.dir === 'E' ? y - 16 : y, B.dir === 'E', seg === 0, seg === last, seg === Math.floor(last / 2) && last >= 2, NC); }
+    for (const [bx, by] of keys) { const B = SKY.bridge.get(bx + ',' + by), x = (bx - x0) * TILE, y = (by - y0) * TILE; if (!B.mid || B.k % 3 !== 1) continue; // 우리 나무 다리(땅 건축 다리)를 3배로 = 3칸 너비
+      const seg = (B.k - 1) / 3, last = Math.ceil(SKY.gap / 3) - 1; skyBridgeSeg(g, B.dir === 'E' ? x : x - 32, B.dir === 'E' ? y - 32 : y, B.dir === 'E', seg === 0, seg === last, false, NC); }
     SKY.bcv = c; SKY.bx0 = x0 * TILE; SKY.by0 = y0 * TILE;
   }
   const SKY_M = 170; // 섬 그림 둘레 여백 (아래 절벽이 들어갈 자리)
@@ -2481,12 +2475,16 @@
   }
   function applyRoomEdit(id, e) { ROOM_EDITS[id] = e; if (ROOMS[id]) { buildRoom(id); if (player.room === ROOMS[id]) player.room = ROOMS[id]; } }
   // 하늘섬 모양: 방마다 다른 둥글고 울퉁불퉁한 섬 (네모 아님). 섬 밖 칸은 못 걷게 막음 (문으로 가는 길은 남김)
-  function isleShape(R) {
+  function isleShape(R) { const doorsL = R.doors.filter((d) => d.to === 'ground' || skyLinked(R, d));
     const sd = hash(R.w * 7 + R.id.length, R.h * 3 + R.id.charCodeAt(0), 61), p = R.id === 'jail' ? 4.5 : 2.2 + sd * 0.7; // 감옥은 감방이 안 잘리게 덜 둥글게
     const amp = R.id === 'jail' ? 0.5 : 1, bump = (a) => amp * (0.14 * Math.sin(3 * a + sd * 6) + 0.09 * Math.sin(5 * a + sd * 11) + 0.06 * Math.sin(8 * a + sd * 3));
-    const inside = (fx, fy) => { const nx = (fx - R.w / 2) / (R.w / 2 - 0.5), ny = (fy - R.h / 2) / (R.h / 2 - 0.5), a = Math.atan2(ny, nx); return Math.abs(nx) ** p + Math.abs(ny) ** p <= 1 + bump(a); };
+    const toDoor = (x, y) => { let best = null; for (const d of doorsL) { const along = d.side === 'E' || d.side === 'W' ? y - (d.at + 0.5) : x - (d.at + 0.5); if (Math.abs(along) > 3.2) continue; const f = 1 - (Math.abs(along) / 3.2) ** 2; if (!best || f > best.f) best = { d, f }; } return best; }; // 다리 쪽으로 섬이 자연스럽게 뻗음
+    const inside0 = (fx, fy) => { const nx = (fx - R.w / 2) / (R.w / 2 - 0.5), ny = (fy - R.h / 2) / (R.h / 2 - 0.5), a = Math.atan2(ny, nx); return Math.abs(nx) ** p + Math.abs(ny) ** p <= 1 + bump(a); };
+    const inside = (fx, fy) => { if (inside0(fx, fy)) return true; const b = toDoor(fx, fy); if (!b) return false; const d = b.d, reach = b.f * 6; return (d.side === 'E' && fx > R.w - reach) || (d.side === 'W' && fx < reach) || (d.side === 'S' && fy > R.h - reach) || (d.side === 'N' && fy < reach); };
     const outline = []; for (let i = 0; i < 180; i++) { const a = i / 180 * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a), k = Math.max(0.5, 1 + bump(a)) ** (1 / p);
-      outline.push([(R.w / 2 + (R.w / 2 - 0.5) * Math.sign(c) * Math.abs(c) ** (2 / p) * k) * TILE, (R.h / 2 + (R.h / 2 - 0.5) * Math.sign(sn) * Math.abs(sn) ** (2 / p) * k) * TILE]); }
+      let ox = R.w / 2 + (R.w / 2 - 0.5) * Math.sign(c) * Math.abs(c) ** (2 / p) * k, oy = R.h / 2 + (R.h / 2 - 0.5) * Math.sign(sn) * Math.abs(sn) ** (2 / p) * k;
+      const b = toDoor(ox, oy); if (b) { const d = b.d, e = b.f; if (d.side === 'E' && c > 0) ox = ox + (R.w - ox) * e; if (d.side === 'W' && c < 0) ox = ox * (1 - e); if (d.side === 'S' && sn > 0) oy = oy + (R.h - oy) * e; if (d.side === 'N' && sn < 0) oy = oy * (1 - e); }
+      outline.push([ox * TILE, oy * TILE]); }
     return { inside, outline };
   }
   function buildRoom(id) {
@@ -2570,8 +2568,13 @@
     const CARP = (R.carpets || []).map(([cx, cy, cw, ch]) => [cx * TILE, cy * TILE, cw * TILE, ch * TILE]);
     for (const [x, y, ww, hh] of CARP) { g.fillStyle = pat(R.carpet || 'aisle'); rr(g, x, y, ww, hh, 14); }
     for (const [x, y, ww, hh] of CARP) edgeStones(x, y, ww, hh);
-    for (const [px, py, pw, ph, key, rad] of R.patches || []) { g.fillStyle = pat(key); rr(g, px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0); }
-    if (R.shape) { g.restore(); g.fillStyle = R.floor === 'lawn' || R.floor === 'meadow' ? pat('cobble') : floorPat; for (const d of R.doors) { const L = 5 * TILE; if (d.side === 'N') g.fillRect((d.at - 1) * TILE, 0, 3 * TILE, L); if (d.side === 'S') g.fillRect((d.at - 1) * TILE, h - L, 3 * TILE, L); if (d.side === 'W') g.fillRect(0, (d.at - 1) * TILE, L, 3 * TILE); if (d.side === 'E') g.fillRect(w - L, (d.at - 1) * TILE, L, 3 * TILE); } } // 문(다리) 쪽 길
+    for (const [px, py, pw, ph, key, rad] of R.patches || []) { g.fillStyle = pat(key); rr(g, px * TILE, py * TILE, pw * TILE, ph * TILE, Math.max(rad || 0, 12)); }
+    if (R.floor === 'lawn' || R.floor === 'meadow') { const T1 = ART.i_tuft_a, T2 = ART.i_tuft_b, pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; // 길 가장자리: 풀이 살짝 덮어 경계를 부드럽게
+      for (const [px, py, pw, ph, key] of R.patches || []) { if (key !== 'cobble' || !T1 || !T2) continue; const X0 = px * TILE, Y0 = py * TILE, X1 = X0 + pw * TILE, Y1 = Y0 + ph * TILE;
+        for (let x = X0 + 6; x < X1 - 10; x += 22) { const t = hash(x, py, 41) < 0.5 ? T1 : T2; g.drawImage(t, x, Y0 - 6, t.width * 2, t.height * 2); const t2 = hash(x, py, 42) < 0.5 ? T2 : T1; g.drawImage(t2, x + 8, Y1 - t2.height * 2 + 4, t2.width * 2, t2.height * 2); }
+        for (let y = Y0 + 10; y < Y1 - 12; y += 18) { g.drawImage(T2, X0 - 6, y, T2.width * 2, T2.height * 2); g.drawImage(T2, X1 - T2.width * 2 + 6, y + 6, T2.width * 2, T2.height * 2); } }
+      g.imageSmoothingEnabled = pv; }
+    if (R.shape) { g.fillStyle = R.floor === 'lawn' || R.floor === 'meadow' ? pat('cobble') : floorPat; for (const d of R.doors) { const L = 5 * TILE; if (d.side === 'N') g.fillRect((d.at - 1) * TILE, 0, 3 * TILE, L); if (d.side === 'S') g.fillRect((d.at - 1) * TILE, h - L, 3 * TILE, L); if (d.side === 'W') g.fillRect(0, (d.at - 1) * TILE, L, 3 * TILE); if (d.side === 'E') g.fillRect(w - L, (d.at - 1) * TILE, L, 3 * TILE); } g.restore(); } // 문(다리) 쪽 길 (섬 안에서만)
     { const rimI = nightK(ART.i_rim); if (rimI) { const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; // 섬 가장자리 흰 자갈 (Flying Islands)
       if (R.shape) { const path = () => { g.beginPath(); R.shape.outline.forEach(([x, y], q) => (q ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); }; // 섬 가장자리: 깔끔한 흰 돌 테두리 두 겹
         g.save(); g.lineJoin = 'round'; path(); g.strokeStyle = 'rgba(90,80,70,0.55)'; g.lineWidth = 12; g.stroke(); path(); g.strokeStyle = '#f4efe2'; g.lineWidth = 8; g.stroke(); path(); g.strokeStyle = '#dcd4c2'; g.lineWidth = 2; g.stroke(); g.restore(); }
@@ -4503,7 +4506,7 @@
     if (hudT <= 0) {
       hudT = 0.15;
       const sky = player.scene === 'sky';
-      $('doom').hidden = !sky && !EDIT.on; // 일차·멸망 D-? 는 하늘에서만
+      $('doom').hidden = true; // 일차·멸망 배너: 안 보이게 (요청)
       $('skyTimer').hidden = !(sky && player.room.id === 'jail' && jailUntil > Date.now()) || EDIT.on; // 감옥 남은 시간만
       if (sky && player.room.id === 'jail' && jailUntil > Date.now()) { const l = Math.max(0, Math.ceil((jailUntil - Date.now()) / 1000)); $('skyTimer').firstChild.textContent = '감옥 '; $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.remove('warn'); }
       else if (sky) { $('skyTimer').firstChild.textContent = '하늘 체류 '; const l = Math.max(0, Math.ceil(player.skyLeft)); $('skyLeft').textContent = `${Math.floor(l / 60)}:${String(l % 60).padStart(2, '0')}`; $('skyTimer').classList.toggle('warn', l <= 60); }
