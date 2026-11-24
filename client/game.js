@@ -353,7 +353,7 @@
       return Promise.all([...j.chars, ...j.animals, ...j.monsters].map(async (k) => { ART['u_' + k] = await loadImg('assets/user/' + k + '.png'); }));
     });
     for (const k of EXTRA) names['x_' + k] = 'extra/' + k + '.png';
-    for (const k of ['cliff_a','cliff_b','cliff_c','bridge_h','bridge_v','crystal_big','crystal','crystal_plant','crystal_plant2','crystal_flower','lily','lily2','bloomtree_a','bloomtree_b','bloomtree_c','crystaltree','twisttree_a','twisttree_b','twisttree_c','bonsai_a','bonsai_b','bonsai_c','angel_statue','ghost_statue','agave_a','agave_b','agave_c','bush_a','bush_b','bush_c','cairn_a','cairn_b','ruins_a','ruins_b','ruins_c','rock_a','rock_b','floor_teal','floor_cream_raw','rim','tuft_a','tuft_b','tuft_c','bush_d','teal_patch','isle_teal','isle_cream']) names['i_' + k] = 'isle/' + k + '.png'; // Flying Islands 타일셋 (하늘섬)
+    for (const k of ['cliff_a','cliff_b','cliff_c','bridge_h','bridge_v','crystal_big','crystal','crystal_plant','crystal_plant2','crystal_flower','lily','lily2','bloomtree_a','bloomtree_b','bloomtree_c','crystaltree','twisttree_a','twisttree_b','twisttree_c','bonsai_a','bonsai_b','bonsai_c','angel_statue','ghost_statue','agave_a','agave_b','agave_c','bush_a','bush_b','bush_c','cairn_a','cairn_b','ruins_a','ruins_b','ruins_c','rock_a','rock_b','floor_teal','floor_cream_raw','rim','tuft_a','tuft_b','tuft_c','bush_d','teal_patch','isle_teal','isle_cream','dragon','cliff_tex']) names['i_' + k] = 'isle/' + k + '.png'; // Flying Islands 타일셋 (하늘섬)
     for (const k of ['lily', 'whitelily', 'lavender', 'marigold']) names['x_fl_' + k] = 'flora/' + k + '.png'; // 받은 꽃 그림
     for (const k of TEMPLE) names['x_' + k] = 'na/' + k + '.png';
     const fonts = document.fonts ? Promise.all([document.fonts.load("11px Galmuri11"), document.fonts.load("700 22px Galmuri11")]).catch(() => {}) : Promise.resolve();
@@ -2318,9 +2318,32 @@
   };
   // ---------------------------------------------------------- 하늘섬: 방을 벽·문 없이 구름다리로 이어 한 장의 지도로 (가로·세로로 길게)
   // 방 번호·방 안 좌표는 그대로 (서버·감옥·맵 고치기와 호환). 다리 위에 서 있으면 왼쪽/위쪽 방 좌표로 셈 (좌표가 음수가 안 되게)
+  // 상점가 넓히기 (30×18 → 42×24, 가게들은 가운데로)
+  { const M = ROOMS.market; M.w = 42; M.h = 24; for (const q of M.props) { q.x += 6; q.y += 3; } M.carpets = [[1, 11, 40, 3]]; M.doors = [{ side: 'E', at: 12, to: 'temple' }, { side: 'W', at: 12, to: 'garden' }]; }
+  ROOMS.plaza.doors.push({ side: 'W', at: 17, to: 'grove' }, { side: 'E', at: 17, to: 'ruins' });
+  ROOMS.wander.doors.push({ side: 'N', at: 26, to: 'peak' });
+  // 새 하늘섬: 꽃정원 · 크리스털 숲 · 고대 폐허(잠든 용) · 전망대 — 구름다리로 이어져 돌아다닐 수 있음
+  Object.assign(ROOMS, {
+    garden: { name: '꽃정원 섬', desc: '꽃과 나무가 가득한 쉼터', w: 30, h: 22, pos: [-1, 1], crowd: 4, floor: 'meadow', trim: '#5fbf6a', emotes: ['꽃 예쁘다', '여기 사진 각', '나무 그늘 좋다'],
+      doors: [{ side: 'E', at: 11, to: 'market' }], patches: [[2, 10, 26, 3, 'cobble', 0]],
+      props: [isleProp('bloomtree_a', 4, 5, 2, 1), isleProp('bloomtree_b', 12, 4, 2, 1), isleProp('bloomtree_c', 20, 5, 2, 1), isleProp('bloomtree_a', 25, 17, 2, 1), isleProp('bloomtree_b', 6, 18, 2, 1),
+        isleProp('agave_c', 15, 17), isleProp('agave_b', 9, 15), isleProp('crystal_flower', 22, 15), isleProp('bush_a', 3, 14), isleProp('bush_b', 27, 7), isleProp('cairn_a', 17, 7),
+        ...[[5, 8], [8, 6], [16, 5], [23, 8], [11, 16], [19, 18], [26, 14], [4, 16]].map(([x, y]) => ({ x, y, w: 1, h: 1, walk: true, draw: (g, X, Y) => drawArt(g, ART.i_lily2, X, Y + 4, 2) }))] },
+    grove: { name: '크리스털 숲', desc: '빛나는 크리스털이 자라는 섬', w: 28, h: 22, pos: [0, 0], crowd: 3, floor: 'lawn', trim: '#6cc4ee', emotes: ['반짝반짝', '크리스털 만져 봐', '여기 밤에 예쁠 듯'],
+      doors: [{ side: 'E', at: 11, to: 'plaza' }], patches: [[2, 10, 25, 3, 'cobble', 0]],
+      props: [isleProp('crystaltree', 13, 5, 3, 1), isleProp('crystal_big', 4, 5), isleProp('crystal_big', 22, 4), isleProp('crystal_big', 6, 17), isleProp('crystal_big', 21, 18), isleProp('crystal_flower', 9, 15), isleProp('crystal_flower', 17, 16),
+        isleProp('crystal_plant', 3, 9), isleProp('crystal_plant2', 25, 8), isleProp('crystal_plant', 12, 18), isleProp('crystal', 18, 7), isleProp('crystal', 8, 7), isleProp('rock_a', 24, 15), isleProp('bonsai_c', 3, 18)] },
+    ruins: { name: '고대 폐허', desc: '옛 신전의 잔해 · 잠든 하늘용', w: 32, h: 24, pos: [2, 0], crowd: 3, floor: 'cobble', trim: '#9aa0b0', emotes: ['용이다!', '깨우지 마…', '옛날 신전인가'],
+      doors: [{ side: 'W', at: 12, to: 'plaza' }], patches: [[3, 3, 10, 7, 'lawn', 22], [19, 15, 10, 6, 'lawn', 22], [4, 16, 8, 5, 'meadow', 18]],
+      props: [isleProp('dragon', 18, 9, 6, 2), isleProp('ruins_a', 5, 6, 3, 1), isleProp('ruins_b', 25, 6, 3, 1), isleProp('ruins_c', 8, 19, 2, 1), isleProp('ghost_statue', 14, 4), isleProp('ghost_statue', 28, 18),
+        isleProp('rock_b', 12, 15), isleProp('rock_a', 23, 20), isleProp('cairn_b', 4, 12), isleProp('twisttree_c', 27, 13, 2, 1), isleProp('bush_c', 16, 20)] },
+    peak: { name: '하늘 전망대', desc: '가장 높은 섬 · 멀리까지 보여요', w: 26, h: 16, pos: [1.4, -2], crowd: 2, floor: 'lawn', trim: '#e8c260', emotes: ['와 다 보인다', '여기 제일 높다', '바람 시원해'],
+      doors: [{ side: 'S', at: 15, to: 'wander' }], patches: [[13, 6, 5, 10, 'cobble', 0]],
+      props: [isleProp('angel_statue', 15, 4, 2, 1), isleProp('bonsai_a', 4, 5, 2, 1), isleProp('bonsai_b', 21, 6, 2, 1), isleProp('cairn_a', 8, 10), isleProp('cairn_b', 20, 11), isleProp('crystal_plant', 10, 4), isleProp('crystal_plant', 19, 3), isleProp('agave_a', 3, 11), isleProp('bush_b', 23, 12)] },
+  });
   // 하늘섬 꾸미기 (Flying Islands 타일셋): 석상·꽃나무·꼬인 나무·크리스털 나무
   ROOMS.temple.props.push(isleProp('angel_statue', 6, 16, 2, 1), isleProp('angel_statue', 23, 16, 2, 1), isleProp('crystal_flower', 1, 4), isleProp('crystal_flower', 28, 4));
-  ROOMS.market.props.push(isleProp('bloomtree_c', 1, 16), isleProp('bloomtree_c', 28, 16), isleProp('crystal_big', 1, 4), isleProp('crystal_big', 28, 3));
+  ROOMS.market.props.push(isleProp('bloomtree_c', 3, 20, 2, 1), isleProp('bloomtree_c', 37, 20, 2, 1), isleProp('crystal_big', 3, 5), isleProp('crystal_big', 38, 5), isleProp('bloomtree_a', 20, 2, 2, 1));
   ROOMS.council.props.push(isleProp('ghost_statue', 22, 14), isleProp('bonsai_a', 1, 14), isleProp('crystal_flower', 13, 14));
   ROOMS.plaza.props.push(isleProp('bloomtree_a', 2, 13, 2, 1), isleProp('twisttree_a', 52, 13, 2, 1), isleProp('twisttree_b', 2, 22, 2, 1), isleProp('bloomtree_b', 52, 22, 2, 1), isleProp('crystaltree', 47, 11, 3, 1), isleProp('ruins_b', 14, 30, 2, 1), isleProp('ruins_c', 41, 30, 2, 1));
   ROOMS.wander.props.push(isleProp('twisttree_c', 30, 16, 2, 1), isleProp('bloomtree_c', 12, 16, 2, 1), isleProp('agave_c', 19, 6), isleProp('bush_b', 2, 6));
@@ -2337,7 +2360,7 @@
     for (const id of Object.keys(ROOMS)) if (!off[id]) off[id] = [0, 200]; // 이어지지 않은 방 (없어야 함)
     for (const [id, A] of Object.entries(ROOMS)) { const [ax, ay] = off[id];
       for (const d of A.doors) { if (!skyLinked(A, d) || (d.side !== 'E' && d.side !== 'S')) continue; // 오른쪽·아래로 가는 다리만 (한 번씩)
-        for (let k = 1; k <= G; k++) for (let w = -1; w <= 1; w++) { const gx = d.side === 'E' ? ax + A.w - 1 + k : ax + d.at + w, gy = d.side === 'E' ? ay + d.at + w : ay + A.h - 1 + k; SKY.bridge.set(gx + ',' + gy, { id, dir: d.side, mid: w === 0, k }); } } }
+        for (let k = 1; k <= G; k++) for (let w = -1; w <= 1; w++) { const gx = d.side === 'E' ? ax + A.w - 1 + k : ax + d.at + w, gy = d.side === 'E' ? ay + d.at + w : ay + A.h - 1 + k; if (w === 0) SKY.bridge.set(gx + ',' + gy, { id, dir: d.side, mid: true, k }); } } } // 다리는 가운데 한 줄만 걸을 수 있음 (그림과 딱 맞게)
   })();
   // 섬 주변 작은 떠 있는 섬 (장식, 못 걸음)
   SKY.islets = []; for (const [id, R] of Object.entries(ROOMS)) { const [ox, oy] = SKY.off[id];
@@ -2377,7 +2400,7 @@
       const seg = (B.k - 1) / 2, last = Math.ceil(SKY.gap / 2) - 1; skyBridgeSeg(g, B.dir === 'E' ? x : x - 16, B.dir === 'E' ? y - 16 : y, B.dir === 'E', seg === 0, seg === last, seg === Math.floor(last / 2) && last >= 2, NC); }
     SKY.bcv = c; SKY.bx0 = x0 * TILE; SKY.by0 = y0 * TILE;
   }
-  const SKY_M = 90;
+  const SKY_M = 170; // 섬 그림 둘레 여백 (아래 절벽이 들어갈 자리)
   function buildRooms() { for (const id of Object.keys(ROOMS)) buildRoom(id); buildBridges(); }
   // 관리자 '맵 고치기'로 바꾼 방 (타일·장벽·소품 숨기기). 서버가 보내 준다
   let ROOM_EDITS = {};
@@ -2511,11 +2534,16 @@
     for (let y = 0; y <= h; y += step) { rim.push([0, y]); rim.push([w, y]); }
     const NC = ROOM_NIGHT; // 섬 아래 바위 절벽 (Flying Islands) · 밤엔 어둡고 보랏빛으로 색만 바꿈
     const nightK = (c) => c; // 밤 어둡기는 화면 전체 밤 효과가 맡음 (그림 색은 그대로)
-    { const CL = ['cliff_a', 'cliff_b', 'cliff_c'].map((k) => nightK(ART['i_' + k])).filter(Boolean); const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false;
-      const ol = R.shape ? R.shape.outline : [[18, h - 18], [w - 18, h - 18]], low = (x) => { let y = -1; for (const [px, py] of ol) if (Math.abs(px - x) < 14 && py > y) y = py; return y; };
-      const segs = []; if (CL.length) for (let x = 24; x < w - 12; x += 40) { const y = low(x); if (y < h * 0.55) continue; segs.push([x + (hash(x, 3, 9) - 0.5) * 10, y]); } // 빈틈없이 겹쳐서 이어 붙임
-      segs.sort((p1, p2) => p1[1] - p2[1]); for (const [x, y] of segs) { const c = CL[(hash(Math.round(x), 1, 9) * CL.length) | 0], cw = c.width * 2; g.drawImage(c, Math.round(x - cw / 2), Math.round(y - 34), cw, c.height * 2); }
-      g.imageSmoothingEnabled = pv; void rim; }
+    if (R.shape && ART.i_cliff_tex) { // 섬 아래 바위: 섬 아랫선을 따라 한 덩어리로 (가운데가 깊고 끝은 뾰족뾰족)
+      const ol = R.shape.outline, bot = ol.filter(([, y]) => y > h * 0.5).sort((a, b) => a[0] - b[0]);
+      if (bot.length > 3) { const x0 = bot[0][0], x1 = bot[bot.length - 1][0], dep = (x, i) => { const u = (x - x0) / Math.max(1, x1 - x0); return 26 + 120 * Math.pow(Math.sin(Math.PI * u), 0.9) + (hash(Math.round(x), 7, 3) - 0.5) * 22 + (i % 2 ? 16 : 0); };
+        const tc = document.createElement('canvas'), T = ART.i_cliff_tex; tc.width = T.width * 2; tc.height = T.height * 2; const tg = tc.getContext('2d'); tg.imageSmoothingEnabled = false; tg.drawImage(T, 0, 0, tc.width, tc.height);
+        g.save(); g.beginPath(); g.moveTo(bot[0][0], bot[0][1] - 14); for (const [x, y] of bot) g.lineTo(x, y - 14);
+        let k = 0; for (let x = x1; x >= x0; x -= 14, k++) { let yb = 0; for (const [px, py] of bot) if (Math.abs(px - x) < 10 && py > yb) yb = py; if (!yb) continue; g.lineTo(Math.round(x), Math.round(yb + dep(x, k))); }
+        g.closePath(); g.fillStyle = g.createPattern(tc, 'repeat'); g.fill(); g.clip();
+        const gr = g.createLinearGradient(0, h * 0.7, 0, h + 150); gr.addColorStop(0, 'rgba(40,30,50,0)'); gr.addColorStop(1, 'rgba(40,30,60,0.45)'); g.fillStyle = gr; g.fillRect(-SKY_M, 0, w + SKY_M * 2, h + SKY_M);
+        g.restore(); g.strokeStyle = 'rgba(70,58,52,0.55)'; g.lineWidth = 2; g.stroke(); } }
+    void rim;
     const pat = (key) => {
       const tc = document.createElement('canvas'); const tg = tc.getContext('2d');
       if ((key === 'lawn' || key === 'meadow' || key === 'aisle') && ART.w_grass) { const G = ART.w_grass; tc.width = G.width * 2; tc.height = G.height * 2; tg.imageSmoothingEnabled = false; // 잔디: 땅 잔디 그림 그대로 + 색만 하늘섬 청록으로
@@ -2531,6 +2559,11 @@
     else { g.fillStyle = floorPat; rr(g, 18, 18, w - 36, h - 36, 18); }
     if (R.dark) { g.fillStyle = 'rgba(30,20,60,0.35)'; rr(g, 18, 18, w - 36, h - 36, 18); }
     else if (R.floor === 'stonefloor') { g.fillStyle = 'rgba(255,248,235,0.22)'; rr(g, 18, 18, w - 36, h - 36, 18); }
+    if ((R.floor === 'lawn' || R.floor === 'meadow') && ART.w_grass) { // 잔디 여러 색: 청록 위에 연두·민트·노란빛 잔디 덩어리
+      const tints = ['hue-rotate(5deg) saturate(1.1) brightness(1.18)', 'hue-rotate(45deg) saturate(0.8) brightness(1.3)', 'hue-rotate(-15deg) saturate(1.2) brightness(1.25)', 'hue-rotate(20deg) saturate(1) brightness(1.08)'];
+      for (let b = 0; b < Math.round(R.w * R.h / 70); b++) { const cx = (1 + hash(b, R.w, 31) * (R.w - 2)) * TILE, cy = (1 + hash(b, R.h, 32) * (R.h - 2)) * TILE, rx = (2 + hash(b, 3, 33) * 3.5) * TILE, ry = rx * (0.55 + hash(b, 4, 34) * 0.3);
+        const G = ART.w_grass, tc = document.createElement('canvas'); tc.width = G.width * 2; tc.height = G.height * 2; const tg = tc.getContext('2d'); tg.imageSmoothingEnabled = false; tg.drawImage(recolor(G, tints[b % tints.length]), 0, 0, tc.width, tc.height);
+        g.fillStyle = g.createPattern(tc, 'repeat'); g.beginPath(); for (let q = 0; q < 24; q++) { const a = q / 24 * Math.PI * 2, rr2 = 1 + (hash(b, q, 35) - 0.5) * 0.35, px = cx + Math.cos(a) * rx * rr2, py = cy + Math.sin(a) * ry * rr2; q ? g.lineTo(Math.round(px / 4) * 4, Math.round(py / 4) * 4) : g.moveTo(Math.round(px / 4) * 4, Math.round(py / 4) * 4); } g.closePath(); g.fill(); } }
     const edgeStones = (x0, y0, ww, hh) => { const rimI = nightK(ART.i_rim); if (!rimI) return; const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; // 잔디 가장자리 흰 자갈 (하늘섬 타일셋처럼)
       for (let x = x0 + 4; x < x0 + ww - 24; x += 30) { g.drawImage(rimI, x, y0 - 10, 40, 22); g.drawImage(rimI, x, y0 + hh - 12, 40, 22); }
       for (let y = y0 + 8; y < y0 + hh - 20; y += 18) { g.drawImage(rimI, x0 - 18, y, 40, 22); g.drawImage(rimI, x0 + ww - 22, y, 40, 22); } g.imageSmoothingEnabled = pv; };
@@ -2540,9 +2573,8 @@
     for (const [px, py, pw, ph, key, rad] of R.patches || []) { g.fillStyle = pat(key); rr(g, px * TILE, py * TILE, pw * TILE, ph * TILE, rad || 0); }
     if (R.shape) { g.restore(); g.fillStyle = R.floor === 'lawn' || R.floor === 'meadow' ? pat('cobble') : floorPat; for (const d of R.doors) { const L = 5 * TILE; if (d.side === 'N') g.fillRect((d.at - 1) * TILE, 0, 3 * TILE, L); if (d.side === 'S') g.fillRect((d.at - 1) * TILE, h - L, 3 * TILE, L); if (d.side === 'W') g.fillRect(0, (d.at - 1) * TILE, L, 3 * TILE); if (d.side === 'E') g.fillRect(w - L, (d.at - 1) * TILE, L, 3 * TILE); } } // 문(다리) 쪽 길
     { const rimI = nightK(ART.i_rim); if (rimI) { const pv = g.imageSmoothingEnabled; g.imageSmoothingEnabled = false; // 섬 가장자리 흰 자갈 (Flying Islands)
-      if (R.shape) { let last = null; for (const [x, y] of R.shape.outline) { if (last && Math.hypot(x - last[0], y - last[1]) < 26) continue; last = [x, y];
-        const nearDoor = R.doors.some((d) => skyLinked(R, d) && ((d.side === 'N' && y < h / 2 && Math.abs(x - (d.at + 0.5) * TILE) < 48) || (d.side === 'S' && y > h / 2 && Math.abs(x - (d.at + 0.5) * TILE) < 48) || (d.side === 'W' && x < w / 2 && Math.abs(y - (d.at + 0.5) * TILE) < 48) || (d.side === 'E' && x > w / 2 && Math.abs(y - (d.at + 0.5) * TILE) < 48)));
-        if (!nearDoor) g.drawImage(rimI, Math.round(x - 20), Math.round(y - 11), 40, 22); } }
+      if (R.shape) { const path = () => { g.beginPath(); R.shape.outline.forEach(([x, y], q) => (q ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); }; // 섬 가장자리: 깔끔한 흰 돌 테두리 두 겹
+        g.save(); g.lineJoin = 'round'; path(); g.strokeStyle = 'rgba(90,80,70,0.55)'; g.lineWidth = 12; g.stroke(); path(); g.strokeStyle = '#f4efe2'; g.lineWidth = 8; g.stroke(); path(); g.strokeStyle = '#dcd4c2'; g.lineWidth = 2; g.stroke(); g.restore(); }
       else { for (let x = 10; x < w - 30; x += 36) { g.drawImage(rimI, x, 8, 40, 22); g.drawImage(rimI, x, h - 34, 40, 22); } }
       g.imageSmoothingEnabled = pv; } }
     if (R.wall && R.wallStyle !== 'iron') heavenWall(g, w, R);
