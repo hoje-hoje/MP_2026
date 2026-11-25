@@ -3,3 +3,4 @@
 사용자가 준 "Flying Islands Pixel Art Top-Down Tileset" 참고 그림(zip)에서 배경만 지우고 조각조각 오려 낸 것.
 섬 아래 절벽·가장자리 자갈·바닥 잔디·밧줄 다리·크리스털·꽃나무·꼬인 나무·석상·폐허 등. **행사 전에 출처·사용 허락 확인 필요.**
 - dragon.png(잠든 하늘용), cliff_tex.png(절벽 질감): 같은 타일셋에서
+- fountain.png: 사용자 zip의 "(SF) HxW Romantic Fountains and Arches" 참고 그림에서 둥근 분수만 오려 냄 — 출처 확인 필요
